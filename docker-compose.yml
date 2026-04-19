@@ -11,6 +11,8 @@ services:
       POSTGRES_DB: edumanager
       POSTGRES_USER: edumanager
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-EduManager2026!Seguro}
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:

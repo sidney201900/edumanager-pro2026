@@ -480,6 +480,12 @@ async function main() {
     await client.query('BEGIN');
     log('🔒', 'Transação iniciada (modo atômico)');
 
+    // 3.5 Criar tabelas se não existirem
+    log('🏗️', 'Rodando schema.sql para garantir que as tabelas existem...');
+    const schemaSql = fs.readFileSync('../schema.sql', 'utf8');
+    await client.query(schemaSql);
+    log('✅', 'Tabelas verificadas/criadas no Postgres local!');
+
     // 4. Também salvar o JSON completo na tabela legada para ponte
     log('📋', 'Salvando JSON blob na tabela school_data (ponte)...');
     await client.query(`
