@@ -13,9 +13,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-EduManager2026!Seguro}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
     networks:
       - edumanager-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edumanager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ============================
   # STORAGE S3-COMPATIBLE (MINIO)
