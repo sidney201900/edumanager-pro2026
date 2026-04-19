@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-EduManager2026!Seguro}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./schema_selfhosted.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
     ports:
       - "5432:5432"
     healthcheck:
@@ -46,6 +46,14 @@ services:
       retries: 5
     networks:
       - edumanager-internal
+      - traefik-public
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.minio.rule=Host(`storageedu.microtecinformaticacurso.com.br`)"
+        - "traefik.http.routers.minio.entrypoints=websecure"
+        - "traefik.http.routers.minio.tls.certresolver=letsencrypt"
+        - "traefik.http.services.minio.loadbalancer.server.port=9000"
 
   # Cria os buckets automaticamente na primeira vez
   minio-init:
@@ -76,7 +84,9 @@ services:
   # EDUMANAGER (PAINEL ADMIN)
   # ============================
   edumanager:
-    build: .
+    build:
+      context: ./manager
+      dockerfile: Dockerfile
     restart: always
     depends_on:
       postgres:
@@ -92,7 +102,7 @@ services:
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-MiniO2026!Seguro}
-      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-https://storageedu.microtecinformaticacurso.com.br}
       - ASAAS_API_KEY=${ASAAS_API_KEY}
       - ASAAS_API_URL=${ASAAS_API_URL}
       - ASAAS_WEBHOOK_TOKEN=${ASAAS_WEBHOOK_TOKEN}
@@ -116,7 +126,7 @@ services:
   # ============================
   portalaluno:
     build:
-      context: ../portalaluno
+      context: ./portal
       dockerfile: Dockerfile
     restart: always
     depends_on:
@@ -131,7 +141,7 @@ services:
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-MiniO2026!Seguro}
-      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-https://storageedu.microtecinformaticacurso.com.br}
     networks:
       - edumanager-internal
       - traefik-public
