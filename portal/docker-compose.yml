@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+
+  portalaluno:
+    image: portalaluno:latest
+    environment:
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_KEY=${VITE_SUPABASE_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - PORT=3001
+    networks:
+      - network_public
+      - default
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.portalaluno.rule=Host(`aluno.microtecinformaticacurso.com.br`)"
+        - "traefik.http.routers.portalaluno.entrypoints=websecure"
+        - "traefik.http.routers.portalaluno.tls=true"
+        - "traefik.http.routers.portalaluno.tls.certresolver=leresolver"
+        - "traefik.http.services.portalaluno.loadbalancer.server.port=3001"
+        - "traefik.docker.network=network_public"
+
+networks:
+  network_public:
+    external: true
+  default:
+    driver: overlay
