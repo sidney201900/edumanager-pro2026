@@ -12,10 +12,17 @@
 // Detecta se está configurado (sempre true no self-hosted)
 export const isSupabaseConfigured = () => true;
 
-// Objeto dummy para compatibilidade com imports legados
 export const supabase = {
   from: () => { throw new Error('Self-Hosted: Use as funções HTTP em vez de supabase.from()'); },
   storage: { from: () => { throw new Error('Self-Hosted: Use as funções de upload HTTP'); } },
+  channel: () => {
+    const mockChannel = {
+      on: () => mockChannel,
+      subscribe: (cb: any) => { if(cb) cb('SUBSCRIBED'); return mockChannel; }
+    };
+    return mockChannel;
+  },
+  removeChannel: () => {},
 };
 
 /**
