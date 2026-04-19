@@ -52,7 +52,7 @@ services:
   # EDUMANAGER (PAINEL ADMIN)
   # ============================
   edumanager:
-    image: edumanager-app:latest
+    image: edumanager-app:v2
     restart: always
     depends_on:
       - postgres
