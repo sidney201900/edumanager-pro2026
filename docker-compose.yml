@@ -14,11 +14,6 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U edumanager"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - edumanager-internal
 
@@ -40,10 +35,12 @@ services:
     deploy:
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.minio.rule=Host(`storageedu.microtecinformaticacurso.com.br`)"
-        - "traefik.http.routers.minio.entrypoints=websecure"
-        - "traefik.http.routers.minio.tls.certresolver=letsencrypt"
-        - "traefik.http.services.minio.loadbalancer.server.port=9000"
+        - "traefik.http.routers.edum-minio.rule=Host(`storageedu.microtecinformaticacurso.com.br`)"
+        - "traefik.http.routers.edum-minio.entrypoints=websecure"
+        - "traefik.http.routers.edum-minio.tls=true"
+        - "traefik.http.routers.edum-minio.tls.certresolver=letsencrypt"
+        - "traefik.http.services.edum-minio.loadbalancer.server.port=9000"
+        - "traefik.docker.network=traefik-public"
 
   # ============================
   # EDUMANAGER (PAINEL ADMIN)
@@ -73,10 +70,12 @@ services:
     deploy:
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.edumanager.rule=Host(`edumanager.microtecinformaticacurso.com.br`)"
-        - "traefik.http.routers.edumanager.entrypoints=websecure"
-        - "traefik.http.routers.edumanager.tls.certresolver=letsencrypt"
-        - "traefik.http.services.edumanager.loadbalancer.server.port=3000"
+        - "traefik.http.routers.edum-manager.rule=Host(`edumanager.microtecinformaticacurso.com.br`)"
+        - "traefik.http.routers.edum-manager.entrypoints=websecure"
+        - "traefik.http.routers.edum-manager.tls=true"
+        - "traefik.http.routers.edum-manager.tls.certresolver=letsencrypt"
+        - "traefik.http.services.edum-manager.loadbalancer.server.port=3000"
+        - "traefik.docker.network=traefik-public"
 
   # ============================
   # PORTAL DO ALUNO
@@ -102,10 +101,12 @@ services:
     deploy:
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.portalaluno.rule=Host(`portal.microtecinformaticacurso.com.br`)"
-        - "traefik.http.routers.portalaluno.entrypoints=websecure"
-        - "traefik.http.routers.portalaluno.tls.certresolver=letsencrypt"
-        - "traefik.http.services.portalaluno.loadbalancer.server.port=3001"
+        - "traefik.http.routers.edum-portal.rule=Host(`portal.microtecinformaticacurso.com.br`)"
+        - "traefik.http.routers.edum-portal.entrypoints=websecure"
+        - "traefik.http.routers.edum-portal.tls=true"
+        - "traefik.http.routers.edum-portal.tls.certresolver=letsencrypt"
+        - "traefik.http.services.edum-portal.loadbalancer.server.port=3001"
+        - "traefik.docker.network=traefik-public"
 
 volumes:
   pgdata:
