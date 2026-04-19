@@ -35,7 +35,7 @@ services:
       - miniodata:/data
     networks:
       - edumanager-internal
-      - traefik-public
+      - network_public
     deploy:
       labels:
         - "traefik.enable=true"
@@ -44,7 +44,7 @@ services:
         - "traefik.http.routers.edum-minio.tls=true"
         - "traefik.http.routers.edum-minio.tls.certresolver=letsencrypt"
         - "traefik.http.services.edum-minio.loadbalancer.server.port=9000"
-        - "traefik.docker.network=traefik-public"
+        - "traefik.docker.network=network_public"
 
   # ============================
   # EDUMANAGER (PAINEL ADMIN)
@@ -70,7 +70,7 @@ services:
       - ASAAS_WEBHOOK_TOKEN=${ASAAS_WEBHOOK_TOKEN}
     networks:
       - edumanager-internal
-      - traefik-public
+      - network_public
     deploy:
       labels:
         - "traefik.enable=true"
@@ -79,7 +79,7 @@ services:
         - "traefik.http.routers.edum-manager.tls=true"
         - "traefik.http.routers.edum-manager.tls.certresolver=letsencrypt"
         - "traefik.http.services.edum-manager.loadbalancer.server.port=3000"
-        - "traefik.docker.network=traefik-public"
+        - "traefik.docker.network=network_public"
 
   # ============================
   # PORTAL DO ALUNO
@@ -101,7 +101,7 @@ services:
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-https://storageedu.microtecinformaticacurso.com.br}
     networks:
       - edumanager-internal
-      - traefik-public
+      - network_public
     deploy:
       labels:
         - "traefik.enable=true"
@@ -110,7 +110,7 @@ services:
         - "traefik.http.routers.edum-portal.tls=true"
         - "traefik.http.routers.edum-portal.tls.certresolver=letsencrypt"
         - "traefik.http.services.edum-portal.loadbalancer.server.port=3001"
-        - "traefik.docker.network=traefik-public"
+        - "traefik.docker.network=network_public"
 
 volumes:
   pgdata:
@@ -119,5 +119,5 @@ volumes:
 networks:
   edumanager-internal:
     driver: overlay
-  traefik-public:
+  network_public:
     external: true
