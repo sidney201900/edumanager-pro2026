@@ -52,7 +52,7 @@ services:
   # EDUMANAGER (PAINEL ADMIN)
   # ============================
   edumanager:
-    image: edumanager-app:v2
+    image: ghcr.io/sidney201900/edumanager-pro2026/edumanager:latest
     restart: always
     depends_on:
       - postgres
@@ -87,7 +87,7 @@ services:
   # PORTAL DO ALUNO
   # ============================
   portalaluno:
-    image: portalaluno-app:latest
+    image: ghcr.io/sidney201900/edumanager-pro2026/portalaluno:latest
     restart: always
     depends_on:
       - postgres
@@ -107,7 +107,7 @@ services:
     deploy:
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.edum-portal.rule=Host(`portal.microtecinformaticacurso.com.br`)"
+        - "traefik.http.routers.edum-portal.rule=Host(`aluno.microtecinformaticacurso.com.br`)"
         - "traefik.http.routers.edum-portal.entrypoints=websecure"
         - "traefik.http.routers.edum-portal.tls=true"
         - "traefik.http.routers.edum-portal.tls.certresolver=letsencrypt"
