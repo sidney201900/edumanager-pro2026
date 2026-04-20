@@ -4,8 +4,8 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copiar package files e instalar dependências
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 # Copiar todo o código fonte
 COPY . .
@@ -19,11 +19,12 @@ FROM node:22-alpine AS production
 WORKDIR /app
 
 # Copiar package files e instalar apenas dependências de produção
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+COPY package.json ./
+RUN npm install --omit=dev
 
-# Copiar o servidor Express
+# Copiar o servidor Express e pastas necessárias
 COPY server.js ./
+COPY services ./services
 
 # Copiar a pasta dist gerada no build
 COPY --from=builder /app/dist ./dist
