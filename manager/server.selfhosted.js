@@ -28,7 +28,7 @@ import {
   getCobrancasByInstallmentId, updateCobrancaLinkCarne,
   updateCobrancaByField
 } from './services/database.js';
-import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage } from './services/storage.js';
+import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats } from './services/storage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,7 +128,6 @@ app.get('/api/system-stats', async (req, res) => {
              (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public') as table_count
     `);
     
-    const { getMinioStats } = await import('./services/storage.js');
     const minioStats = await getMinioStats();
     
     res.json({
