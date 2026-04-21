@@ -4,7 +4,7 @@
  * Substitui todas as chamadas supabase.storage do sistema
  * ============================================================
  */
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, ListBucketsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || 'minio';
 const MINIO_PORT = process.env.MINIO_PORT || '9000';
@@ -93,6 +93,46 @@ export async function uploadAtestado(fileBuffer, contentType) {
   const ext = contentType.split('/')[1] || 'jpg';
   const fileName = `atestado_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
   return uploadFile('atestados', fileName, fileBuffer, contentType);
+}
+
+export async function getMinioStats() {
+  try {
+    const data = await s3Client.send(new ListBucketsCommand({}));
+    const buckets = data.Buckets || [];
+    let totalSize = 0;
+    let totalItems = 0;
+    
+    const bucketsInfo = await Promise.all(buckets.map(async (bucket) => {
+      let bucketSize = 0;
+      let bucketItems = 0;
+      try {
+        const objects = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket.Name }));
+        if (objects.Contents) {
+          bucketItems = objects.Contents.length;
+          bucketSize = objects.Contents.reduce((acc, curr) => acc + (curr.Size || 0), 0);
+        }
+      } catch (e) {} // Ignorar buckets inacessíveis
+      
+      totalSize += bucketSize;
+      totalItems += bucketItems;
+      
+      return {
+        name: bucket.Name,
+        items: bucketItems,
+        sizeMB: (bucketSize / (1024 * 1024)).toFixed(2)
+      };
+    }));
+
+    return {
+      bucketCount: buckets.length,
+      totalItems,
+      totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2),
+      buckets: bucketsInfo
+    };
+  } catch (error) {
+    console.error('Erro ao buscar stats do MinIO:', error);
+    return { error: true, message: error.message };
+  }
 }
 
 export { s3Client };

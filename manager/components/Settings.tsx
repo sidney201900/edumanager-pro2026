@@ -58,6 +58,14 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
 
   const [activeTab, setActiveTab] = useState<'perfil' | 'monitoramento'>('perfil');
   const [apiLogs, setApiLogs] = useState<any[]>([]);
+  const [systemStats, setSystemStats] = useState<any>(null);
+
+  React.useEffect(() => {
+    fetch('/api/system-stats')
+      .then(res => res.json())
+      .then(data => setSystemStats(data))
+      .catch(err => console.error('Erro ao buscar stats do sistema:', err));
+  }, []);
 
   React.useEffect(() => {
     if (activeTab === 'monitoramento') {
@@ -186,49 +194,7 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
     );
   };
 
-  const [isSyncing, setIsSyncing] = useState(false);
-  const supabaseConfigured = useMemo(() => isSupabaseConfigured(), []);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
 
-  const downloadSupabaseSQL = () => {
-    const sql = `-- Create the table for storing the entire application state as a JSON blob
-create table if not exists school_data (
-  id bigint primary key,
-  data jsonb not null default '{}'::jsonb,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- Insert the initial row (id=1) if it doesn't exist so the app has something to fetch/update
-insert into school_data (id, data)
-values (1, '{}'::jsonb)
-on conflict (id) do nothing;
-
--- Enable Row Level Security (RLS)
-alter table school_data enable row level security;
-
--- Create a policy that allows anyone to read/write (for development/demo purposes)
--- In a real production app, you would restrict this to authenticated users
-create policy "Enable read access for all users"
-on school_data for select
-using (true);
-
-create policy "Enable insert access for all users"
-on school_data for insert
-with check (true);
-
-create policy "Enable update access for all users"
-on school_data for update
-using (true);`;
-
-    const blob = new Blob([sql], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'supabase_setup.sql';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const closeModal = () => {
     setIsClosing(true);
@@ -253,27 +219,13 @@ using (true);`;
 
         const compressedFile = await imageCompression(file, options);
         
-        let logoUrl = '';
-        
-        // Try to upload to Supabase if configured
-        if (supabaseConfigured) {
-          const url = await uploadLogo(compressedFile);
-          if (url) {
-            logoUrl = url;
-          }
-        }
-        
-        // Fallback to base64 if Supabase upload failed or not configured
-        if (!logoUrl) {
-          const reader = new FileReader();
-          logoUrl = await new Promise((resolve) => {
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.readAsDataURL(compressedFile);
-          });
+        const url = await uploadLogo(compressedFile);
+        if (!url) {
+           throw new Error("Falha ao obter a URL da logo após o upload");
         }
 
-        setGlobalLogo(logoUrl);
-        updateData({ logo: logoUrl });
+        setGlobalLogo(url);
+        updateData({ logo: url });
         showAlert('Sucesso', 'Logo atualizada com sucesso!', 'success');
       } catch (error) {
         console.error('Erro ao fazer upload da imagem:', error);
@@ -295,27 +247,7 @@ using (true);`;
       .slice(0, 16);
   };
 
-  const handleManualSync = async () => {
-    if (!supabaseConfigured) return;
-    
-    setIsSyncing(true);
-    try {
-      const cloudData = await dbService.fetchFromCloud();
-      if (cloudData) {
-        setData(cloudData);
-        await dbService.saveData(cloudData);
-        showAlert('Sucesso', '✅ Dados sincronizados com a nuvem!', 'success');
-      } else {
-        // If no cloud data, maybe we should push local data?
-        await dbService.saveToCloud(data);
-        showAlert('Sucesso', '✅ Dados locais enviados para a nuvem!', 'success');
-      }
-    } catch (error) {
-      showAlert('Erro', '❌ Falha na sincronização. Verifique sua conexão e configurações.', 'error');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+
 
   const inputClass = "w-full px-4 py-3 bg-white text-black border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm text-sm";
 
@@ -475,46 +407,87 @@ using (true);`;
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xl space-y-4">
-              <div className="flex items-center gap-3 text-indigo-600">
-                <div className="p-2 bg-indigo-50 rounded-lg">
-                  <Cloud size={20} />
-                </div>
-                <h3 className="text-lg font-black text-slate-800">Sincronização Nuvem</h3>
-              </div>
-              
-              <div className={`p-4 rounded-lg border ${supabaseConfigured ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                <div className="flex items-center gap-2 font-bold text-sm mb-1">
-                  {supabaseConfigured ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                  {supabaseConfigured ? 'Conectado ao Supabase' : 'Não Conectado'}
-                </div>
-                <p className="text-xs opacity-80 leading-relaxed">
-                  {supabaseConfigured 
-                    ? 'Seus dados estão sendo salvos automaticamente na nuvem.' 
-                    : 'Para habilitar o backup na nuvem, configure as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_KEY.'}
-                </p>
-                {!supabaseConfigured && (
-                  <div className="mt-3 text-[10px] bg-white p-2 rounded border border-slate-200 font-mono text-slate-400 break-all">
-                    VITE_SUPABASE_URL=...<br/>
-                    VITE_SUPABASE_KEY=...
+            {/* POSTGRESQL CARD */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xl space-y-4 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 pointer-events-none"></div>
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3 text-blue-600">
+                  <div className="p-2 bg-blue-50 rounded-lg shadow-sm border border-blue-100">
+                    <Database size={20} />
                   </div>
+                  <h3 className="text-lg font-black text-slate-800">Banco de Dados</h3>
+                </div>
+                {systemStats ? (
+                  <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                    <CheckCircle size={12} /> Online
+                  </span>
+                ) : (
+                  <RefreshCw size={16} className="text-slate-300 animate-spin" />
                 )}
               </div>
+              
+              <div className="grid grid-cols-2 gap-3 mt-4 relative z-10">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 shadow-inner">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tamanho em Disco</p>
+                  <p className="text-xl font-black text-slate-800">{systemStats?.postgres?.dbSize || '--'}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 shadow-inner">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tabelas SGBD</p>
+                  <p className="text-xl font-black text-slate-800">{systemStats?.postgres?.tableCount || '--'} <span className="text-sm font-medium text-slate-400">PostgreSQL</span></p>
+                </div>
+              </div>
+            </div>
 
-              {supabaseConfigured && (
-                <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700">
-                  <p className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                    <CheckCircle size={14} /> Sincronização Automática Ativa
-                  </p>
+            {/* MINIO STORAGE CARD */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xl space-y-4 relative overflow-hidden">
+              <div className="absolute bottom-0 right-0 w-24 h-24 bg-red-50 rounded-full -mr-8 -mb-8 pointer-events-none"></div>
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3 text-red-600">
+                  <div className="p-2 bg-red-50 rounded-lg shadow-sm border border-red-100">
+                    <Cloud size={20} />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800">Storage Físico</h3>
+                </div>
+                {systemStats && !systemStats.minio?.error ? (
+                  <span className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                    <CheckCircle size={12} /> MinIO
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                    <AlertTriangle size={12} /> Backup
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex gap-4 relative z-10">
+                <div className="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-100 shadow-inner">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Uso Total</p>
+                  <p className="text-xl font-black text-slate-800">{systemStats?.minio?.totalSizeMB || '0.00'} <span className="text-sm font-medium text-slate-400">MB</span></p>
+                </div>
+                <div className="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-100 shadow-inner">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Arquivos</p>
+                  <p className="text-xl font-black text-slate-800">{systemStats?.minio?.totalItems || '0'}</p>
+                </div>
+              </div>
+
+              {systemStats?.minio?.buckets && systemStats.minio.buckets.length > 0 && (
+                <div className="pt-4 border-t border-slate-100 mt-2 relative z-10">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Buckets Mapeados</p>
+                  <div className="space-y-2">
+                    {systemStats.minio.buckets.map((b: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-100 shadow-sm hover:border-red-200 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm shadow-red-200"></div>
+                          <span className="text-sm font-bold text-slate-700">{b.name}</span>
+                        </div>
+                        <div className="text-xs font-bold text-slate-400">
+                          <span className="text-slate-600">{b.items}</span> itens • <span className="text-slate-600">{b.sizeMB}</span> MB
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
-
-              <button 
-                onClick={downloadSupabaseSQL}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-all font-bold text-xs border border-indigo-100"
-              >
-                <FileText size={16} /> Baixar Script SQL Supabase
-              </button>
             </div>
 
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xl space-y-4">

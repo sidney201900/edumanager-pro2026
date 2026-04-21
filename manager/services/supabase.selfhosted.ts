@@ -71,7 +71,7 @@ export const uploadExamImage = async (file: File): Promise<string | null> => {
     const formData = new FormData();
     formData.append('photo', file);
 
-    const response = await fetch('/api/upload/student-photo', {
+    const response = await fetch('/api/upload/exam-image', {
       method: 'POST',
       body: formData,
     });

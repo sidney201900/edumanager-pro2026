@@ -121,6 +121,29 @@ app.put('/api/school-data', async (req, res) => {
   }
 });
 
+app.get('/api/system-stats', async (req, res) => {
+  try {
+    const dbResult = await pool.query(`
+      SELECT pg_size_pretty(pg_database_size(current_database())) as db_size,
+             (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public') as table_count
+    `);
+    
+    const { getMinioStats } = await import('./services/storage.js');
+    const minioStats = await getMinioStats();
+    
+    res.json({
+      postgres: {
+        dbSize: dbResult.rows[0].db_size,
+        tableCount: dbResult.rows[0].table_count
+      },
+      minio: minioStats
+    });
+  } catch(e) {
+    console.error('System Stats Error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============================================================
 // Upload de Logo (MinIO em vez de Supabase Storage)
 // ============================================================
@@ -157,6 +180,42 @@ app.post('/api/upload/student-photo', upload.single('photo'), async (req, res) =
     return res.status(200).json({ url });
   } catch (error) {
     console.error('Erro ao processar foto:', error);
+    return res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
+// ============================================================
+// Upload de Logo da Escola (MinIO)
+// ============================================================
+app.post('/api/upload/logo', upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    }
+
+    const { uploadLogo } = await import('./services/storage.js');
+    const url = await uploadLogo(req.file.buffer, req.file.mimetype);
+    return res.status(200).json({ url });
+  } catch (error) {
+    console.error('Erro ao processar logo:', error);
+    return res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
+// ============================================================
+// Upload de Imagem de Avaliação (MinIO)
+// ============================================================
+app.post('/api/upload/exam-image', upload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    }
+
+    const { uploadExamImage } = await import('./services/storage.js');
+    const url = await uploadExamImage(req.file.buffer, req.file.mimetype);
+    return res.status(200).json({ url });
+  } catch (error) {
+    console.error('Erro ao processar imagem de avaliação:', error);
     return res.status(500).json({ error: 'Erro interno.' });
   }
 });

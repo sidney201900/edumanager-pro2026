@@ -73,6 +73,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
   const [cameraActive, setCameraActive] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [tempPhoto, setTempPhoto] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | Blob | null>(null); // Physical file for MinIO upload
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [isProcessingFace, setIsProcessingFace] = useState(false);
   
@@ -482,6 +483,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     const file = e.target.files?.[0];
     if (file) {
       try {
+        setPhotoFile(file); // Hold physical file for MinIO FormData upload
         const compressed = await compressImage(file);
         setFormData(prev => ({ ...prev, photo: compressed }));
         
@@ -561,6 +563,11 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
   const savePhoto = async () => {
     if (tempPhoto) {
       try {
+        // Convert base64 camera shot to physical Blob for MinIO FormData upload
+        const response = await fetch(tempPhoto);
+        const blob = await response.blob();
+        setPhotoFile(blob);
+
         const compressed = await compressImage(tempPhoto);
         setFormData(prev => ({ ...prev, photo: compressed }));
         
@@ -599,6 +606,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
       setShowModal(false);
       setIsClosing(false);
       setEditingStudent(null);
+      setPhotoFile(null); // Reset MinIO physical upload file
       setFormData({
         name: '',
         email: '',
@@ -707,15 +715,30 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
       portalPassword = rawCpfForPassword.substring(0, 6) || '123456';
     }
 
-    // Processar Foto em Storage (Evitar inchar o JSON)
-    let finalPhotoUrl = formData.photo || editingStudent?.photo;
-    if (formData.photo && formData.photo.startsWith('data:image')) {
-      const uploadUrl = await uploadStudentPhoto(formData.photo);
-      if (uploadUrl) {
-        finalPhotoUrl = uploadUrl;
-      } else {
-        showAlert('Aviso', 'Erro ao salvar a foto na nuvem. Ela foi salva localmente e pode falhar na sincronização.', 'warning');
+    // Processar Foto via Nova Arquitetura FormData MinIO Local
+    let finalPhotoUrl = editingStudent?.photo || '';
+    if (photoFile) {
+      const uploadData = new FormData();
+      uploadData.append('photo', photoFile, 'student-avatar.webp');
+
+      try {
+        const uploadResponse = await fetch('/api/upload/student-photo', {
+          method: 'POST',
+          body: uploadData
+        });
+
+        if (uploadResponse.ok) {
+          const resultData = await uploadResponse.json();
+          finalPhotoUrl = resultData.url;
+        } else {
+          showAlert('Aviso', 'Erro ao salvar a foto fisicamente no MinIO. Imagem não atualizada.', 'warning');
+        }
+      } catch (uploadError) {
+        console.error('Erro no upload FormData:', uploadError);
+        showAlert('Aviso', 'Falha de conexão no momento do upload. A foto pode não ter sido salva.', 'warning');
       }
+    } else if (formData.photo && !formData.photo.startsWith('data:image')) {
+       finalPhotoUrl = formData.photo;
     }
 
     const studentToSave: Student = {

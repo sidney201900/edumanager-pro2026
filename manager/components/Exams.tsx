@@ -113,7 +113,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     } catch (error: any) {
       console.error(error);
       const errorMessage = error.message || 'Erro desconhecido';
-      alert(`Erro ao enviar imagem: ${errorMessage}\n\nCertifique-se de que o bucket "edumanager-assets" existe no Supabase e tem as permissões corretas.`);
+      alert(`Erro ao enviar imagem: ${errorMessage}\n\nVerifique sua conexão ou a configuração do bucket "exames" no MinIO.`);
     } finally {
       setIsUploading(false);
       if (event.target) {

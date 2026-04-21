@@ -152,9 +152,10 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
       return;
     }
 
-    // Check if there is already a record for this lesson
+    // Check if there is already a record for this lesson specifically
     const existingIndex = (data.attendance || []).findIndex(a => 
-      a.studentId === absenceStudentId && a.date.startsWith(lesson.date)
+      a.studentId === absenceStudentId && 
+      ((a as any).lessonId === lesson.id || a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`)
     );
 
     let updatedAttendance = [...(data.attendance || [])];
@@ -165,7 +166,8 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
         type: 'absence',
         justification: absenceJustification,
         justificationAccepted: true,
-        verified: true
+        verified: true,
+        lessonId: lesson.id as any
       };
     } else {
       const newAbsence: Attendance = {
@@ -176,7 +178,8 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
         verified: true,
         type: 'absence',
         justification: absenceJustification,
-        justificationAccepted: true
+        justificationAccepted: true,
+        ...(lesson ? { lessonId: lesson.id } : {}) as any
       };
       updatedAttendance.push(newAbsence);
     }
@@ -352,11 +355,43 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                   );
                 }
 
-                return classStudents.map(student => {
-                  const studentAttendance = (data.attendance || []).filter(a => a.studentId === student.id && a.classId === selectedClass.id);
-                  const presences = studentAttendance.filter(a => a.type === 'presence' || a.type !== 'absence').length;
-                  const absences = studentAttendance.filter(a => a.type === 'absence').length;
-                  const justified = studentAttendance.filter(a => a.type === 'absence' && a.justificationAccepted).length;
+                  const studentActualRecords = (data.attendance || []).filter(a => a.studentId === student.id && a.classId === selectedClass.id);
+                  const classLessonsRaw = (data.lessons || []).filter(l => l.classId === selectedClass.id && l.status !== 'cancelled');
+                  
+                  const deduplicatedLessons = classLessonsRaw.filter((lesson, index, self) =>
+                    index === self.findIndex((t) => (
+                      t.date === lesson.date && t.startTime === lesson.startTime
+                    ))
+                  );
+
+                  let presences = 0;
+                  let absences = 0;
+                  let justified = 0;
+                  const now = new Date();
+
+                  deduplicatedLessons.forEach(lesson => {
+                    const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
+                    const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
+                    const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000); 
+
+                    const matchedRecord = studentActualRecords.find(a => {
+                      if ((a as any).lessonId === lesson.id) return true;
+                      if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
+                      const recordTime = new Date(a.date);
+                      return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
+                    });
+
+                    if (matchedRecord) {
+                       if (matchedRecord.type === 'absence') {
+                          if (matchedRecord.justificationAccepted) justified++;
+                          else absences++;
+                       } else if (matchedRecord.type === 'presence' || !matchedRecord.type) {
+                          presences++;
+                       }
+                    } else if (now > lessonEnd) {
+                       absences++;
+                    }
+                  });
 
                   return (
                     <div 
@@ -431,65 +466,51 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 const actualRecords = (data.attendance || [])
                   .filter(a => a.studentId === selectedStudent.id && a.classId === selectedClass.id);
                 
-                const classLessons = (data.lessons || [])
+                const classLessonsRaw = (data.lessons || [])
                   .filter(l => l.classId === selectedClass.id && l.status !== 'cancelled');
 
-                const virtualRecords: any[] = [];
-                const matchedActualRecordIds = new Set<string>();
+                const deduplicatedLessons = classLessonsRaw.filter((lesson, index, self) =>
+                  index === self.findIndex((t) => (
+                    t.date === lesson.date && t.startTime === lesson.startTime
+                  ))
+                );
+
+                const tableRows: any[] = [];
                 
-                classLessons.forEach(lesson => {
+                deduplicatedLessons.forEach(lesson => {
                   const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
                   const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
                   const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000); // 30 mins before
                   
-                  // Lógica de "Casamento" refinada para evitar duplicidade
-                  const matchingRecord = actualRecords.find(a => {
-                    // Match forte se já tiver lessonId (registros criados a partir daqui)
+                  let record = actualRecords.find(a => {
                     if ((a as any).lessonId === lesson.id) return true;
-                    // Match de horário exato (manual antigo)
                     if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
-                    
-                    // Match por Janela de Tempo (Biometria): entre 30 min antes da aula até o fim da aula
                     const recordTime = new Date(a.date);
                     return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
                   });
-                  
-                  if (!matchingRecord) {
-                    // Não tem ponto registrado ainda. Criar o virtual apenas se já estiver na janela
-                    if (now >= presenceStartWindow) {
-                      const isFinished = now > lessonEnd;
 
-                      virtualRecords.push({
-                        id: `v-${lesson.id}`,
-                        studentId: selectedStudent.id,
-                        classId: selectedClass.id,
-                        date: `${lesson.date}T${lesson.startTime || '00:00'}:00`,
-                        type: isFinished ? 'absence' : 'awaiting',
-                        isVirtual: true,
-                        lessonId: lesson.id,
-                        awaiting: !isFinished
-                      });
-                    }
-                  } else {
-                    (matchingRecord as any).lessonId = lesson.id;
-                    matchedActualRecordIds.add(matchingRecord.id);
+                  if (!record && now >= presenceStartWindow) {
+                    const isFinished = now > lessonEnd;
+                    record = {
+                      id: `v-${lesson.id}`,
+                      studentId: selectedStudent.id,
+                      classId: selectedClass.id,
+                      date: `${lesson.date}T${lesson.startTime || '00:00'}:00`,
+                      type: isFinished ? 'absence' : 'awaiting',
+                      isVirtual: true,
+                      lessonId: lesson.id,
+                      awaiting: !isFinished
+                    };
+                  }
+                  
+                  if (record) {
+                    tableRows.push({ lesson, record });
                   }
                 });
 
-                // Filtrar os records reais para evitar duplicidade na lista caso haja lixo no banco
-                // Só mostra os reais que casaram com aulas válidas, MAIS qualquer registro avulso
-                // que, por algum motivo exótico não casou (fallback de segurança visual)
-                const uniqueActualRecords = actualRecords.filter(a => {
-                  if (matchedActualRecordIds.has(a.id)) return true;
-                  // Se não casou, e a aula for do mesmo dia, ignora para não poluir (provavelmente duplicata de biometria)
-                  const hasLessonSameDay = classLessons.some(l => a.date.startsWith(l.date));
-                  return !hasLessonSameDay;
-                });
+                tableRows.sort((a, b) => new Date(b.lesson.date + 'T' + (b.lesson.startTime || '00:00') + ':00').getTime() - new Date(a.lesson.date + 'T' + (a.lesson.startTime || '00:00') + ':00').getTime());
 
-                const studentRecords = [...uniqueActualRecords, ...virtualRecords]
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-                if (studentRecords.length === 0) {
+                if (tableRows.length === 0) {
                   return (
                     <div className="text-center py-16 text-slate-400">
                       <Calendar size={48} className="mx-auto mb-4 opacity-20" />
@@ -498,9 +519,18 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                   );
                 }
 
-                const presences = studentRecords.filter(a => a.type === 'presence' || (!a.type && !a.isVirtual)).length;
-                const absences = studentRecords.filter(a => a.type === 'absence').length;
-                const justified = studentRecords.filter(a => a.type === 'absence' && a.justificationAccepted).length;
+                let presences = 0;
+                let absences = 0;
+                let justified = 0;
+
+                tableRows.forEach(row => {
+                   if (row.record.type === 'absence') {
+                      if (row.record.justificationAccepted) justified++;
+                      else absences++;
+                   } else if (row.record.type === 'presence' || (!row.record.type && !row.record.isVirtual)) {
+                      presences++;
+                   }
+                });
 
                 return (
                   <>
@@ -516,7 +546,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                         <AlertCircle size={14} /> {justified} Justificadas
                       </div>
                       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
-                        <BookOpen size={14} /> {studentRecords.length} Aulas
+                        <BookOpen size={14} /> {tableRows.length} Aulas
                       </div>
                     </div>
 
@@ -536,16 +566,9 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                          {studentRecords.map(record => {
+                          {tableRows.map(({lesson, record}) => {
                             const recordDate = new Date(record.date);
                             const time = recordDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            
-                            // Find corresponding lesson times with high precision
-                            const lesson = data.lessons.find(l => 
-                              (record.isVirtual && record.id === `v-${l.id}`) || 
-                              (record.lessonId === l.id) ||
-                              (!record.lessonId && l.date === record.date.split('T')[0] && l.classId === record.classId)
-                            );
 
                             let justMotivo = record.justification || '';
                             let justAttachment: string | null = null;

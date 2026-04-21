@@ -5,11 +5,12 @@ async function migrarPelaWeb() {
 
   // 1. Lendo os arquivos
   const sql = fs.readFileSync('../schema.sql', 'utf8');
-  
+
   // Pegue o seu arquivo que já foi salvo!
   const arquivos = fs.readdirSync('.');
-  const arquivoBackup = arquivos.find(a => a.startsWith('backup_supabase_') && a.endsWith('.json'));
-  
+  // Garante que vai pegar especificamente o arquivo migrado e limpo!
+  const arquivoBackup = arquivos.find(a => a.includes('_migrado.json'));
+
   if (!arquivoBackup) {
     console.log('❌ O JSON de backup não foi encontrado na pasta manager!');
     return;
