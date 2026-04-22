@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   edumanager:
-    build: .
+    image: ghcr.io/sidney201900/edumanager-pro2026/edumanager:latest
     environment:
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
       - VITE_SUPABASE_KEY=${VITE_SUPABASE_KEY}

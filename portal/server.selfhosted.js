@@ -468,7 +468,12 @@ app.get('/api/portal/avaliacoes', authMiddleware, async (req, res) => {
       .filter(e => e.status === 'published' && e.classId === student.classId)
       .map(e => ({
         ...e,
-        questions: e.questions.map(q => ({ id: q.id, text: q.text, options: q.options }))
+        questions: e.questions.map(q => ({
+          id: q.id,
+          text: q.text,
+          options: q.options,
+          imageUrl: normalizeStorageUrl(q.imageUrl)
+        }))
       }));
 
     const { rows: submissions } = await pool.query(

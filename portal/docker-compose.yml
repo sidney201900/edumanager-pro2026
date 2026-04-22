@@ -3,7 +3,7 @@ version: '3.8'
 services:
 
   portalaluno:
-    image: portalaluno:latest
+    image: ghcr.io/sidney201900/edumanager-pro2026/portalaluno:latest
     environment:
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
       - VITE_SUPABASE_KEY=${VITE_SUPABASE_KEY}
