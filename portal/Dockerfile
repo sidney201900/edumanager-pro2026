@@ -13,6 +13,7 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
 COPY server.selfhosted.js ./server.js
+COPY src/services ./src/services
 COPY --from=builder /app/dist ./dist
 EXPOSE 3001
 CMD ["node", "server.js"]
