@@ -16,6 +16,11 @@ import jwt from 'jsonwebtoken';
 import pg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
+import { uploadAtestado, s3Client } from './src/services/storage.js';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,12 +42,44 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// ============================================================
+// Proxy de Imagens do MinIO (acesso público via backend)
+// ============================================================
+app.get('/storage/:bucket/:key', async (req, res) => {
+  try {
+    const { bucket, key } = req.params;
+    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const data = await s3Client.send(command);
+    
+    res.set('Content-Type', data.ContentType || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    data.Body.pipe(res);
+  } catch (e) {
+    res.status(404).send('Arquivo não encontrado');
+  }
+});
+
 // ===== Helper: Get school data (PostgreSQL) =====
 async function getSchoolData() {
   const { rows } = await pool.query(
     'SELECT data FROM school_data WHERE id = 1'
   );
   return rows[0]?.data || {};
+}
+
+// ===== Helper: Normalizar URLs do MinIO para proxy relativo =====
+function normalizeStorageUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('/storage/')) return url;
+  const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_URL || '';
+  if (MINIO_PUBLIC_URL && url.startsWith(MINIO_PUBLIC_URL)) {
+    return url.replace(MINIO_PUBLIC_URL, '/storage');
+  }
+  const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+  if (match && (url.includes('minio') || url.includes('storageedu') || url.includes(':9000'))) {
+    return `/storage/${match[1]}`;
+  }
+  return url;
 }
 
 // ===== Helper: Save school data (PostgreSQL) =====
@@ -116,6 +153,9 @@ app.post('/api/portal/login', async (req, res) => {
       ? (schoolData.courses || []).find((c) => c.id === studentClass.courseId) || null
       : null;
 
+    // Normalizar foto do aluno
+    if (student.photo) student.photo = normalizeStorageUrl(student.photo);
+
     res.json({
       token,
       user: tokenPayload,
@@ -135,7 +175,7 @@ app.get('/api/portal/escola', async (req, res) => {
     const schoolData = await getSchoolData();
     res.json({
       name: schoolData.profile?.name || 'Escola',
-      logo: schoolData.logo || null,
+      logo: normalizeStorageUrl(schoolData.logo) || null,
       profile: schoolData.profile || null,
     });
   } catch (err) {
@@ -159,6 +199,9 @@ app.get('/api/portal/me', authMiddleware, async (req, res) => {
     const course = studentClass
       ? (schoolData.courses || []).find((c) => c.id === studentClass.courseId) || null
       : null;
+
+    // Normalizar foto
+    if (student.photo) student.photo = normalizeStorageUrl(student.photo);
 
     res.json({
       student: { ...student, portalPassword: undefined },
@@ -229,11 +272,16 @@ app.get('/api/portal/frequencia', authMiddleware, async (req, res) => {
 });
 
 // POST /api/portal/frequencia/justificar
-app.post('/api/portal/frequencia/justificar', authMiddleware, async (req, res) => {
+app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arquivo'), async (req, res) => {
   try {
-    const { date, justification } = req.body;
+    const { date, motivo } = req.body;
     if (!date) return res.status(400).json({ error: 'A data da aula é obrigatória' });
-    if (!justification || justification.trim() === '') return res.status(400).json({ error: 'A justificativa é obrigatória' });
+    if (!motivo || motivo.trim() === '') return res.status(400).json({ error: 'A justificativa (motivo) é obrigatória' });
+
+    let publicUrl = null;
+    if (req.file) {
+      publicUrl = await uploadAtestado(req.file.buffer, req.file.mimetype);
+    }
 
     const schoolData = await getSchoolData();
     const attendance = schoolData.attendance || [];
@@ -241,29 +289,28 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, async (req, res) =
     const student = (schoolData.students || []).find(s => s.id === req.user.studentId);
 
     const fullDateStr = date;
+    const justificationPayload = JSON.stringify({ motivo: motivo.trim(), arquivo: publicUrl });
+    
     let recordIndex = attendance.findIndex(a => a.studentId === req.user.studentId && a.date === fullDateStr);
 
     if (recordIndex !== -1) {
       const existing = attendance[recordIndex];
       if (existing.type === 'presence') return res.status(400).json({ error: 'Não é possível justificar uma presença' });
-      attendance[recordIndex] = { ...existing, justification: justification.trim() };
+      attendance[recordIndex] = { ...existing, justification: justificationPayload };
     } else {
       const newRecord = {
         id: `att-just-${Date.now()}`, studentId: req.user.studentId, classId: student?.classId || '',
-        date: fullDateStr, verified: false, type: 'absence', justification: justification.trim(),
+        date: fullDateStr, verified: false, type: 'absence', justification: justificationPayload,
       };
       attendance.push(newRecord);
       recordIndex = attendance.length - 1;
     }
 
-    let attachment = null;
-    try { const parsed = JSON.parse(justification); attachment = parsed.arquivo_base64 || null; } catch (e) {}
-
     notifications.push({
       id: `notif-${Date.now()}`, studentId: 'admin',
       title: 'Nova Justificativa de Falta',
       message: `${student?.name || 'Aluno'} enviou uma justificativa para a aula de ${date}.`,
-      attachment, read: false, createdAt: new Date().toISOString(),
+      attachment: publicUrl, read: false, createdAt: new Date().toISOString(),
     });
 
     schoolData.attendance = attendance;

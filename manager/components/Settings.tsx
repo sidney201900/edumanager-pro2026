@@ -60,11 +60,23 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
   const [apiLogs, setApiLogs] = useState<any[]>([]);
   const [systemStats, setSystemStats] = useState<any>(null);
 
-  React.useEffect(() => {
+  const fetchStats = () => {
     fetch('/api/system-stats')
       .then(res => res.json())
-      .then(data => setSystemStats(data))
-      .catch(err => console.error('Erro ao buscar stats do sistema:', err));
+      .then(data => {
+        if (data.error) console.error('Erro na API:', data.error);
+        setSystemStats(data);
+      })
+      .catch(err => {
+        console.error('Erro ao buscar stats do sistema:', err);
+        setSystemStats({ error: true });
+      });
+  };
+
+  React.useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000); // Atualiza a cada 30s
+    return () => clearInterval(interval);
   }, []);
 
   React.useEffect(() => {

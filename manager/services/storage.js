@@ -41,8 +41,9 @@ export async function uploadFile(bucket, fileName, fileBuffer, contentType) {
 
   await s3Client.send(command);
 
-  // Retorna a URL pública (MinIO com política de download anônimo)
-  return `${MINIO_PUBLIC_URL}/${bucket}/${fileName}`;
+  // Retorna URL relativa que será servida pelo proxy do backend
+  // Isso garante que o browser acessa via nosso servidor, sem precisar de acesso direto ao MinIO
+  return `/storage/${bucket}/${fileName}`;
 }
 
 /**

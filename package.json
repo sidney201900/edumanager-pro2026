@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "minio": "^8.0.7"
+  },
+  "devDependencies": {
+    "@types/minio": "^7.1.0",
+    "ts-node": "^10.9.2"
+  }
+}

@@ -28,7 +28,8 @@ import {
   getCobrancasByInstallmentId, updateCobrancaLinkCarne,
   updateCobrancaByField
 } from './services/database.js';
-import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats } from './services/storage.js';
+import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats, s3Client } from './services/storage.js';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,7 +49,25 @@ const cancelCache = new Set();
 const sentCache = new Set();
 const lockCache = new Set();
 
-const upload = multer({ storage: multer.memoryStorage() });
+// ============================================================
+// Proxy de Imagens do MinIO (acesso público via backend)
+// ============================================================
+app.get('/storage/:bucket/:key', async (req, res) => {
+  try {
+    const { bucket, key } = req.params;
+    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const data = await s3Client.send(command);
+    
+    res.set('Content-Type', data.ContentType || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    data.Body.pipe(res);
+  } catch (e) {
+    res.status(404).send('Arquivo não encontrado');
+  }
+});
+
+const multerStorage = multer.memoryStorage();
+const upload = multer({ storage: multerStorage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ============================================================
 // ROTA NOVA: Login Administrativo (JWT)
@@ -91,6 +110,44 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/school-data', async (req, res) => {
   try {
     const data = await getSchoolData();
+    
+    // Normalizar URLs do MinIO para proxy relativo
+    // Converte URLs como https://storageedu.xxx/bucket/file para /storage/bucket/file
+    const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_URL || '';
+    const normalizeUrl = (url) => {
+      if (!url || typeof url !== 'string') return url;
+      // Se já é uma URL relativa de proxy, manter
+      if (url.startsWith('/storage/')) return url;
+      // Se é a URL pública do MinIO, converter para proxy
+      if (MINIO_PUBLIC_URL && url.startsWith(MINIO_PUBLIC_URL)) {
+        return url.replace(MINIO_PUBLIC_URL, '/storage');
+      }
+      // Fallback: URL com http://localhost:9000 ou http://minio:9000
+      const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+      if (match && (url.includes('minio') || url.includes('storageedu') || url.includes(':9000'))) {
+        return `/storage/${match[1]}`;
+      }
+      return url;
+    };
+    
+    // Normalizar fotos de alunos
+    if (data.students) {
+      data.students.forEach(s => { if (s.photo) s.photo = normalizeUrl(s.photo); });
+    }
+    // Normalizar logo
+    if (data.logo) data.logo = normalizeUrl(data.logo);
+    if (data.profile?.logo) data.profile.logo = normalizeUrl(data.profile.logo);
+    // Normalizar fotos nos registros de presença
+    if (data.attendance) {
+      data.attendance.forEach(a => { if (a.photo) a.photo = normalizeUrl(a.photo); });
+    }
+    // Normalizar imagens de exames
+    if (data.exams) {
+      data.exams.forEach(e => {
+        if (e.questions) e.questions.forEach(q => { if (q.image) q.image = normalizeUrl(q.image); });
+      });
+    }
+    
     res.json({ data });
   } catch (error) {
     console.error('Erro ao buscar school_data:', error);

@@ -18,7 +18,7 @@ export default function Frequencia() {
   const [showJustifyModal, setShowJustifyModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   const [justificationText, setJustificationText] = useState('');
-  const [justificationFile, setJustificationFile] = useState<string | null>(null);
+  const [justificationFile, setJustificationFile] = useState<File | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -66,52 +66,9 @@ export default function Frequencia() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Se não for imagem, apenas lê normalmente (ex: PDF)
-    if (!file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = () => setJustificationFile(reader.result as string);
-      reader.readAsDataURL(file);
-      return;
+    if (file) {
+      setJustificationFile(file);
     }
-
-    // Lógica de Compactação para Imagens
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-
-        // Limite máximo de 1280px para largura ou altura
-        const MAX_SIZE = 1280;
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height *= MAX_SIZE / width;
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width *= MAX_SIZE / height;
-            height = MAX_SIZE;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          // Exporta como JPEG com 70% de qualidade para o melhor balanço tamanho/qualidade
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-          setJustificationFile(compressedBase64);
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleJustify = async (e: React.FormEvent) => {
@@ -128,22 +85,20 @@ export default function Frequencia() {
     setSubmitLoading(true);
     setError('');
 
-    const payload: any = { motivo: justificationText.trim() };
+    const formData = new FormData();
+    formData.append('date', selectedDate);
+    formData.append('motivo', justificationText.trim());
     if (justificationFile) {
-      payload.arquivo_base64 = justificationFile;
+      formData.append('arquivo', justificationFile);
     }
     
     try {
       const res = await fetch('/api/portal/frequencia/justificar', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}` 
         },
-        body: JSON.stringify({
-          date: selectedDate,
-          justification: JSON.stringify(payload),
-        }),
+        body: formData,
       });
       
       if (!res.ok) {

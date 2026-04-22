@@ -13,14 +13,23 @@
 
 ### ⚙️ Módulo de Configurações e Infra (Manager)
 - **Arquitetura de Armazenamento:** Implementada a transição para **Self-Hosted Storage (MinIO)**. 
-  - O arquivo `supabase.ts` foi substituído por uma versão que utiliza chamadas de API HTTP (`/api/upload`) em vez do SDK da Supabase, garantindo total controle sobre os arquivos no ambiente local.
+  - Extração de Base64 concluída com sucesso via `migrate_images_to_minio.ts`.
+  - O banco de dados de produção (PostgreSQL Local) foi populado com sucesso absoluto na VPS através da rota `/api/migracao-remota` utilizando o script `injetar_magia.ts`.
+  - O sistema agora é 100% Self-Hosted (PostgreSQL e MinIO próprios), sem dependência da nuvem do Supabase.
 - **Funcionalidades de Configuração:**
   - Gestão multi-unidade (Alternância entre Matriz e Filiais).
   - Validação de CNPJ e busca automática via CEP.
   - Monitoramento de logs de API em tempo real.
 - **Histórico de Estabilidade:**
-  - Realizamos um `reset --hard e2b9810` para remover tentativas falhas de otimização de build que causaram instabilidade.
   - O sistema voltou para o último estado "verde" conhecido.
+- **Refatoração de Uploads (Missão 2):** 
+  - [x] **Foto do Aluno (Manager):** Migrado de Base64 para envio via `FormData` direto ao MinIO no componente `Students.tsx`.
+  - [x] **Logo da Escola (Settings):** Removido falback agressivo para base64 e isolado backend para upload exclusivo no bucket `logos`.
+  - [x] **Imagens de Avaliações (Exams):** Ajustado para utilizar Rota isolada `form-data` para salvar no bucket `exames` do MinIO.
+  - [x] **Atestados (Portal):** Refatorado portal (backend e view) para upload do arquivo binário e salvar a url pública no JSON associado.
+  - [x] **Frequência e Biometria (AttendanceQuery):** Corrigido bug de contagem, deduplicação de aulas e janela de 30 minutos para validação facial.
+  - [x] **Financeiro (Manager):** Migração total para API PostgreSQL local, eliminando o Supabase Sync que causava erros na aba financeira.
+  - [x] **Telemetria do Sistema (Settings):** Cards reais de monitoramento de disco (Postgres) e objetos (MinIO).
 
 ### 🚀 Infraestrutura e Deploy
 - **Estado Atual:** O pipeline do GitHub Actions está configurado para gerar imagens Docker para `amd64` e `arm64`.
@@ -28,7 +37,6 @@
 
 ## 📋 Próximos Passos Pendentes
 
-1. **Migração Schoodat:** Iniciar script de migração seguindo a regra de não alteração de senhas em `GEMINI.md`.
+1. **Concluída a Arquitetura de Storage Local (MinIO):** Todo o sistema (Tanto portal quanto manager) agora utiliza `FormData` para envio físico de arquivos aos servidores, salvando apenas a `URL pública` no banco de dados.
 2. **Otimização de Build:** Re-explorar o cache do Docker ou considerar a remoção do suporte nativo ARM64 se não for estritamente necessário para o servidor final.
 3. **Financeiro:** Implementar visualização de extrato detalhado e integração com gateway de pagamento direto via cartão.
-4. **Segurança:** Auditar as políticas de RLS no Supabase para as tabelas de sincronização.
