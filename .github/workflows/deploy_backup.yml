@@ -1,8 +1,7 @@
 name: Build and Deploy
 
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch: # Transformado em acionamento manual para não rodar duplicado
 
 jobs:
   build-and-push:
