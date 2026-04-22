@@ -52,10 +52,10 @@ const lockCache = new Set();
 // ============================================================
 // Proxy de Imagens do MinIO (acesso público via backend)
 // ============================================================
-app.get('/storage/:bucket/*', async (req, res) => {
+app.get(/^\/storage\/([^\/]+)\/(.+)$/, async (req, res) => {
   try {
-    const bucket = req.params.bucket;
-    const key = req.params[0]; // Captura tudo que vem após o bucket (incluindo barras)
+    const bucket = req.params[0];
+    const key = req.params[1]; // Captura tudo que vem após o bucket (incluindo barras)
     
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     const data = await s3Client.send(command);
