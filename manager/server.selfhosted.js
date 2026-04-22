@@ -473,6 +473,36 @@ app.post('/api/webhook_asaas', async (req, res) => {
   }
 });
 
+// Admin Raw Cobrancas para a Aba Financeiro
+app.get('/api/admin/cobrancas', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM alunos_cobrancas ORDER BY vencimento DESC');
+    res.json(result.rows);
+  } catch(e) {
+    res.status(500).json({error: e.message});
+  }
+});
+
+app.delete('/api/admin/cobrancas', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).end();
+    await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = ANY($1)', [ids]);
+    res.json({ success: true });
+  } catch(e) {
+     res.status(500).json({error: e.message});
+  }
+});
+
+app.delete('/api/admin/cobrancas/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch(e) {
+    res.status(500).json({error: e.message});
+  }
+});
+
 // Webhook Evolution
 app.post('/api/webhooks/evolution', (req, res) => {
   try {

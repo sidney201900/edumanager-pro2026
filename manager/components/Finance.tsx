@@ -178,21 +178,19 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
   }, [data.payments]);
 
   const syncAsaasPayments = async () => {
-    if (!isSupabaseConfigured() || isSyncing) return;
+    if (isSyncing) return;
 
     setIsSyncing(true);
     try {
-      const { data: cloudPayments, error } = await supabase
-        .from('alunos_cobrancas')
-        .select('asaas_payment_id, status, aluno_id, valor, vencimento, data_pagamento, installment, asaas_installment_id, link_boleto');
-
-      if (error) throw error;
+      const resp = await fetch('/api/admin/cobrancas');
+      if (!resp.ok) throw new Error('API fetch failed');
+      const cloudPayments = await resp.json();
 
       if (cloudPayments && cloudPayments.length > 0) {
         let updatedCount = 0;
         const currentPayments = dataPaymentsRef.current;
         const updatedPayments = currentPayments.map(p => {
-          const match = cloudPayments.find(cp => {
+          const match = cloudPayments.find((cp: any) => {
             if (p.asaasPaymentId) {
               return cp.asaas_payment_id === p.asaasPaymentId;
             }
@@ -226,7 +224,6 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
         if (updatedCount > 0) {
           updateData({ payments: updatedPayments });
 
-          // Check if any was updated to overdue
           const hasOverdue = updatedPayments.some((p, idx) => {
             const oldP = currentPayments[idx];
             return oldP && oldP.status !== 'overdue' && p.status === 'overdue';
@@ -243,33 +240,27 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
           if (hasPaid && hasOverdue) message = 'Pagamentos e atrasos atualizados.';
 
           showAlert('Sincronização', message, 'success');
-        } else {
-          showAlert('Sincronização', 'Nenhum novo pagamento confirmado encontrado.', 'info');
         }
       }
     } catch (error) {
       console.error('Erro ao sincronizar pagamentos:', error);
-      showAlert('Erro', 'Falha ao sincronizar com o Asaas.', 'error');
+      // Suppress alert so it doesn't pop up randomly to the user if the server restarts temporarily
     } finally {
       setIsSyncing(false);
     }
   };
 
   const fetchSupabaseRecords = async () => {
-    if (!isSupabaseConfigured()) return;
     setIsFetchingSupabase(true);
-    setSelectedSupabaseRows([]); // Clear selection on refresh
+    setSelectedSupabaseRows([]);
     try {
-      const { data: records, error } = await supabase
-        .from('alunos_cobrancas')
-        .select('*')
-        .order('vencimento', { ascending: false });
-
-      if (error) throw error;
+      const resp = await fetch('/api/admin/cobrancas');
+      if (!resp.ok) throw new Error('API fetch failed');
+      const records = await resp.json();
       setSupabaseRecords(records || []);
     } catch (error) {
-      console.error('Error fetching Supabase records:', error);
-      showAlert('Erro', 'Falha ao buscar dados do Supabase.', 'error');
+      console.error('Error fetching billing records from Postgres:', error);
+      showAlert('Erro', 'Falha ao buscar dados do Banco de Dados.', 'error');
     } finally {
       setIsFetchingSupabase(false);
     }
@@ -277,34 +268,30 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
 
   const deleteSupabaseRecord = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('alunos_cobrancas')
-        .delete()
-        .eq('asaas_payment_id', id);
-
-      if (error) throw error;
+      const resp = await fetch(`/api/admin/cobrancas/${id}`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error('Delete failed');
       
       setSupabaseRecords(prev => prev.filter(r => r.asaas_payment_id !== id));
-      showAlert('Sucesso', 'Registro removido do Supabase.', 'success');
+      showAlert('Sucesso', 'Registro removido do Banco.', 'success');
     } catch (error) {
-      console.error('Error deleting Supabase record:', error);
-      showAlert('Erro', 'Falha ao excluir do Supabase.', 'error');
+      console.error('Error deleting record:', error);
+      showAlert('Erro', 'Falha ao excluir do Banco de Dados.', 'error');
     }
   };
 
   const deleteSupabaseRecordsBulk = async () => {
     if (selectedSupabaseRows.length === 0) return;
     
-    if(!confirm(`Tem certeza que deseja excluir ${selectedSupabaseRows.length} registros diretamente do Supabase?`)) return;
+    if(!confirm(`Tem certeza que deseja excluir ${selectedSupabaseRows.length} registros diretamente do Banco de Dados?`)) return;
 
     setIsFetchingSupabase(true);
     try {
-      const { error } = await supabase
-        .from('alunos_cobrancas')
-        .delete()
-        .in('asaas_payment_id', selectedSupabaseRows);
-
-      if (error) throw error;
+      const resp = await fetch('/api/admin/cobrancas', {
+         method: 'DELETE',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ ids: selectedSupabaseRows })
+      });
+      if (!resp.ok) throw new Error('Bulk delete failed');
       
       setSupabaseRecords(prev => prev.filter(r => !selectedSupabaseRows.includes(r.asaas_payment_id)));
       setSelectedSupabaseRows([]);

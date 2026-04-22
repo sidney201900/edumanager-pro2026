@@ -355,6 +355,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                   );
                 }
 
+                return classStudents.map(student => {
                   const studentActualRecords = (data.attendance || []).filter(a => a.studentId === student.id && a.classId === selectedClass.id);
                   const classLessonsRaw = (data.lessons || []).filter(l => l.classId === selectedClass.id && l.status !== 'cancelled');
                   
