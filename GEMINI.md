@@ -9,7 +9,7 @@
 - **Storage Architecture**: 100% Self-Hosted (MinIO) - Decoupled from Supabase Cloud.
 - **Image Serving**: All images are served via a backend proxy route (`/storage/:bucket/:key`) to ensure cross-origin compatibility and security.
 - **Synchronization**: High-performance local API for bank reconciliation (Asaas).
-- **Orquestração:** Portainer (Docker)
+- **Orquestração e CI/CD:** Portainer (Docker) com GitHub Actions via Self-Hosted Runner (Oracle ARM64 nativo) e Watchtower.
 - **Production Entry Point**: All production deployments MUST use `server.selfhosted.js` renamed/copied as `server.js` in the Docker containers to ensure full local feature availability.
 
 ## ⚠️ Regras de Negócio Críticas (MANDATÓRIO)
@@ -24,5 +24,5 @@
 2. **Segurança:** Todas as rotas sensíveis devem validar o token JWT local (via secrets do ambiente). Proibido usar Supabase SDK para lógica de autenticação ou sincronização no frontend.
 3. **Resiliência:** Tratamento rigoroso de erros em chamadas de API de terceiros (Asaas, Evolution API).
 4. **Upload de Arquivos:** Proibido o uso de Base64 para envio de novos arquivos ao servidor. Use obrigatoriamente `FormData` e envie o objeto `File/Blob` para as rotas de API que integram com o MinIO.
-5. **Build Stability**: Dockerfiles MUST include `ENV NODE_OPTIONS="--max-old-space-size=4096"` before `npm run build` to prevent Vite/Rolldown crashes during ARM64 cross-compilation.
+5. **Build & Deploy Stability:** O pipeline de deploy deve obrigatoriamente utilizar `runs-on: self-hosted` e compilar apenas a plataforma `linux/arm64` (sem emulação QEMU). A atualização da stack em produção deve ser automatizada via container transiente do Watchtower.
 6. **Express Compatibility**: Avoid using raw `/*` wildcards in Express 5 routes; use Regex paths (`/^\/route\/(.+)$/`) for compatibility with `path-to-regexp` v8.

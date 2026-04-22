@@ -5,6 +5,7 @@ import {
   ClipboardList, Clock, ChevronLeft, ChevronRight, Send, CheckCircle2,
   XCircle, Award, AlertTriangle, Timer, ArrowLeft
 } from 'lucide-react';
+import { normalizePhotoUrl } from '../services/storage';
 
 // ==========================================
 // Exam Environment — Portal do Aluno
@@ -273,10 +274,10 @@ export default function Avaliacoes() {
                         Imagem de Apoio
                       </div>
                       <img 
-                        src={question.imageUrl} 
+                        src={normalizePhotoUrl(question.imageUrl)} 
                         alt="Imagem de apoio" 
                         style={{ width: '100%', height: 'auto', display: 'block', cursor: 'zoom-in' }} 
-                        onClick={() => window.open(question.imageUrl, '_blank')}
+                        onClick={() => window.open(normalizePhotoUrl(question.imageUrl), '_blank')}
                       />
                     </div>
                   )}

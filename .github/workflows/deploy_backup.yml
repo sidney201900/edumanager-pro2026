@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -14,6 +14,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Adiciona suporte a QEMU para conseguir buildar ARM64 em runners AMD64
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -30,8 +34,8 @@ jobs:
         with:
           context: ./manager
           push: true
-          # Constrói nativamente apenas para ARM64 na Oracle
-          platforms: linux/arm64
+          # Constrói para as duas arquiteturas
+          platforms: linux/amd64,linux/arm64
           tags: ghcr.io/${{ github.repository }}/edumanager:latest
 
       - name: Build and push Portal
@@ -39,14 +43,6 @@ jobs:
         with:
           context: ./portal
           push: true
-          # Constrói nativamente apenas para ARM64 na Oracle
-          platforms: linux/arm64
+          # Constrói para as duas arquiteturas
+          platforms: linux/amd64,linux/arm64
           tags: ghcr.io/${{ github.repository }}/portalaluno:latest
-
-      - name: Atualizar Containers em Produção (Watchtower)
-        run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v ~/.docker/config.json:/config.json \
-            containrrr/watchtower \
-            --run-once --cleanup

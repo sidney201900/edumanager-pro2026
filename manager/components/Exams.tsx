@@ -14,6 +14,16 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const normalizePhotoUrl = (url?: string) => {
+    if (!url) return '';
+    if (url.startsWith('data:image') || url.startsWith('/storage')) return url;
+    try {
+      const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+      if (match) return `/storage/${match[1]}`;
+    } catch(e) {}
+    return url;
+  };
+
   const exams = data.exams || [];
 
   const filteredExams = exams.filter(exam =>
@@ -272,7 +282,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                   <label className="block text-sm font-bold text-slate-700 mb-2">Imagem de Apoio (Opcional)</label>
                   {question.imageUrl ? (
                     <div className="relative inline-block mt-2 group/img">
-                      <img src={question.imageUrl} alt="Apoio" className="max-w-full md:max-w-md h-auto rounded-xl border border-slate-200 shadow-sm" />
+                      <img src={normalizePhotoUrl(question.imageUrl)} alt="Apoio" className="max-w-full md:max-w-md h-auto rounded-xl border border-slate-200 shadow-sm" />
                       <button 
                         onClick={() => handleQuestionChange(qIndex, 'imageUrl', undefined)}
                         className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center hover:bg-red-600 shadow-lg"

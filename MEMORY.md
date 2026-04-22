@@ -8,7 +8,10 @@
 - [x] Vacina de cache global: Injeção de `normalizePhotoUrl` nos módulos de Boletim, Turmas e Frequência.
 - [x] Estabilização do Build ARM64: Injeção de `max_old_space_size=4096` nos Dockerfiles para evitar crashes do Vite no Github Actions.
 - [x] Correção de Rota Express 5: Migração de curingas `*` para Regex para evitar falhas de inicialização no servidor.
-- [ ] Próximo Passo: Validar o tempo de build no Github Actions e confirmar o carregamento das fotos na VPS Oracle.
+- [x] Correção do Crash 404 no Portal: Injeção da pasta `src/services` no container de produção para permitir o import do `storage.js`.
+- [x] Correção das Imagens de Prova: Normalização das URLs nas questões de avaliações (Portal e Manager).
+- [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
+- [ ] Próximo Passo: Verificar se o Watchtower sincronizou as imagens corretamente na produção.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)
 - **Funcionalidades Implementadas:**
@@ -40,8 +43,8 @@
   - [x] **Telemetria do Sistema (Settings):** Cards reais de monitoramento de disco (Postgres) e objetos (MinIO).
 
 ### 🚀 Infraestrutura e Deploy
-- **Estado Atual:** O pipeline do GitHub Actions está configurado para gerar imagens Docker para `amd64` e `arm64`.
-- **Desafio:** O build de `arm64` via QEMU é extremamente lento (>15 min). Tentativas de otimização causaram quebras e foram revertidas para manter a estabilidade.
+- **Estado Atual:** Pipeline 100% estabilizado no GitHub Actions usando `self-hosted` runner (Oracle ARM64 nativo). 
+- **Melhoria:** O build agora ocorre diretamente na arquitetura de destino, sem emulação QEMU, garantindo velocidade e estabilidade total.
 
 ## 📋 Próximos Passos Pendentes
 
