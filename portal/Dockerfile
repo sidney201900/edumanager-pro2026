@@ -12,8 +12,8 @@ FROM node:22-alpine AS production
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
-COPY server.selfhosted.js ./server.js
-COPY src/services ./src/services
+COPY server.selfhosted.js ./server.js 
+COPY services ./services
 COPY --from=builder /app/dist ./dist
 EXPOSE 3001
 CMD ["node", "server.js"]

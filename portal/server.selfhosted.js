@@ -17,7 +17,7 @@ import pg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import { uploadAtestado, s3Client } from './server/services/storage.js';
+import { uploadAtestado, s3Client } from './services/storage.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -51,7 +51,7 @@ app.get(/^\/storage\/([^\/]+)\/(.+)$/, async (req, res) => {
     const key = req.params[1];
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     const data = await s3Client.send(command);
-    
+
     res.set('Content-Type', data.ContentType || 'image/jpeg');
     res.set('Cache-Control', 'public, max-age=86400');
     data.Body.pipe(res);
@@ -291,7 +291,7 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
 
     const fullDateStr = date;
     const justificationPayload = JSON.stringify({ motivo: motivo.trim(), arquivo: publicUrl });
-    
+
     let recordIndex = attendance.findIndex(a => a.studentId === req.user.studentId && a.date === fullDateStr);
 
     if (recordIndex !== -1) {
