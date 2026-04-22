@@ -11,6 +11,8 @@ RUN npm install
 COPY . .
 
 # Build da aplicação (gera a pasta /app/dist)
+# Aumentamos a RAM para evitar crashs do Vite via QEMU ARM64
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
 # ---- Production Stage ----
