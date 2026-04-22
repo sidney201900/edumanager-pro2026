@@ -23,7 +23,7 @@ COPY package.json ./
 RUN npm install --omit=dev
 
 # Copiar o servidor Express e pastas necessárias
-COPY server.js ./
+COPY server.selfhosted.js ./server.js
 COPY services ./services
 
 # Copiar a pasta dist gerada no build

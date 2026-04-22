@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development tsx server.js",
+    "dev": "NODE_ENV=development tsx server.selfhosted.js",
     "build": "vite build",
-    "start": "node server.js",
+    "start": "node server.selfhosted.js",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },
