@@ -21,6 +21,20 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
   const [scheduleClass, setScheduleClass] = useState<Class | null>(null); // For LessonSchedule component
   const [viewingStudentsClass, setViewingStudentsClass] = useState<Class | null>(null); // For student list modal
   
+  // Helper para normalizar URLs de fotos (vacina contra cache antigo)
+  const normalizePhotoUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.startsWith('data:image') || url.startsWith('blob:')) return url;
+    if (url.startsWith('/storage/')) return url;
+    
+    try {
+      const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+      if (match) return `/storage/${match[1]}`;
+    } catch(e) {}
+    
+    return url;
+  };
+  
   const [formData, setFormData] = useState<Omit<Class, 'id'>>({
     name: '',
     courseId: '',
@@ -531,7 +545,7 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden border border-slate-200">
                               {student.photo ? (
-                                <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
+                                <img src={normalizePhotoUrl(student.photo)} alt={student.name} className="w-full h-full object-cover" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-slate-300">
                                   <User size={20} />

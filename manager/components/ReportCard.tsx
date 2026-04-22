@@ -39,6 +39,20 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
   const periods = data.periods || [];
   const grades = data.grades || [];
 
+  // Helper para normalizar URLs de fotos (vacina contra cache antigo)
+  const normalizePhotoUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.startsWith('data:image') || url.startsWith('blob:')) return url;
+    if (url.startsWith('/storage/')) return url;
+    
+    try {
+      const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+      if (match) return `/storage/${match[1]}`;
+    } catch(e) {}
+    
+    return url;
+  };
+
   const handleAddSubject = () => {
     if (!newSubjectName.trim()) {
       showAlert('Atenção', '⚠️ Por favor, informe o nome da disciplina.', 'warning');
@@ -364,7 +378,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 flex-shrink-0 overflow-hidden">
                           {student.photo ? (
-                            <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
+                            <img src={normalizePhotoUrl(student.photo)} alt={student.name} className="w-full h-full object-cover" />
                           ) : (
                             <User size={20} />
                           )}

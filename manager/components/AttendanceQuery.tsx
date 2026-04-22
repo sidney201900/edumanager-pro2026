@@ -49,6 +49,20 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
   const [viewingAttachment, setViewingAttachment] = useState<string | null>(null);
   const [attendanceForAttachment, setAttendanceForAttachment] = useState<Attendance | null>(null);
 
+  // Helper para normalizar URLs de fotos (vacina contra cache antigo)
+  const normalizePhotoUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.startsWith('data:image') || url.startsWith('blob:')) return url;
+    if (url.startsWith('/storage/')) return url;
+    
+    try {
+      const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+      if (match) return `/storage/${match[1]}`;
+    } catch(e) {}
+    
+    return url;
+  };
+
   const toggleAttendanceStatus = (record: any) => {
     let updatedAttendance = [...(data.attendance || [])];
     
@@ -404,9 +418,9 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                       className="flex items-center justify-between p-4 bg-slate-50 hover:bg-indigo-50 rounded-xl border border-slate-100 hover:border-indigo-200 cursor-pointer transition-all group"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm flex-shrink-0 overflow-hidden">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden border border-slate-200 flex items-center justify-center text-indigo-600 font-black text-sm flex-shrink-0">
                           {student.photo ? (
-                            <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
+                            <img src={normalizePhotoUrl(student.photo)} alt={student.name} className="w-full h-full object-cover" />
                           ) : (
                             student.name.charAt(0).toUpperCase()
                           )}
@@ -441,11 +455,13 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
 
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black overflow-hidden flex-shrink-0">
+                <div className="w-20 h-20 rounded-full bg-slate-50 border-4 border-white shadow-xl overflow-hidden flex-shrink-0">
                   {selectedStudent.photo ? (
-                    <img src={selectedStudent.photo} alt={selectedStudent.name} className="w-full h-full object-cover" />
+                    <img src={normalizePhotoUrl(selectedStudent.photo)} alt={selectedStudent.name} className="w-full h-full object-cover" />
                   ) : (
-                    <User size={24} />
+                    <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 font-black text-2xl">
+                      {selectedStudent.name.charAt(0).toUpperCase()}
+                    </div>
                   )}
                 </div>
                 <div>
@@ -834,10 +850,10 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
               </div>
             </div>
             <div className="flex-1 overflow-auto bg-slate-200 p-4 flex items-center justify-center">
-              {viewingAttachment.startsWith('data:application/pdf') || viewingAttachment.includes('.pdf') ? (
-                <iframe src={viewingAttachment} className="w-full h-full min-h-[70vh] rounded-lg shadow-sm bg-white" />
+              {viewingAttachment.includes('pdf') ? (
+                <iframe src={normalizePhotoUrl(viewingAttachment)} className="w-full h-full min-h-[70vh] rounded-lg shadow-sm border border-slate-100" />
               ) : (
-                <img src={viewingAttachment} className="max-w-full max-h-full object-contain rounded-lg shadow-sm" alt="Documento" />
+                <img src={normalizePhotoUrl(viewingAttachment)} className="max-w-full max-h-full object-contain rounded-lg shadow-xl" alt="Documento" />
               )}
             </div>
           </div>

@@ -58,6 +58,20 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
 
   const [activeTab, setActiveTab] = useState<'perfil' | 'monitoramento'>('perfil');
   const [apiLogs, setApiLogs] = useState<any[]>([]);
+
+  // Helper para normalizar URLs de fotos (vacina contra cache antigo)
+  const normalizePhotoUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.startsWith('data:image')) return url;
+    if (url.startsWith('/storage/')) return url;
+    
+    try {
+      const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+      if (match) return `/storage/${match[1]}`;
+    } catch(e) {}
+    
+    return url;
+  };
   const [systemStats, setSystemStats] = useState<any>(null);
 
   const fetchStats = () => {
@@ -334,7 +348,9 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
                 <div className="flex flex-col items-center gap-4">
                   <div className="w-40 h-40 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden relative group shadow-inner">
                     {globalLogo ? (
-                      <img src={globalLogo} alt="Logo" className="w-full h-full object-contain p-2" />
+                      <div className="w-full h-full bg-slate-50 flex items-center justify-center p-4">
+                        <img src={normalizePhotoUrl(globalLogo)} alt="Logo" className="w-full h-full object-contain p-2" />
+                      </div>
                     ) : (
                       <div className="text-slate-300 text-center p-4">
                         <Camera size={40} className="mx-auto mb-2 opacity-20" />

@@ -99,6 +99,21 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     }
   }, [deepLinkStudentId, deepLinkClassId, data.students]);
 
+  // Helper para normalizar URLs de fotos (vacina contra cache antigo)
+  const normalizePhotoUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.startsWith('data:image')) return url; // Base64
+    if (url.startsWith('/storage/')) return url; // Já formatada
+    
+    // Converte URLs absolutas (ex: https://storageedu.../alunos/file) para proxy relativo (/storage/alunos/file)
+    try {
+      const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+      if (match) return `/storage/${match[1]}`;
+    } catch(e) {}
+    
+    return url;
+  };
+
   // Load Models
   useEffect(() => {
     const loadModels = async () => {
@@ -516,6 +531,9 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
       });
       
       streamRef.current = stream;
+      if (videoRef.current) {
+         videoRef.current.srcObject = stream;
+      }
       setCameraActive(true);
     } catch (err) {
       console.error("Error accessing camera:", err);
@@ -1208,7 +1226,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden border border-slate-200">
                               {student.photo ? (
-                                <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
+                                <img src={normalizePhotoUrl(student.photo)} alt={student.name} className="w-full h-full object-cover" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-slate-400">
                                   <User size={20} />
@@ -1358,7 +1376,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
                       </>
                     ) : formData.photo ? (
                       <>
-                        <img src={formData.photo} alt="Student" className="w-full h-full object-cover" />
+                        <img src={normalizePhotoUrl(formData.photo)} alt="Student" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <p className="text-white font-bold text-xs">Alterar Foto</p>
                         </div>

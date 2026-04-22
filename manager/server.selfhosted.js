@@ -52,9 +52,11 @@ const lockCache = new Set();
 // ============================================================
 // Proxy de Imagens do MinIO (acesso público via backend)
 // ============================================================
-app.get('/storage/:bucket/:key', async (req, res) => {
+app.get('/storage/:bucket/*', async (req, res) => {
   try {
-    const { bucket, key } = req.params;
+    const bucket = req.params.bucket;
+    const key = req.params[0]; // Captura tudo que vem após o bucket (incluindo barras)
+    
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     const data = await s3Client.send(command);
     
@@ -62,6 +64,7 @@ app.get('/storage/:bucket/:key', async (req, res) => {
     res.set('Cache-Control', 'public, max-age=86400');
     data.Body.pipe(res);
   } catch (e) {
+    console.error(`[Storage Proxy] Erro ao buscar: ${req.params.bucket}/${req.params[0]}`, e.message);
     res.status(404).send('Arquivo não encontrado');
   }
 });
@@ -179,25 +182,32 @@ app.put('/api/school-data', async (req, res) => {
 });
 
 app.get('/api/system-stats', async (req, res) => {
+  let postgresStats = { dbSize: 'N/A', tableCount: '0' };
   try {
     const dbResult = await pool.query(`
       SELECT pg_size_pretty(pg_database_size(current_database())) as db_size,
              (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public') as table_count
     `);
-    
-    const minioStats = await getMinioStats();
-    
-    res.json({
-      postgres: {
-        dbSize: dbResult.rows[0].db_size,
-        tableCount: dbResult.rows[0].table_count
-      },
-      minio: minioStats
-    });
+    postgresStats = {
+      dbSize: dbResult.rows[0].db_size,
+      tableCount: dbResult.rows[0].table_count
+    };
   } catch(e) {
-    console.error('System Stats Error:', e);
-    res.status(500).json({ error: e.message });
+    console.error('System Stats (Postgres) Error:', e);
   }
+  
+  let minioStats = { error: true, message: 'Not initialized' };
+  try {
+    minioStats = await getMinioStats();
+  } catch(e) {
+    console.error('System Stats (MinIO) Error:', e);
+    minioStats = { error: true, message: e.message };
+  }
+  
+  res.json({
+    postgres: postgresStats,
+    minio: minioStats
+  });
 });
 
 // ============================================================
