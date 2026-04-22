@@ -11,6 +11,7 @@
 - [x] Correção do Crash 404 no Portal: Injeção da pasta `src/services` no container de produção para permitir o import do `storage.js`.
 - [x] Correção das Imagens de Prova: Normalização das URLs nas questões de avaliações (Portal e Manager).
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
+- [x] Fix Tela Branca (Portal): Refatoração de `normalizePhotoUrl` para `helpers.ts` isolado, evitando vazamento de SDK de Backend no Navegador.
 - [ ] Próximo Passo: Verificar se o Watchtower sincronizou as imagens corretamente na produção.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)

@@ -5,7 +5,7 @@ import {
   ClipboardList, Clock, ChevronLeft, ChevronRight, Send, CheckCircle2,
   XCircle, Award, AlertTriangle, Timer, ArrowLeft
 } from 'lucide-react';
-import { normalizePhotoUrl } from '../services/storage';
+import { normalizePhotoUrl } from '../helpers';
 
 // ==========================================
 // Exam Environment — Portal do Aluno

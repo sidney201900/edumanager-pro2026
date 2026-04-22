@@ -5,7 +5,7 @@ import {
   FileText, Award, User, LogOut, GraduationCap, X, Menu, ClipboardList
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { normalizePhotoUrl } from '../services/storage';
+import { normalizePhotoUrl } from '../helpers';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
