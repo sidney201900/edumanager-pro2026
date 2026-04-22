@@ -46,6 +46,7 @@ jobs:
       - name: Atualizar Containers em Produção (Watchtower)
         run: |
           docker run --rm \
+            -e DOCKER_API_VERSION=1.44 \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v ~/.docker/config.json:/config.json \
             containrrr/watchtower \
