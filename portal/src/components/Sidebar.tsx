@@ -158,7 +158,7 @@ export default function Sidebar() {
               overflow: 'hidden', transition: 'all 0.3s ease', color: 'white'
             }}>
               {student.photo ? (
-                <img src={student.photo} alt={student.name}
+                <img src={normalizePhotoUrl(student.photo)} alt={student.name}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 student.name.charAt(0).toUpperCase()

@@ -1,6 +1,6 @@
 # MEMORY.md - Contexto de Desenvolvimento
 
-## 📅 Estado Atual (21/04/2026)
+## 📅 Estado Atual (22/04/2026)
 
 - [x] Correção do "Bug da Tela Preta" na câmera ao alternar para câmera traseira no celular.
 - [x] Unificação do servidor de produção: Dockerfile agora utiliza `server.selfhosted.js` (Manager e Portal).
@@ -11,7 +11,10 @@
 - [x] Correção do Crash 404 no Portal: Injeção da pasta `src/services` no container de produção para permitir o import do `storage.js`.
 - [x] Correção das Imagens de Prova: Normalização das URLs nas questões de avaliações (Portal e Manager).
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
-- [x] Fix Tela Branca (Portal): Refatoração de `normalizePhotoUrl` para `helpers.ts` isolado, evitando vazamento de SDK de Backend no Navegador.
+- [x] Fix Tela Branca (Portal): Isolamento Físico absoluto do `storage.js` (SDK Backend) para pasta fora do `src` (server-only). Isso impede vazamentos de Node.js no navegador.
+- [x] Correção Financeiro (Portal): Resolvido erros de renderização em `Financeiro.tsx` e inconsistência de tipos em `Notifications.ts`.
+- [x] Pipeline Deploy: Ajustado volume do Docker no GitHub Actions de `~/.docker` para `$DOCKER_CONFIG` para compatibilidade total com o Runner.
+- [x] Normalização de Imagens: Todas as fotos de alunos no Portal agora passam pela vacina `normalizePhotoUrl`.
 - [ ] Próximo Passo: Verificar se o Watchtower sincronizou as imagens corretamente na produção.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)

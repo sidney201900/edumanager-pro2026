@@ -91,7 +91,7 @@ export default function Financeiro() {
       overdue: { className: 'badge badge-danger', label: 'Atrasado' },
       cancelled: { className: 'badge badge-info', label: 'Cancelado' },
     };
-    const s = map[norm] || { className: 'badge badge-info', label: status };
+    const s = map[norm] || { className: 'badge badge-info', label: norm };
     return <span className={s.className}>{s.label}</span>;
   };
 
@@ -362,7 +362,7 @@ export default function Financeiro() {
                           >
                             <Printer size={14} /> Visualizar Recibo
                           </button>
-                        ) : isPending(payment.status) && link ? (
+                        ) : isPending(payment) && link ? (
                           <a
                             href={link}
                             target="_blank"

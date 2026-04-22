@@ -1,7 +1,7 @@
 /**
  * Helpers compartihados de UI
  */
-export function normalizePhotoUrl(url) {
+export function normalizePhotoUrl(url?: string | null): string {
   if (!url || typeof url !== 'string') return '';
   if (url.startsWith('data:image')) return url;
   if (url.startsWith('/storage/')) return url;

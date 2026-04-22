@@ -17,7 +17,7 @@ import pg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import { uploadAtestado, s3Client } from './src/services/storage.js';
+import { uploadAtestado, s3Client } from './server/services/storage.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 const upload = multer({ storage: multer.memoryStorage() });

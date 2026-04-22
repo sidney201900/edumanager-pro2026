@@ -159,6 +159,7 @@ export interface Notification {
   message: string;
   read: boolean;
   createdAt: string; // ISO string
+  type?: 'info' | 'alert' | 'success' | 'danger';
 }
 
 // ==========================================
