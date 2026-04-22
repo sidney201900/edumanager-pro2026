@@ -46,10 +46,26 @@ export async function uploadFile(bucket, fileName, fileBuffer, contentType) {
 }
 
 /**
- * Gera a URL pública de um arquivo existente
+ * Normaliza URLs de mídia para o formato de proxy (/storage/...)
+ */
+export function normalizePhotoUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('data:image')) return url;
+  if (url.startsWith('/storage/')) return url;
+  
+  try {
+    const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+    if (match) return `/storage/${match[1]}`;
+  } catch(e) {}
+  
+  return url;
+}
+
+/**
+ * Gera a URL de proxy para um arquivo existente
  */
 export function getPublicUrl(bucket, fileName) {
-  return `${MINIO_PUBLIC_URL}/${bucket}/${fileName}`;
+  return `/storage/${bucket}/${fileName}`;
 }
 
 /**

@@ -45,9 +45,10 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // ============================================================
 // Proxy de Imagens do MinIO (acesso público via backend)
 // ============================================================
-app.get('/storage/:bucket/:key', async (req, res) => {
+app.get(/^\/storage\/([^\/]+)\/(.+)$/, async (req, res) => {
   try {
-    const { bucket, key } = req.params;
+    const bucket = req.params[0];
+    const key = req.params[1];
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     const data = await s3Client.send(command);
     

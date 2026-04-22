@@ -4,6 +4,7 @@ import {
   User, Mail, Phone, Calendar, MapPin, CreditCard,
   Lock, Eye, EyeOff, Loader2, CheckCircle2, Shield
 } from 'lucide-react';
+import { normalizePhotoUrl } from '../services/storage';
 
 export default function MeusDados() {
   const { student, updatePassword } = useAuth();
@@ -98,7 +99,7 @@ export default function MeusDados() {
             borderBottom: '1px solid var(--glass-border)',
           }}>
             {student.photo ? (
-              <img src={student.photo} alt={student.name} style={{
+              <img src={normalizePhotoUrl(student.photo)} alt={student.name} style={{
                 width: 64, height: 64, borderRadius: '50%', objectFit: 'cover',
                 border: '3px solid var(--color-primary)',
               }} />

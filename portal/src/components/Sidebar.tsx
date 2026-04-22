@@ -5,6 +5,7 @@ import {
   FileText, Award, User, LogOut, GraduationCap, X, Menu, ClipboardList
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { normalizePhotoUrl } from '../services/storage';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -111,7 +112,7 @@ export default function Sidebar() {
         }}>
           {schoolLogo ? (
             <img
-              src={schoolLogo}
+              src={normalizePhotoUrl(schoolLogo)}
               alt="EduManager"
               style={{
                 width: desktopCollapsed ? 40 : 44, height: desktopCollapsed ? 40 : 44, 

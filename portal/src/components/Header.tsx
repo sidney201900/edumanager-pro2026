@@ -3,6 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Moon, Sun } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import Notifications from './Notifications';
+import { normalizePhotoUrl } from '../services/storage';
 
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',

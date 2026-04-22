@@ -2,6 +2,14 @@
 
 ## 📅 Estado Atual (21/04/2026)
 
+- [x] Correção do "Bug da Tela Preta" na câmera ao alternar para câmera traseira no celular.
+- [x] Unificação do servidor de produção: Dockerfile agora utiliza `server.selfhosted.js` (Manager e Portal).
+- [x] Correção dos Cards de Monitoramento (PostgreSQL/MinIO) com tratativa de erro independente.
+- [x] Vacina de cache global: Injeção de `normalizePhotoUrl` nos módulos de Boletim, Turmas e Frequência.
+- [x] Estabilização do Build ARM64: Injeção de `max_old_space_size=4096` nos Dockerfiles para evitar crashes do Vite no Github Actions.
+- [x] Correção de Rota Express 5: Migração de curingas `*` para Regex para evitar falhas de inicialização no servidor.
+- [ ] Próximo Passo: Validar o tempo de build no Github Actions e confirmar o carregamento das fotos na VPS Oracle.
+
 ### 💳 Módulo Financeiro (Portal do Aluno)
 - **Funcionalidades Implementadas:**
   - Cards de resumo (Total em Aberto, Pago, Parcelas).

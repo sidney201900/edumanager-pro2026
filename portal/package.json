@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "node server.js",
+    "dev:server": "node server.selfhosted.js",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.selfhosted.js"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",
