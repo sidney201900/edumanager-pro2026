@@ -4,7 +4,7 @@ import {
   User, Mail, Phone, Calendar, MapPin, CreditCard,
   Lock, Eye, EyeOff, Loader2, CheckCircle2, Shield
 } from 'lucide-react';
-import { normalizePhotoUrl } from '../services/storage';
+import { normalizePhotoUrl } from '../helpers';
 
 export default function MeusDados() {
   const { student, updatePassword } = useAuth();
