@@ -63,8 +63,9 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
     if (!notif.read) handleMarkAsRead(notif.id);
     
     if (notif.title.toLowerCase().includes('justificativa') || notif.message.toLowerCase().includes('justificativa')) {
-      if (onNavigateToStudent) {
-        onNavigateToStudent(notif.studentId);
+      const targetId = (notif as any).fromStudentId || notif.studentId;
+      if (onNavigateToStudent && targetId !== 'admin') {
+        onNavigateToStudent(targetId);
       } else {
         setView(View.AttendanceQuery);
       }
@@ -94,8 +95,11 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
     );
     
     if (pendingAbsences.length > 0) {
-      // Tenta achar pelo studentId mencionado na mensagem ou aceita o mais recente
-      const matchedAbsence = pendingAbsences[0]; // aceita o mais recente pendente
+      // Tenta achar pelo studentId mencionado ou associado à notificação
+      const targetId = (notif as any).fromStudentId;
+      const matchedAbsence = targetId 
+        ? pendingAbsences.find(a => a.studentId === targetId) || pendingAbsences[0]
+        : pendingAbsences[0];
       
       const updatedAttendance = (data.attendance || []).map(a => 
         a.id === matchedAbsence.id ? { ...a, justificationAccepted: true } : a
@@ -168,7 +172,7 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
                     try {
                       const parsed = JSON.parse(notif.message);
                       displayMessage = parsed.motivo || displayMessage;
-                      attachmentFromMessage = parsed.arquivo_base64 || null;
+                      attachmentFromMessage = parsed.arquivo || parsed.arquivo_base64 || null;
                     } catch(e) {}
                   }
 
@@ -189,13 +193,14 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
                         {displayMessage}
                       </p>
                       {(!notif.read) && (
-                        <div className="flex justify-end mt-2 gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex justify-end mt-2 gap-2 transition-opacity">
                           {isJustificativa && (
                             <button 
                               onClick={(e) => { 
                                 e.stopPropagation(); 
-                                if (onNavigateToStudent) {
-                                  onNavigateToStudent(notif.studentId);
+                                const targetId = (notif as any).fromStudentId || notif.studentId;
+                                if (onNavigateToStudent && targetId !== 'admin') {
+                                  onNavigateToStudent(targetId);
                                 } else {
                                   setView(View.AttendanceQuery);
                                 }

@@ -308,10 +308,14 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
     }
 
     notifications.push({
-      id: `notif-${Date.now()}`, studentId: 'admin',
+      id: `notif-${Date.now()}`, 
+      studentId: 'admin',
+      fromStudentId: req.user.studentId, // Identificador para navegação no Manager
       title: 'Nova Justificativa de Falta',
       message: `${student?.name || 'Aluno'} enviou uma justificativa para a aula de ${date}.`,
-      attachment: publicUrl, read: false, createdAt: new Date().toISOString(),
+      attachment: publicUrl, 
+      read: false, 
+      createdAt: new Date().toISOString(),
     });
 
     schoolData.attendance = attendance;

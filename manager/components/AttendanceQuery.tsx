@@ -111,6 +111,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     try {
       const parsed = JSON.parse(attendanceForAttachment.justification);
       delete parsed.arquivo_base64;
+      delete parsed.arquivo;
       const updatedJustification = JSON.stringify(parsed);
       
       const updatedAttendance = (data.attendance || []).map(a => 
@@ -593,7 +594,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                               try {
                                 const parsed = JSON.parse(justMotivo);
                                 justMotivo = parsed.motivo || justMotivo;
-                                justAttachment = parsed.arquivo_base64 || null;
+                                justAttachment = parsed.arquivo || parsed.arquivo_base64 || null;
                               } catch(e) {}
                             }
 

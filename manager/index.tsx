@@ -28,6 +28,7 @@ import { DialogProvider } from './DialogContext';
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [currentView, setCurrentView] = useState<View>(View.Dashboard);
   const [deepLinkStudentId, setDeepLinkStudentId] = useState<string | null>(null);
   const [deepLinkClassId, setDeepLinkClassId] = useState<string | null>(null);
@@ -41,11 +42,23 @@ const App = () => {
 
   // 0. Load from IndexedDB on mount
   useEffect(() => {
-    const loadLocal = async () => {
-      const localData = await dbService.initData();
-      setData(prev => ({ ...prev, ...localData }));
+    const loadSessionAndData = async () => {
+      try {
+        const savedSession = localStorage.getItem('edumanager_session');
+        if (savedSession) {
+          const user = JSON.parse(savedSession);
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+        }
+        const localData = await dbService.initData();
+        setData(prev => ({ ...prev, ...localData }));
+      } catch (e) {
+        console.error("Erro ao carregar sessão:", e);
+      } finally {
+        setIsCheckingAuth(false);
+      }
     };
-    loadLocal();
+    loadSessionAndData();
   }, []);
 
   // 1. Initial Cloud Fetch (Sync on Load)
@@ -122,37 +135,28 @@ const App = () => {
     dataRef.current = data;
   }, [data]);
 
+  // 4. Polling Inteligente (Substitui o Realtime do Supabase no ambiente Self-Hosted)
+  // Verifica mudanças no servidor a cada 30 segundos
   useEffect(() => {
-    if (isCloudEnabled) {
-      console.log("📡 Iniciando escuta em tempo real para school_data...");
-      // Cria um canal de escuta para a tabela school_data
-      const channel = supabase
-        .channel('school_data_changes')
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'school_data', filter: 'id=eq.1' },
-          (payload) => {
-            // Quando houver um UPDATE (ex: Portal enviou justificativa)
-            const newData = payload.new.data as SchoolData;
-            
-            // Só atualiza se for uma mudança externa (evita loops)
-            if (newData.lastUpdated !== dataRef.current.lastUpdated) {
-              console.log("🔔 Nova mudança externa detectada em tempo real!");
-              setData(newData);
-              dbService.saveData(newData); // Sincroniza cache local
-            }
-          }
-        )
-        .subscribe((status) => {
-          console.log("🔌 Status da conexão Realtime:", status);
-        });
+    const pollInterval = setInterval(async () => {
+      // Pequena validação para não interromper ações do usuário
+      if (syncStatus === 'syncing') return;
+      
+      try {
+        const cloudData = await dbService.fetchFromCloud();
+        if (cloudData && cloudData.lastUpdated !== dataRef.current.lastUpdated) {
+          console.log("🔔 Polling: Novos dados detectados no servidor!");
+          setData(cloudData);
+          dbService.saveData(cloudData);
+          setSyncStatus('saved');
+        }
+      } catch (e) {
+        // Silencioso em caso de erro de rede temporário
+      }
+    }, 30000); // 30 segundos
 
-      return () => {
-        console.log("⚰️ Encerrando canal de Realtime");
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [isCloudEnabled]);
+    return () => clearInterval(pollInterval);
+  }, [syncStatus]);
 
   const updateData = (newData: Partial<SchoolData>) => {
     setData(prev => ({ 
@@ -228,16 +232,32 @@ const App = () => {
     }
   };
 
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <RefreshCw size={48} className="text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return <Auth data={data} onLogin={(user) => {
+      localStorage.setItem('edumanager_session', JSON.stringify(user));
       setCurrentUser(user);
       setIsAuthenticated(true);
     }} onUpdateUsers={handleUpdateUsers} />;
   }
 
+  const handleLogout = () => {
+    localStorage.removeItem('edumanager_session');
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    setCurrentView(View.Dashboard);
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-50 relative">
-      <Sidebar currentView={currentView} setView={setCurrentView} user={currentUser} logo={data.logo} />
+      <Sidebar currentView={currentView} setView={setCurrentView} user={currentUser} logo={data.logo} onLogout={handleLogout} />
       <main className="flex-1 w-full overflow-y-auto max-h-screen pt-16 md:pt-0 relative">
         {/* Sync Indicator - Green Strip on the Right */}
         {syncStatus === 'syncing' && (

@@ -32,9 +32,10 @@ interface SidebarProps {
   setView: (view: View) => void;
   user: User | null;
   logo?: string;
+  onLogout: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user, logo }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user, logo, onLogout }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -147,7 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, user, logo }) =
             )}
             {!isCollapsed && (
               <button 
-                onClick={() => window.location.reload()}
+                onClick={onLogout}
                 className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition-all"
                 title="Sair"
               >
