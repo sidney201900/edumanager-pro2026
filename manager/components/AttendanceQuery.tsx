@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SchoolData, Attendance, Class, Student } from '../types';
 import { dbService } from '../services/dbService';
 import { useDialog } from '../DialogContext';
-import { Search, Calendar, User, Clock, CheckCircle, XCircle, FileDown, BookOpen, Plus, X, AlertCircle, RefreshCw, ChevronRight, Trash2, FileSignature, Paperclip } from 'lucide-react';
+import { Search, Calendar, User, Clock, CheckCircle, XCircle, FileDown, BookOpen, Plus, X, AlertCircle, RefreshCw, ChevronRight, Trash2, FileSignature, Paperclip, Eye } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { addHeader } from '../services/pdfService';
@@ -48,6 +48,9 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
   const [absenceLessonId, setAbsenceLessonId] = useState('');
   const [viewingAttachment, setViewingAttachment] = useState<string | null>(null);
   const [attendanceForAttachment, setAttendanceForAttachment] = useState<Attendance | null>(null);
+  const [showJustificationTextModal, setShowJustificationTextModal] = useState(false);
+  const [currentJustificationText, setCurrentJustificationText] = useState('');
+  const [currentRecordForJustification, setCurrentRecordForJustification] = useState<Attendance | null>(null);
 
   // Helper para normalizar URLs de fotos (vacina contra cache antigo)
   const normalizePhotoUrl = (url?: string) => {
@@ -654,7 +657,18 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                                   {isAwaiting || isPendente ? (
                                     <span className="text-xs italic text-indigo-400">Aguardando registro ou justificativa...</span>
                                   ) : justMotivo ? (
-                                    <p className="text-sm text-slate-600 truncate max-w-[200px]" title={justMotivo}>{justMotivo}</p>
+                                    <button 
+                                      onClick={() => {
+                                        setCurrentJustificationText(justMotivo);
+                                        setCurrentRecordForJustification(record);
+                                        setShowJustificationTextModal(true);
+                                      }}
+                                      className="p-2 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all shadow-sm border border-amber-100 flex items-center gap-2 group"
+                                      title="Ver Justificativa Completa"
+                                    >
+                                      <Eye size={18} className="group-hover:scale-110 transition-transform" />
+                                      <span className="text-[10px] font-bold uppercase tracking-wider">Ver Motivo</span>
+                                    </button>
                                   ) : (
                                     <span className="text-sm text-slate-300">—</span>
                                   )}
@@ -855,6 +869,55 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 <iframe src={normalizePhotoUrl(viewingAttachment)} className="w-full h-full min-h-[70vh] rounded-lg shadow-sm border border-slate-100" />
               ) : (
                 <img src={normalizePhotoUrl(viewingAttachment)} className="max-w-full max-h-full object-contain rounded-lg shadow-xl" alt="Documento" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {showJustificationTextModal && (
+        <div className="fixed inset-0 bg-transparent z-[110] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 relative border border-slate-100">
+            {/* Design header */}
+            <div className="bg-amber-500 h-1.5 w-full absolute top-0 left-0"></div>
+            
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-amber-50/30">
+              <h3 className="text-lg font-black text-amber-800 flex items-center gap-2">
+                <AlertCircle size={22} /> Motivo da Falta
+              </h3>
+              <button 
+                onClick={() => setShowJustificationTextModal(false)}
+                className="p-2 text-amber-400 hover:text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-8">
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6 max-h-[300px] overflow-y-auto">
+                <p className="text-slate-700 font-medium leading-relaxed italic text-center">
+                  "{currentJustificationText}"
+                </p>
+              </div>
+
+              {currentRecordForJustification && !currentRecordForJustification.justificationAccepted && (
+                <button 
+                  onClick={() => {
+                    const updated = (data.attendance || []).map(a => a.id === currentRecordForJustification.id ? { ...a, justificationAccepted: true } : a);
+                    updateData({ attendance: updated });
+                    dbService.saveData({ ...data, attendance: updated });
+                    showAlert('Sucesso', 'Justificativa aceita com sucesso.', 'success');
+                    setShowJustificationTextModal(false);
+                  }}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-base hover:bg-indigo-700 shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  <CheckCircle size={20} /> Aceitar Justificativa
+                </button>
+              )}
+              
+              {currentRecordForJustification?.justificationAccepted && (
+                <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 text-emerald-700 rounded-2xl font-black uppercase text-xs border border-emerald-100">
+                  <CheckCircle size={18} /> Já Aceita
+                </div>
               )}
             </div>
           </div>

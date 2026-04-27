@@ -166,12 +166,14 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
                   const isJustificativa = notif.title.toLowerCase().includes('justificativa') || notif.message.toLowerCase().includes('justificativa');
                   
                   let displayMessage = notif.message;
+                  let justificationMotive = '';
                   let attachmentFromMessage = null;
                   
                   if (notif.message.startsWith('{')) {
                     try {
                       const parsed = JSON.parse(notif.message);
-                      displayMessage = parsed.motivo || displayMessage;
+                      displayMessage = parsed.text || parsed.motivo || displayMessage;
+                      justificationMotive = parsed.motivo || '';
                       attachmentFromMessage = parsed.arquivo || parsed.arquivo_base64 || null;
                     } catch(e) {}
                   }
@@ -192,6 +194,12 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
                       <p className={`text-sm font-medium leading-relaxed mb-2 ${notif.read ? 'text-slate-400' : 'text-emerald-600/90'}`}>
                         {displayMessage}
                       </p>
+                      {isJustificativa && justificationMotive && (
+                        <div className="bg-amber-50 p-2 rounded-lg border border-amber-100 mb-3">
+                          <p className="text-[11px] font-bold text-amber-800 italic uppercase mb-1">Motivo enviado:</p>
+                          <p className="text-xs text-amber-700 font-medium">"{justificationMotive}"</p>
+                        </div>
+                      )}
                       {(!notif.read) && (
                         <div className="flex justify-end mt-2 gap-2 transition-opacity">
                           {isJustificativa && (
@@ -248,7 +256,7 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
       )}
 
       {viewingAttachment && (
-        <div className="fixed inset-0 bg-transparent z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-4 border-b flex items-center justify-between bg-slate-50">
               <h3 className="font-black text-slate-800 flex items-center gap-2">

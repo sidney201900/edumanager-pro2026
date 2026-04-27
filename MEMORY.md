@@ -11,11 +11,12 @@
 - [x] Correção do Crash 404 no Portal: Injeção da pasta `src/services` no container de produção para permitir o import do `storage.js`.
 - [x] Correção das Imagens de Prova: Normalização das URLs nas questões de avaliações (Portal e Manager).
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
-- [x] Fix Tela Branca (Portal): Isolamento Físico absoluto do `storage.js` (SDK Backend) para pasta fora do `src` (server-only). Isso impede vazamentos de Node.js no navegador.
-- [x] Correção Financeiro (Portal): Resolvido erros de renderização em `Financeiro.tsx` e inconsistência de tipos em `Notifications.ts`.
-- [x] Pipeline Deploy: Ajustado volume do Docker no GitHub Actions de `~/.docker` para `$DOCKER_CONFIG` para compatibilidade total com o Runner.
-- [x] Normalização de Imagens: Todas as fotos de alunos no Portal agora passam pela vacina `normalizePhotoUrl`.
-- [ ] Próximo Passo: Verificar se o Watchtower sincronizou as imagens corretamente na produção.
+- [x] Correção do Sino de Notificações: Botões sempre visíveis e suporte a anexo via chave `arquivo`.
+- [x] Persistência de Login (Manager): Login agora persiste no F5 via `localStorage`.
+- [x] Polling de Dados (30s): Implementada sincronização automática entre Portal e Manager para notificações instantâneas (Self-Hosted).
+- [x] Deep Link de Notificação: Corrigida navegação do Sino para o Histórico de Aluno usando metadados `fromStudentId`.
+- [x] Normalização de Anexos: Sincronização de chaves de justificativa entre Portal e página de Frequência.
+- [ ] Próximo Passo: Monitorar o log de acesso dos usuários após a ativação da persistência de login.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)
 - **Funcionalidades Implementadas:**
