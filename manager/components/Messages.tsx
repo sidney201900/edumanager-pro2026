@@ -14,11 +14,14 @@ const defaultTemplates = {
   boletoVencido: "Olá {nome}, o boleto referente a {descricao} de R$ {valor} venceu em {vencimento}. Segue o PDF da 2ª via atualizada abaixo:",
   cobrancaCancelada: "Olá {nome}, a cobrança referente a {descricao} foi cancelada.",
   cobrancaAtualizada: "Olá {nome}, o boleto de {descricao} foi atualizado. Segue a nova versão:",
+  boletoAVencer: "Olá {nome}, lembramos que sua cobrança referente a {descricao} no valor de R$ {valor} vencerá em {vencimento}. Segue o PDF abaixo:",
   felizAniversario: "Olá {nome}, a equipe da {escola} passa para te desejar um Feliz Aniversário! Muita saúde, paz e conquistas neste novo ciclo! 🎂🎈",
   automationRules: {
     sendOnDueDate: true,
     sendDaysAfter: '1',
-    repeatEveryDays: '3'
+    repeatEveryDays: '3',
+    sendDaysBefore: '3',
+    maxPreWarnings: '2'
   }
 };
 
@@ -117,6 +120,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
       boletoVencido: normalizeLineBreaks(templates.boletoVencido),
       cobrancaCancelada: normalizeLineBreaks(templates.cobrancaCancelada),
       cobrancaAtualizada: normalizeLineBreaks(templates.cobrancaAtualizada),
+      boletoAVencer: normalizeLineBreaks(templates.boletoAVencer),
       felizAniversario: normalizeLineBreaks(templates.felizAniversario)
     };
     updateData({ messageTemplates: normalizedTemplates });
@@ -126,11 +130,11 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
   const handleDispararCobrancas = async () => {
     showConfirm(
       'Disparar Cobranças',
-      'Tem certeza que deseja processar e enviar as mensagens para TODOS os alunos com pagamentos atrasados agora?',
+      'Tem certeza que deseja processar e enviar as mensagens para TODOS os alunos com pagamentos ATRASADOS agora?',
       async () => {
         setIsSending(true);
         try {
-          const resp = await fetch('/api/disparar_cobrancas', { method: 'POST' });
+          const resp = await fetch('/api/disparar_cobrancas?tipo=atrasado', { method: 'POST' });
           const resData = await resp.json();
           if (resp.ok) {
             showAlert('Sucesso', resData.message || 'Cobranças processadas e disparadas com sucesso!', 'success');
@@ -139,6 +143,29 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
           }
         } catch (e: any) {
           showAlert('Erro', 'Erro de conexão ao disparar cobranças.', 'error');
+        } finally {
+          setIsSending(false);
+        }
+      }
+    );
+  };
+
+  const handleDispararPreventivos = async () => {
+    showConfirm(
+      'Lembretes Preventivos',
+      'Tem certeza que deseja iniciar o envio dos LEMBRETES PREVENTIVOS para os boletos próximos do vencimento agora?',
+      async () => {
+        setIsSending(true);
+        try {
+          const resp = await fetch('/api/disparar_cobrancas?tipo=preventivo', { method: 'POST' });
+          const resData = await resp.json();
+          if (resp.ok) {
+            showAlert('Sucesso', resData.message || 'Lembretes disparados com sucesso!', 'success');
+          } else {
+            showAlert('Erro', resData.error || 'Erro ao disparar lembretes', 'error');
+          }
+        } catch (e: any) {
+          showAlert('Erro', 'Erro de conexão.', 'error');
         } finally {
           setIsSending(false);
         }
@@ -212,6 +239,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
     { key: 'boletoVencido', label: 'Boleto Vencido', desc: 'Enviado conforme automação ou disparo manual de atrasados.', color: 'red', icon: AlertTriangle, vars: ['{nome}', '{matricula}', '{descricao}', '{valor}', '{vencimento}', '{link_boleto}', '{escola}'] },
     { key: 'cobrancaCancelada', label: 'Cobrança Cancelada', desc: 'Enviado quando o boleto for cancelado no sistema.', color: 'slate', icon: AlertTriangle, vars: ['{nome}', '{matricula}', '{descricao}', '{escola}'] },
     { key: 'cobrancaAtualizada', label: 'Cobrança Atualizada', desc: 'Enviado quando houver edição/atualização da cobrança.', color: 'amber', icon: Settings, vars: ['{nome}', '{matricula}', '{descricao}', '{valor}', '{vencimento}', '{link_boleto}', '{escola}'] },
+    { key: 'boletoAVencer', label: 'Boleto a Vencer', desc: 'Aviso preventivo enviado dias antes do vencimento.', color: 'indigo', icon: Clock, vars: ['{nome}', '{matricula}', '{descricao}', '{valor}', '{vencimento}', '{link_boleto}', '{escola}'] },
     { key: 'felizAniversario', label: 'Feliz Aniversário', desc: 'Mensagem carinhosa para os aniversariantes do dia.', color: 'pink', icon: Cake, vars: ['{nome}', '{escola}'] }
   ];
 
@@ -253,49 +281,6 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
         {/* Lado Esquerdo - Configurações e Disparos */}
         <div className="space-y-6">
           
-          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-xl">
-            <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6 text-sm uppercase tracking-widest text-indigo-600">
-              <Clock size={18} /> Automação
-            </h3>
-            
-            <div className="space-y-5">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={templates.automationRules.sendOnDueDate}
-                  onChange={(e) => setTemplates(p => ({ ...p, automationRules: { ...p.automationRules, sendOnDueDate: e.target.checked } }))}
-                  className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span className="text-sm font-bold text-slate-700">Aviso no dia do vencimento</span>
-              </label>
-
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">1º aviso após</label>
-                <div className="flex items-center gap-3 text-sm text-slate-700 font-bold">
-                  <input 
-                    type="number" min="1" max="30"
-                    value={templates.automationRules.sendDaysAfter}
-                    onChange={(e) => setTemplates(p => ({ ...p, automationRules: { ...p.automationRules, sendDaysAfter: e.target.value } }))}
-                    className="w-16 px-3 py-2 border border-slate-200 rounded-lg text-center bg-white shadow-sm"
-                  />
-                  <span>dias</span>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Repetir a cada</label>
-                <div className="flex items-center gap-3 text-sm text-slate-700 font-bold">
-                  <input 
-                    type="number" min="1" max="30"
-                    value={templates.automationRules.repeatEveryDays}
-                    onChange={(e) => setTemplates(p => ({ ...p, automationRules: { ...p.automationRules, repeatEveryDays: e.target.value } }))}
-                    className="w-16 px-3 py-2 border border-slate-200 rounded-lg text-center bg-white shadow-sm"
-                  />
-                  <span>dias</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
           <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl shadow-lg">
             <h3 className="font-black text-emerald-800 flex items-center gap-2 mb-4 text-sm uppercase tracking-widest">
@@ -370,6 +355,24 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
             </div>
           </div>
 
+          <div className="bg-indigo-50 border border-indigo-200 p-6 rounded-2xl shadow-lg mb-6">
+            <h3 className="font-black text-indigo-800 flex items-center gap-2 mb-3 text-sm uppercase tracking-widest">
+              <Clock size={18} /> Lembretes Preventivos
+            </h3>
+            <p className="text-[10px] text-indigo-600 font-medium mb-4">
+              Envia avisos para boletos que vencem em até {templates.automationRules.sendDaysBefore} dias.
+            </p>
+            <button 
+              onClick={handleDispararPreventivos}
+              disabled={isSending || !data.evolutionConfig?.apiUrl}
+              className={`w-full py-3.5 px-4 rounded-xl font-black text-sm text-white shadow-lg transition-all active:scale-95 ${
+                isSending || !data.evolutionConfig?.apiUrl ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
+            >
+              {isSending ? 'Processando...' : 'Enviar Lembretes Agora'}
+            </button>
+          </div>
+
           <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl shadow-lg">
             <h3 className="font-black text-amber-800 flex items-center gap-2 mb-3 text-sm uppercase tracking-widest">
               <AlertTriangle size={18} /> Inadimplência
@@ -433,6 +436,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
               slate: 'bg-slate-50 text-slate-600',
               amber: 'bg-amber-50 text-amber-600',
               pink: 'bg-pink-50 text-pink-600',
+              indigo: 'bg-indigo-50 text-indigo-600',
             };
             
             return (
@@ -492,12 +496,91 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                 id="template-editor"
                 value={(templates[editingTemplate.key as keyof typeof templates] as string) || ''}
                 onChange={(e) => setTemplates(p => ({ ...p, [editingTemplate.key]: e.target.value }))}
-                rows={10}
+                rows={['boletoAVencer', 'boletoVencido'].includes(editingTemplate.key) ? 6 : 10}
                 className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] focus:border-indigo-500 focus:bg-white focus:outline-none transition-all text-slate-700 font-medium shadow-inner resize-none"
                 placeholder="Escreva sua mensagem..."
               />
 
-              <div className="flex gap-4">
+              {editingTemplate.key === 'boletoAVencer' && (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <h4 className="font-black text-indigo-800 text-sm flex items-center gap-2 uppercase tracking-widest mb-4">
+                    <Clock size={16} /> Configuração de Disparo Preventivo
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2 ml-1">Antecedência (Dias)</label>
+                      <div className="flex items-center bg-white border border-indigo-100 rounded-xl overflow-hidden shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
+                        <input 
+                          type="number" min="1" max="30"
+                          value={templates.automationRules.sendDaysBefore}
+                          onChange={(e) => setTemplates(p => ({ ...p, automationRules: { ...p.automationRules, sendDaysBefore: e.target.value } }))}
+                          className="w-full px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none text-center"
+                        />
+                      </div>
+                      <p className="text-[9px] text-indigo-400 mt-1.5 ml-1 font-medium">Dias antes do vencimento para avisar.</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2 ml-1">Repetições Max.</label>
+                      <div className="flex items-center bg-white border border-indigo-100 rounded-xl overflow-hidden shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
+                        <input 
+                          type="number" min="1" max="10"
+                          value={templates.automationRules.maxPreWarnings}
+                          onChange={(e) => setTemplates(p => ({ ...p, automationRules: { ...p.automationRules, maxPreWarnings: e.target.value } }))}
+                          className="w-full px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none text-center"
+                        />
+                      </div>
+                      <p className="text-[9px] text-indigo-400 mt-1.5 ml-1 font-medium">Limite de avisos recebidos pelo aluno.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {editingTemplate.key === 'boletoVencido' && (
+                <div className="bg-red-50 border border-red-100 rounded-2xl p-6 mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <h4 className="font-black text-red-800 text-sm flex items-center gap-2 uppercase tracking-widest mb-4">
+                    <AlertTriangle size={16} /> Configuração de Inadimplência
+                  </h4>
+                  
+                  <div className="space-y-4">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={templates.automationRules.sendOnDueDate}
+                        onChange={(e) => setTemplates(p => ({ ...p, automationRules: { ...p.automationRules, sendOnDueDate: e.target.checked } }))}
+                        className="w-5 h-5 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                      />
+                      <span className="text-sm font-bold text-red-900">Aviso no dia do vencimento</span>
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 ml-1">1º aviso (Dias após)</label>
+                        <div className="flex items-center bg-white border border-red-100 rounded-xl overflow-hidden shadow-sm focus-within:ring-2 focus-within:ring-red-500 transition-all">
+                          <input 
+                            type="number" min="1" max="30"
+                            value={templates.automationRules.sendDaysAfter}
+                            onChange={(e) => setTemplates(p => ({ ...p, automationRules: { ...p.automationRules, sendDaysAfter: e.target.value } }))}
+                            className="w-full px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none text-center"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 ml-1">Repetir a cada (Dias)</label>
+                        <div className="flex items-center bg-white border border-red-100 rounded-xl overflow-hidden shadow-sm focus-within:ring-2 focus-within:ring-red-500 transition-all">
+                          <input 
+                            type="number" min="1" max="30"
+                            value={templates.automationRules.repeatEveryDays}
+                            onChange={(e) => setTemplates(p => ({ ...p, automationRules: { ...p.automationRules, repeatEveryDays: e.target.value } }))}
+                            className="w-full px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none text-center"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4 pt-2">
                 <button 
                   onClick={() => setEditingTemplate(null)} 
                   className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all active:scale-95"

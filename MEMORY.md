@@ -11,12 +11,14 @@
 - [x] Correção do Crash 404 no Portal: Injeção da pasta `src/services` no container de produção para permitir o import do `storage.js`.
 - [x] Correção das Imagens de Prova: Normalização das URLs nas questões de avaliações (Portal e Manager).
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
-- [x] Correção do Sino de Notificações: Botões sempre visíveis e suporte a anexo via chave `arquivo`.
-- [x] Persistência de Login (Manager): Login agora persiste no F5 via `localStorage`.
-- [x] Polling de Dados (30s): Implementada sincronização automática entre Portal e Manager para notificações instantâneas (Self-Hosted).
-- [x] Deep Link de Notificação: Corrigida navegação do Sino para o Histórico de Aluno usando metadados `fromStudentId`.
-- [x] Normalização de Anexos: Sincronização de chaves de justificativa entre Portal e página de Frequência.
-- [ ] Próximo Passo: Monitorar o log de acesso dos usuários após a ativação da persistência de login.
+- [x] Correção do Sino de Notificações: Botões sempre visíveis, suporte a anexo via chave `arquivo` e exibição do **Motivo da Falta** direto na lista do sino.
+- [x] **Mensagens e Automação Financeira:** Implementado sistema seletivo de disparos (Atrasados vs Preventivos) com botões independentes e lógica de servidor desacoplada.
+- [x] **Configuração Contextual:** Configurações de automação (dias antes/depois, repetições) movidas da sidebar global para dentro dos modais de cada modelo de mensagem.
+- [x] **Refinamento de UX/UI:** Correção de modais de Frequência para padrão `bg-transparent` e adição de cor `indigo` para identificação de lembretes preventivos.
+- [x] Registro de Frequência: Implementado ícone de olho para abrir modal com texto completo da justificativa e botão de aprovação rápida.
+- [x] Padronização Visual: Modais atualizados para `bg-transparent` (sem escurecimento/blur) com `shadow-2xl` para efeito de flutuação premium.
+- [x] Backup & Sincronia: Portal agora envia metadados de justificativa filtráveis pelo Gerenciador.
+- [ ] Próximo Passo: Analisar logs de comportamento dos disparos preventivos em larga escala.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)
 - **Funcionalidades Implementadas:**

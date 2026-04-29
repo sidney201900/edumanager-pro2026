@@ -348,7 +348,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
 
       {/* Confirmation Modal */}
       {showConfirmModal && capturedImage && detectedStudent && (
-        <div className={`fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-400 ${isClosing ? 'opacity-0' : 'opacity-100 animate-in fade-in'}`}>
+        <div className={`fixed inset-0 bg-transparent z-50 flex items-center justify-center p-4 transition-opacity duration-400 ${isClosing ? 'opacity-0' : 'opacity-100 animate-in fade-in'}`}>
           <div className={`bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl transition-all duration-400 relative ${isClosing ? 'animate-slide-down-fade-out' : 'animate-slide-up'}`}>
             {/* Blue Top Bar */}
             <div className="bg-indigo-600 h-1.5 w-full absolute top-0 left-0 z-10"></div>

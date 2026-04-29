@@ -121,6 +121,13 @@ export async function getCobrancasByAlunoId(alunoId) {
   return rows;
 }
 
+export async function getCobrancasPendentes() {
+  const { rows } = await pool.query(
+    "SELECT * FROM alunos_cobrancas WHERE status = 'PENDENTE'"
+  );
+  return rows;
+}
+
 export async function getCobrancasAtrasadas() {
   const { rows } = await pool.query(
     "SELECT * FROM alunos_cobrancas WHERE status = 'ATRASADO'"

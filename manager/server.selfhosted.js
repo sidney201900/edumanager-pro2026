@@ -172,6 +172,23 @@ app.put('/api/school-data', async (req, res) => {
       return res.status(409).json({ success: false, reason: 'newer_version' });
     }
 
+    // Inicialização de colunas necessárias para automação
+    pool.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='pre_warnings_count') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN pre_warnings_count INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_pre_warning_at') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN last_pre_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+      END $$;
+    `).catch(err => console.error('[PostgreSQL] Erro ao inicializar colunas de automação:', err));
+
+    pool.on('error', (err) => {
+      console.error('Erro inesperado no pool:', err);
+    });
+
     schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
     res.json({ success: true });
@@ -386,11 +403,7 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
       }
     }
 
-    const fbGerado = 'Olá {nome}, sua cobrança referente a {descricao} no valor de R$ {valor} foi gerada. Vencimento: {vencimento}.';
-    const fbPago = 'Olá {nome}, confirmamos o pagamento de R$ {valor} referente a {descricao}. Muito obrigado!';
-    const fbAtrasado = 'Olá {nome}, o boleto referente a {descricao} de R$ {valor} venceu em {vencimento}. Segue o PDF da 2ª via atualizada abaixo:';
-    const fbCancelado = 'Olá {nome}, a cobrança referente a {descricao} foi cancelada.';
-    const fbAtualizado = 'Olá {nome}, o boleto de {descricao} foi atualizado. Segue a nova versão:';
+    const fbAVencer = 'Olá {nome}, lembramos que sua cobrança referente a {descricao} no valor de R$ {valor} vencerá em {vencimento}. Segue o PDF abaixo:';
 
     let templateText = '';
     if (eventType === 'PAYMENT_CREATED') templateText = templates?.boletoGerado || fbGerado;
@@ -398,6 +411,8 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
     else if (eventType === 'PAYMENT_OVERDUE') templateText = templates?.boletoVencido || fbAtrasado;
     else if (eventType === 'PAYMENT_DELETED') templateText = templates?.cobrancaCancelada || fbCancelado;
     else if (eventType === 'PAYMENT_UPDATED') templateText = templates?.cobrancaAtualizada || fbAtualizado;
+    else if (eventType === 'PAYMENT_UPCOMING') templateText = templates?.boletoAVencer || fbAVencer;
+
     if (!templateText) return;
 
     let msgFinal = templateText
@@ -823,17 +838,74 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  // Disparo Manual de Inadimplência
+  // Disparo Manual de Inadimplência e Lembretes
   app.post('/api/disparar_cobrancas', async (req, res) => {
     try {
-      const atrasados = await getCobrancasAtrasadas();
-      if (atrasados.length === 0) return res.status(200).json({ message: 'Nenhuma atrasada.' });
-      let enviadas = 0;
-      for (const cob of atrasados) {
-        if (cob.asaas_payment_id) { await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE'); enviadas++; }
+      const tipo = req.query.tipo || 'ambos';
+      const appData = await getSchoolData();
+      const rules = appData?.messageTemplates?.automationRules || {};
+      const sendDaysBefore = parseInt(rules.sendDaysBefore) || 3;
+      const maxPreWarnings = parseInt(rules.maxPreWarnings) || 1;
+
+      let enviadasAtraso = 0;
+      let enviadasAviso = 0;
+
+      // 1. Processar Atrasados
+      if (tipo === 'atrasado' || tipo === 'ambos') {
+        const atrasados = await getCobrancasAtrasadas();
+        for (const cob of atrasados) {
+          if (cob.asaas_payment_id) { 
+            await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE'); 
+            enviadasAtraso++; 
+          }
+        }
       }
-      return res.status(200).json({ message: `${enviadas} mensagens processadas.` });
-    } catch (error) { return res.status(500).json({ error: 'Erro interno.' }); }
+
+      // 2. Processar A Vencer (Lembretes Preventivos)
+      if (tipo === 'preventivo' || tipo === 'ambos') {
+        const pendentes = await getCobrancasPendentes();
+        const hoje = new Date();
+        hoje.setHours(0,0,0,0);
+
+        for (const cob of pendentes) {
+          if (!cob.asaas_payment_id || !cob.vencimento) continue;
+          
+          const vencimento = new Date(cob.vencimento);
+          vencimento.setHours(0,0,0,0);
+          
+          const diffDias = Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (diffDias > 0 && diffDias <= sendDaysBefore) {
+            const currentCount = parseInt(cob.pre_warnings_count) || 0;
+            
+            if (currentCount < maxPreWarnings) {
+              const lastWarn = cob.last_pre_warning_at ? new Date(cob.last_pre_warning_at) : null;
+              const jaEnviadoHoje = lastWarn && lastWarn.toDateString() === hoje.toDateString();
+
+              if (!jaEnviadoHoje) {
+                await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING');
+                
+                await pool.query(
+                  'UPDATE alunos_cobrancas SET pre_warnings_count = $1, last_pre_warning_at = NOW() WHERE asaas_payment_id = $2',
+                  [currentCount + 1, cob.asaas_payment_id]
+                );
+                enviadasAviso++;
+              }
+            }
+          }
+        }
+      }
+
+      let msg = '';
+      if (tipo === 'atrasado') msg = `${enviadasAtraso} mensagens de atraso processadas.`;
+      else if (tipo === 'preventivo') msg = `${enviadasAviso} lembretes preventivos processados.`;
+      else msg = `${enviadasAtraso} mensagens de atraso e ${enviadasAviso} lembretes preventivos processados.`;
+
+      return res.status(200).json({ message: msg });
+    } catch (error) { 
+      console.error('[Disparo] Erro:', error);
+      return res.status(500).json({ error: 'Erro interno.' }); 
+    }
   });
 
   // Imprimir Carnê
