@@ -136,11 +136,11 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
         if (linkedExams.length > 0) {
           linkedExams.forEach(exam => {
-            const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id && (g as any).examId === exam.id);
+            const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id && g.examId === exam.id);
             periodGrades[exam.id] = existingGrade ? existingGrade.value : '';
           });
         } else {
-          const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id && !(g as any).examId);
+          const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id && !g.examId);
           periodGrades['direct'] = existingGrade ? existingGrade.value : '';
         }
         initialGrades[subject.id][period.id] = periodGrades;
@@ -187,7 +187,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
       const periodSums: number[] = [];
 
       Object.values(subjectPeriods).forEach((examValues: any) => {
-        const sum = Object.values(examValues).reduce((a: number, b: any) => a + (b !== '' ? Number(b) : 0), 0);
+        const sum: number = Object.values(examValues).reduce<number>((a, b: any) => a + (b !== '' ? Number(b) : 0), 0);
         if (Object.values(examValues).some(v => v !== '')) {
           periodSums.push(sum);
         }
@@ -529,7 +529,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                             <div className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-500">
                               MÉDIA: {(() => {
                                 const subjectGrades = studentGrades[subject.id] || {};
-                                const pSums = Object.values(subjectGrades).map((exVals: any) => Object.values(exVals).reduce((a: number, b: any) => a + (b !== '' ? Number(b) : 0), 0));
+                                const pSums: number[] = Object.values(subjectGrades).map((exVals: any) => Object.values(exVals).reduce<number>((a, b: any) => a + (b !== '' ? Number(b) : 0), 0));
                                 const valid = pSums.filter(s => s > 0);
                                 return valid.length > 0 ? (valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(1) : '0.0';
                               })()}
@@ -540,7 +540,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                           {periods.map(period => {
                             const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.periodId === period.id && e.status === 'published');
                             const periodGrades = studentGrades[subject.id]?.[period.id] || {};
-                            const periodSum = Object.values(periodGrades).reduce((a: number, b: any) => a + (b !== '' ? Number(b) : 0), 0);
+                            const periodSum: number = Object.values(periodGrades).reduce<number>((a, b: any) => a + (b !== '' ? Number(b) : 0), 0);
 
                             return (
                               <div key={period.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 relative">

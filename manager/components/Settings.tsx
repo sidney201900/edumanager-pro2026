@@ -302,15 +302,6 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
   };
 
 
-
-  const closeModal = () => {
-    setIsClosing(true);
-    setTimeout(() => {
-      setShowImportModal(false);
-      setIsClosing(false);
-    }, 300);
-  };
-
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {

@@ -23,6 +23,11 @@
 - [x] **Controle de Refação (Retake Policy):** Adicionado botão de cadeado nos cards de Avaliações para permitir ou bloquear que alunos refaçam provas no portal (Regra 15).
 - [x] **UI de Avaliações:** Padronização dos botões de edição ("Editar Prova" vs "Editar Atividade") e adição de botão de exclusão rápida direto no card.
 - [x] **Correção de Vínculo de Notas:** Garantido que o `examId` seja sempre salvo nas notas geradas pelo Portal para preenchimento automático do Boletim Escolar no Manager.
+- [x] **Fix Memory Leak:** Removido `pool.on('error')` que estava dentro da rota `PUT /api/school-data`, acumulando listeners a cada salvamento.
+- [x] **Fix SyntaxError (Backticks):** Corrigido erro de sintaxe com backticks escapados na rota do Database Explorer que impedia o servidor de iniciar.
+- [x] **Fix Static Serving Duplicado:** Consolidada a entrega de arquivos estáticos (dist) no `manager/server.selfhosted.js`, eliminando o erro 404 em produção.
+- [x] **TypeScript Cleanup:** Corrigidos erros de tipo `unknown` nos `reduce()` do ReportCard.tsx e removida função órfã `closeModal` do Settings.tsx.
+- [x] **Interface Grade Tipada:** Adicionado `examId?: string` à interface `Grade` em `types.ts`, eliminando casts `as any` inseguros.
 - [ ] Próximo Passo: Iniciar testes de estresse no servidor self-hosted para submissão massiva de fotos de frequência.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)

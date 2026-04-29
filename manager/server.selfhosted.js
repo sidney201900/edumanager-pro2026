@@ -185,10 +185,6 @@ app.put('/api/school-data', async (req, res) => {
       END $$;
     `).catch(err => console.error('[PostgreSQL] Erro ao inicializar colunas de automação:', err));
 
-    pool.on('error', (err) => {
-      console.error('Erro inesperado no pool:', err);
-    });
-
     schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
     res.json({ success: true });
@@ -262,7 +258,7 @@ app.get('/api/database/tables/:tableName/data', async (req, res) => {
     const result = await pool.query(query);
     res.json({ rows: result.rows, fields: result.fields.map(f => f.name) });
   } catch (error) {
-    console.error(\`Erro ao buscar dados da tabela \${req.params.tableName}:\`, error);
+    console.error(`Erro ao buscar dados da tabela ${req.params.tableName}:`, error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -912,14 +908,6 @@ app.get('/api/alunos/:id/carne', async (req, res) => {
 // INICIALIZAÇÃO
 // ============================================================
 async function startServer() {
-  const distPath = path.join(__dirname, 'dist');
-  if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    app.use((req, res, next) => req.path.startsWith('/api') ? next() : res.sendFile(path.join(distPath, 'index.html')));
-  } else {
-    const vite = await import('vite').then(m => m.createServer({ server: { middlewareMode: true }, appType: 'spa' }));
-    app.use(vite.middlewares);
-  }
 
   // Disparo Manual de Inadimplência e Lembretes
   app.post('/api/disparar_cobrancas', async (req, res) => {
@@ -1028,6 +1016,28 @@ async function startServer() {
       }
     } catch (error) { return res.status(500).json({ error: 'Erro interno.' }); }
   });
+
+  // ===================================================
+  // SERVE FRONTEND (Final Catch-all)
+  // ===================================================
+  const distPath = path.join(__dirname, 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/storage')) return next();
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    try {
+      const vite = await import('vite').then(m => m.createServer({ 
+        server: { middlewareMode: true }, 
+        appType: 'spa' 
+      }));
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn('Vite dev server not available and dist folder missing.');
+    }
+  }
 
   app.listen(PORT, '0.0.0.0', () => console.log(`🚀 EduManager Self-Hosted na porta ${PORT}`));
 }

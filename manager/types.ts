@@ -194,6 +194,7 @@ export interface Grade {
   subjectId: string;
   value: number;
   period: string; // e.g., "1º Bimestre", "Final"
+  examId?: string; // Vincula a nota a uma avaliação específica
 }
 
 export interface Handout {
