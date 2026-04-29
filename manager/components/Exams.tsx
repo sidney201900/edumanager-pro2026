@@ -419,7 +419,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <BookOpen className="text-indigo-600" size={32} /> Avaliações
+            <BookOpen className="text-indigo-600" size={32} /> Atividades e Provas
           </h2>
           <p className="text-slate-500 mt-2 font-medium">Gerencie as provas e testes das turmas.</p>
         </div>

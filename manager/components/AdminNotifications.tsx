@@ -139,7 +139,7 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
         <div className="absolute top-14 right-0 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-top-4 fade-in duration-200 flex flex-col max-h-[80vh]">
           <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between sticky top-0 z-10">
             <div>
-              <h3 className="font-black text-slate-800 flex items-center gap-2">Avaliações Pendentes
+              <h3 className="font-black text-slate-800 flex items-center gap-2">Atividades/Provas Pendentes
                 {unreadCount > 0 && <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-bold">{unreadCount}</span>}
               </h3>
             </div>

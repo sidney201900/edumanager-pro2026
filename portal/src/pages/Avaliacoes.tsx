@@ -26,6 +26,7 @@ export default function Avaliacoes() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [submissions, setSubmissions] = useState<ExamSubmission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'exams' | 'activities'>('exams');
 
   // Exam mode state
   const [view, setView] = useState<ExamView>('listing');
@@ -598,7 +599,7 @@ export default function Avaliacoes() {
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}
           >
-            <ArrowLeft size={18} /> Voltar às Avaliações
+            <ArrowLeft size={18} /> Voltar às Atividades e Provas
           </button>
         </div>
       </div>
@@ -608,14 +609,62 @@ export default function Avaliacoes() {
   // ==========================================
   // RENDER: Listing (Default)
   // ==========================================
+  const filteredExams = exams.filter(e => {
+    const isActivity = (e as any).evaluationType === 'activity';
+    return activeTab === 'activities' ? isActivity : !isActivity;
+  });
+
   return (
     <div className="page-container">
       <div className="animate-fade-in" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title">Avaliações</h1>
-        <p className="page-subtitle">Provas e avaliações disponíveis para você</p>
+        <h1 className="page-title">Atividades e Provas</h1>
+        <p className="page-subtitle">Provas e atividades disponíveis para você</p>
       </div>
 
-      {exams.length === 0 ? (
+      {/* Tabs */}
+      <div className="animate-fade-in" style={{ 
+        display: 'flex', gap: '0.5rem', marginBottom: '2rem', 
+        background: 'var(--color-surface-light)', padding: '0.5rem', 
+        borderRadius: '12px', border: '1px solid var(--glass-border)',
+        width: 'fit-content'
+      }}>
+        <button
+          onClick={() => setActiveTab('exams')}
+          style={{
+            padding: '0.5rem 1.5rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '0.85rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: activeTab === 'exams' ? 'var(--color-primary)' : 'transparent',
+            color: activeTab === 'exams' ? 'white' : 'var(--color-text-secondary)',
+            boxShadow: activeTab === 'exams' ? '0 2px 8px var(--bg-primary-alpha)' : 'none'
+          }}
+        >
+          Provas ({exams.filter(e => (e as any).evaluationType !== 'activity').length})
+        </button>
+        <button
+          onClick={() => setActiveTab('activities')}
+          style={{
+            padding: '0.5rem 1.5rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontSize: '0.85rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: activeTab === 'activities' ? 'var(--color-info, #0369a1)' : 'transparent',
+            color: activeTab === 'activities' ? 'white' : 'var(--color-text-secondary)',
+            boxShadow: activeTab === 'activities' ? '0 2px 8px rgba(3, 105, 161, 0.2)' : 'none'
+          }}
+        >
+          Atividades ({exams.filter(e => (e as any).evaluationType === 'activity').length})
+        </button>
+      </div>
+
+      {filteredExams.length === 0 ? (
         <div className="glass-card animate-fade-in" style={{
           padding: '4rem 2rem', textAlign: 'center',
           color: 'var(--color-text-secondary)',
@@ -630,7 +679,7 @@ export default function Avaliacoes() {
           gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
           gap: '1rem',
         }} className="animate-fade-in stagger-children">
-          {exams.map(exam => {
+          {filteredExams.map(exam => {
             const sub = getSubmission(exam.id);
             const isDone = !!sub;
 
@@ -699,23 +748,40 @@ export default function Avaliacoes() {
                 </div>
 
                 {isDone ? (
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '0.75rem 1rem', borderRadius: 10,
-                    background: 'var(--bg-success-alpha)',
-                  }}>
-                    <div>
-                      <p style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>SUA NOTA</p>
-                      <p style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-success)' }}>
-                        {sub!.final_score.toFixed(1)}
-                      </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '0.75rem 1rem', borderRadius: 10,
+                      background: 'var(--bg-success-alpha)',
+                    }}>
+                      <div>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>SUA NOTA</p>
+                        <p style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-success)' }}>
+                          {sub!.final_score.toFixed(1)}
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>ACERTOS</p>
+                        <p style={{ fontSize: '1rem', fontWeight: 700 }}>
+                          {sub!.correct_count}/{sub!.total_questions}
+                        </p>
+                      </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>ACERTOS</p>
-                      <p style={{ fontSize: '1rem', fontWeight: 700 }}>
-                        {sub!.correct_count}/{sub!.total_questions}
-                      </p>
-                    </div>
+                    <button
+                      onClick={() => {
+                        showAppConfirm('Deseja realmente refazer? Sua nota anterior será substituída.', () => startExam(exam));
+                      }}
+                      style={{
+                        width: '100%', padding: '0.65rem',
+                        borderRadius: 10, border: '1px solid var(--color-primary-alpha)',
+                        background: 'transparent', color: 'var(--color-primary)',
+                        fontSize: '0.8rem', fontWeight: 700,
+                        cursor: 'pointer', transition: 'all 0.2s',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      }}
+                    >
+                      Refazer {(exam as any).evaluationType === 'activity' ? 'Atividade' : 'Prova'}
+                    </button>
                   </div>
                 ) : (
                   <button

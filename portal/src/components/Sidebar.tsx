@@ -12,7 +12,7 @@ const navItems = [
   { path: '/minhas-aulas', label: 'Cronograma', icon: CalendarClock },
   { path: '/financeiro', label: 'Financeiro', icon: CreditCard },
   { path: '/notas', label: 'Notas', icon: BookOpen },
-  { path: '/avaliacoes', label: 'Avaliações', icon: ClipboardList },
+  { path: '/avaliacoes', label: 'Atividades e Provas', icon: ClipboardList },
   { path: '/frequencia', label: 'Frequência', icon: CalendarCheck },
   { path: '/contratos', label: 'Contratos', icon: FileText },
   { path: '/certificados', label: 'Certificados', icon: Award },

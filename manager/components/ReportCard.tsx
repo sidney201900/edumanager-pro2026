@@ -490,12 +490,27 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                             <h4 className="font-black text-slate-800 uppercase tracking-wider text-sm">{subject.name}</h4>
                           </div>
                           <div className="flex items-center gap-2">
-                            {linkedExams.length > 0 && (
-                              <div className="px-3 py-1 bg-violet-50 border border-violet-200 rounded-lg text-[10px] font-black text-violet-600 flex items-center gap-1">
-                                <FileText size={12} />
-                                {linkedExams.length} {linkedExams.length === 1 ? 'Prova' : 'Provas'}
-                              </div>
-                            )}
+                            {(() => {
+                              const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.status === 'published');
+                              const provasCount = linkedExams.filter(e => (e as any).evaluationType !== 'activity').length;
+                              const atividadesCount = linkedExams.filter(e => (e as any).evaluationType === 'activity').length;
+                              return (
+                                <>
+                                  {provasCount > 0 && (
+                                    <div className="px-3 py-1 bg-violet-50 border border-violet-200 rounded-lg text-[10px] font-black text-violet-600 flex items-center gap-1">
+                                      <FileText size={12} />
+                                      {provasCount} {provasCount === 1 ? 'Prova' : 'Provas'}
+                                    </div>
+                                  )}
+                                  {atividadesCount > 0 && (
+                                    <div className="px-3 py-1 bg-sky-50 border border-sky-200 rounded-lg text-[10px] font-black text-sky-600 flex items-center gap-1">
+                                      <FileText size={12} />
+                                      {atividadesCount} {atividadesCount === 1 ? 'Atividade' : 'Atividades'}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                             <div className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-500">
                               MÉDIA: {(() => {
                                 const subjectGrades = studentGrades[subject.id] || {};
@@ -506,7 +521,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                             </div>
                           </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="flex flex-col gap-6">
                           {periods.map(period => {
                             const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.periodId === period.id && e.status === 'published');
                             const periodGrades = studentGrades[subject.id]?.[period.id] || {};
@@ -520,45 +535,53 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                                 </div>
 
                                 {linkedExams.length > 0 ? (
-                                  <div className="space-y-3">
+                                  <div className="space-y-4">
                                     {linkedExams.map(exam => {
                                       const isActivity = (exam as any).evaluationType === 'activity';
                                       const maxScore = (exam as any).maxScore ?? 10;
                                       return (
-                                        <div key={exam.id} className="space-y-1">
-                                          <div className="flex items-center justify-between mb-1">
-                                            <span className="text-[10px] font-bold text-slate-600 truncate pr-2" title={exam.title}>
-                                              <span className={`mr-1 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider ${isActivity ? 'bg-sky-100 text-sky-700' : 'bg-violet-100 text-violet-700'}`}>
-                                                {isActivity ? 'Ativ' : 'Prova'}
-                                              </span>
-                                              {exam.title}
-                                            </span>
-                                            <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap shrink-0">Vale {maxScore}</span>
+                                        <div key={exam.id} className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 ${isActivity ? 'bg-sky-50/50 border-sky-100' : 'bg-violet-50/50 border-violet-100'}`}>
+                                          <div className="flex-1">
+                                            <div className="flex flex-col">
+                                              <div className="text-sm font-bold text-slate-800 leading-tight mb-1 flex items-center gap-2">
+                                                <span className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-black shrink-0 ${isActivity ? 'bg-sky-200 text-sky-800' : 'bg-violet-200 text-violet-800'}`}>
+                                                  {isActivity ? 'Atividade' : 'Prova'}
+                                                </span>
+                                                {exam.title}
+                                              </div>
+                                              {exam.description && (
+                                                <p className="text-xs text-slate-500 leading-snug pr-2">{exam.description}</p>
+                                              )}
+                                            </div>
                                           </div>
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max={maxScore}
-                                            step="0.1"
-                                            placeholder="—"
-                                            className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm font-bold text-center"
-                                            value={studentGrades[subject.id]?.[period.id]?.[exam.id] ?? ''}
-                                            onChange={(e) => {
-                                              let val = parseFloat(e.target.value);
-                                              if (val > maxScore) val = maxScore;
-                                              if (val < 0) val = 0;
-                                              setStudentGrades(prev => ({
-                                                ...prev,
-                                                [subject.id]: {
-                                                  ...prev[subject.id],
-                                                  [period.id]: {
-                                                    ...prev[subject.id]?.[period.id],
-                                                    [exam.id]: isNaN(val) ? '' : val
+                                          
+                                          <div className="flex items-center gap-3 shrink-0">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase">Nota (Máx {maxScore})</span>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              max={maxScore}
+                                              step="0.1"
+                                              placeholder="—"
+                                              className={`w-24 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-all text-sm font-black text-center ${isActivity ? 'bg-white border-sky-200 focus:ring-sky-500' : 'bg-white border-violet-200 focus:ring-violet-500'}`}
+                                              value={studentGrades[subject.id]?.[period.id]?.[exam.id] ?? ''}
+                                              onChange={(e) => {
+                                                let val = parseFloat(e.target.value);
+                                                if (val > maxScore) val = maxScore;
+                                                if (val < 0) val = 0;
+                                                setStudentGrades(prev => ({
+                                                  ...prev,
+                                                  [subject.id]: {
+                                                    ...prev[subject.id],
+                                                    [period.id]: {
+                                                      ...prev[subject.id]?.[period.id],
+                                                      [exam.id]: isNaN(val) ? '' : val
+                                                    }
                                                   }
-                                                }
-                                              }));
-                                            }}
-                                          />
+                                                }));
+                                              }}
+                                            />
+                                          </div>
                                         </div>
                                       )
                                     })}

@@ -8,6 +8,7 @@ interface GradeWithSubject extends Grade {
   examTitle?: string;
   evaluationType?: string;
   maxScore?: number;
+  periodName?: string;
 }
 
 export default function Notas() {
@@ -139,7 +140,7 @@ export default function Notas() {
                 
                 <div style={{ padding: '1.5rem' }}>
                   {periods.map(period => {
-                    const periodGrades = subjectGrades.filter(g => g.period === period);
+                    const periodGrades = subjectGrades.filter(g => (g.periodName || g.period) === period);
                     if (periodGrades.length === 0) return null;
 
                     const periodTotal = periodGrades.reduce((sum, g) => sum + g.value, 0);

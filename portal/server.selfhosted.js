@@ -251,15 +251,17 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
     const enrichedGrades = grades.map((g) => {
       const subject = subjects.find((s) => s.id === g.subjectId);
       const exam = g.examId ? (schoolData.exams || []).find(e => e.id === g.examId) : null;
+      const periodObj = (schoolData.periods || []).find(p => p.id === g.period);
       return { 
         ...g, 
         subjectName: subject?.name || 'Disciplina desconhecida',
         examTitle: exam?.title,
         evaluationType: exam?.evaluationType || 'exam',
-        maxScore: exam?.maxScore
+        maxScore: exam?.maxScore,
+        periodName: periodObj ? periodObj.name : g.period
       };
     });
-    const periods = [...new Set(grades.map((g) => g.period))];
+    const periods = [...new Set(enrichedGrades.map((g) => g.periodName))];
     if (periods.length === 0) periods.push('1º Bimestre', '2º Bimestre', '3º Bimestre', '4º Bimestre');
     periods.sort();
     res.json({ grades: enrichedGrades, periods, allSubjects: courseSubjects });
@@ -519,12 +521,17 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
     const { examId, answers } = req.body;
     if (!examId || !answers) return res.status(400).json({ error: 'Dados obrigatórios' });
 
-    // Verificar se já submeteu
+    // Verificar se já submeteu e deletar a submissão anterior para permitir refazer
     const { rows: existing } = await pool.query(
-      'SELECT id FROM provas_submissoes WHERE aluno_id = $1 AND prova_id = $2 LIMIT 1',
+      'SELECT * FROM provas_submissoes WHERE aluno_id = $1 AND prova_id = $2 LIMIT 1',
       [req.user.studentId, examId]
     );
-    if (existing.length > 0) return res.status(409).json({ error: 'Você já realizou esta prova.' });
+    if (existing.length > 0) {
+      await pool.query(
+        'DELETE FROM provas_submissoes WHERE aluno_id = $1 AND prova_id = $2',
+        [req.user.studentId, examId]
+      );
+    }
 
     const schoolData = await getSchoolData();
     const exam = (schoolData.exams || []).find(e => e.id === examId);

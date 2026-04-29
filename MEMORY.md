@@ -12,11 +12,12 @@
 - [x] Correção das Imagens de Prova: Normalização das URLs nas questões de avaliações (Portal e Manager).
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
 - [x] Correção do Sino de Notificações: Botões sempre visíveis, suporte a anexo via chave `arquivo` e exibição do **Motivo da Falta** direto na lista do sino.
-- [x] **Segurança Financeira:** Implementado estado de carregamento (`isCreating`) no botão de gerar cobranças para impedir disparos duplicados ao Asaas por cliques múltiplos.
-- [x] **Boletim & Avaliações:** Refatoração completa do sistema de notas para suportar múltiplas avaliações por período, integrando notas diretas e notas vindas de provas/atividades online.
-- [x] **Sincronia Portal/Manager:** Ajustada a submissão de provas no Portal para calcular notas via `maxScore` e injetar automaticamente no boletim do Gerenciador via `examId`.
-- [x] **Padronização de Servidor:** Confirmado o uso de `server.selfhosted.js` em ambos os apps como ponto de entrada para garantir 100% de funcionalidades locais.
-- [ ] Próximo Passo: Monitorar o desempenho das submissões de provas simultâneas no Portal.
+- [x] **Segurança Financeira:** Implementada trava de segurança (`isCreating`) contra cliques múltiplos em formulários financeiros, resolvendo a duplicidade de cobranças no Asaas.
+- [x] **Boletim Detalhado (Manager):** Upgrade para layout de lista (Full-Width) com cores distintas: **Violeta (Provas)** e **Azul (Atividades)**.
+- [x] **Retake Logic:** Implementada possibilidade de refazer Provas/Atividades no Portal, com substituição automática da nota anterior e limpeza de submissão no banco.
+- [x] **Mapeamento de Períodos:** Corrigido o bug que exibia UUIDs (códigos) no boletim do aluno; agora exibe os nomes amigáveis (ex: 1º Bimestre).
+- [x] **Nomenclatura Unificada:** Alterado "Avaliações" para **"Atividades e Provas"** em todo o ecossistema (Portal e Manager).
+- [ ] Próximo Passo: Analisar a necessidade de pesos diferenciados (médias ponderadas) entre Atividades e Provas no cálculo do boletim.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)
 - **Funcionalidades Implementadas:**
