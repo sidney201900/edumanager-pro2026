@@ -37,6 +37,7 @@ O EduManager armazena TODOS os dados da escola em uma **única tabela** chamada 
   attendance: Attendance[],  // Registros de presença
   subjects: Subject[],       // Disciplinas
   grades: Grade[],           // Notas dos alunos
+  exams: Exam[],             // Avaliações (Provas e Atividades)
   profile: SchoolProfile,    // Dados da escola (nome, logo, etc.)
   logo?: string,             // Logo da escola em base64
 }
@@ -105,6 +106,19 @@ interface Grade {
   subjectId: string;
   value: number;
   period: string;    // Ex: "1º Bimestre"
+  examId?: string;   // ID da avaliação vinculada (se houver)
+}
+```
+
+### Interface Exam (avaliações):
+```typescript
+interface Exam {
+  id: string;
+  title: string;
+  evaluationType: 'exam' | 'activity';
+  maxScore: number;
+  subjectId?: string;
+  periodId?: string;
 }
 ```
 

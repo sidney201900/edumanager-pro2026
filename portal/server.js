@@ -257,7 +257,7 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, async (req, res) =
     }
 
     let attachment = null;
-    try { const parsed = JSON.parse(justification); attachment = parsed.arquivo_base64 || null; } catch (e) {}
+    try { const parsed = JSON.parse(justification); attachment = parsed.arquivo_base64 || null; } catch (e) { }
 
     notifications.push({
       id: `notif-${Date.now()}`, studentId: 'admin',

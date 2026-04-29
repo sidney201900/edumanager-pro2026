@@ -653,6 +653,24 @@ export default function Avaliacoes() {
                 )}
 
                 <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      backgroundColor: (exam as any).evaluationType === 'activity' ? 'var(--bg-info-alpha, #e0f2fe)' : 'var(--bg-primary-alpha, #ede9fe)',
+                      color: (exam as any).evaluationType === 'activity' ? 'var(--color-info, #0369a1)' : 'var(--color-primary, #6d28d9)',
+                      border: `1px solid ${(exam as any).evaluationType === 'activity' ? '#bae6fd' : '#ddd6fe'}`
+                    }}>
+                      {(exam as any).evaluationType === 'activity' ? 'Atividade' : 'Prova'}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+                      Vale: {(exam as any).maxScore ?? 10} pts
+                    </span>
+                  </div>
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 4, paddingRight: isDone ? 90 : 0 }}>
                     {exam.title}
                   </h3>
@@ -712,7 +730,7 @@ export default function Avaliacoes() {
                       boxShadow: '0 4px 15px var(--bg-primary-alpha)',
                     }}
                   >
-                    <Award size={18} /> Iniciar Prova
+                    <Award size={18} /> {(exam as any).evaluationType === 'activity' ? 'Iniciar Atividade' : 'Iniciar Prova'}
                   </button>
                 )}
               </div>

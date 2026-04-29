@@ -12,13 +12,11 @@
 - [x] Correção das Imagens de Prova: Normalização das URLs nas questões de avaliações (Portal e Manager).
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
 - [x] Correção do Sino de Notificações: Botões sempre visíveis, suporte a anexo via chave `arquivo` e exibição do **Motivo da Falta** direto na lista do sino.
-- [x] **Mensagens e Automação Financeira:** Implementado sistema seletivo de disparos (Atrasados vs Preventivos) com botões independentes e lógica de servidor desacoplada.
-- [x] **Configuração Contextual:** Configurações de automação (dias antes/depois, repetições) movidas da sidebar global para dentro dos modais de cada modelo de mensagem.
-- [x] **Refinamento de UX/UI:** Correção de modais de Frequência para padrão `bg-transparent` e adição de cor `indigo` para identificação de lembretes preventivos.
-- [x] Registro de Frequência: Implementado ícone de olho para abrir modal com texto completo da justificativa e botão de aprovação rápida.
-- [x] Padronização Visual: Modais atualizados para `bg-transparent` (sem escurecimento/blur) com `shadow-2xl` para efeito de flutuação premium.
-- [x] Backup & Sincronia: Portal agora envia metadados de justificativa filtráveis pelo Gerenciador.
-- [ ] Próximo Passo: Analisar logs de comportamento dos disparos preventivos em larga escala.
+- [x] **Segurança Financeira:** Implementado estado de carregamento (`isCreating`) no botão de gerar cobranças para impedir disparos duplicados ao Asaas por cliques múltiplos.
+- [x] **Boletim & Avaliações:** Refatoração completa do sistema de notas para suportar múltiplas avaliações por período, integrando notas diretas e notas vindas de provas/atividades online.
+- [x] **Sincronia Portal/Manager:** Ajustada a submissão de provas no Portal para calcular notas via `maxScore` e injetar automaticamente no boletim do Gerenciador via `examId`.
+- [x] **Padronização de Servidor:** Confirmado o uso de `server.selfhosted.js` em ambos os apps como ponto de entrada para garantir 100% de funcionalidades locais.
+- [ ] Próximo Passo: Monitorar o desempenho das submissões de provas simultâneas no Portal.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)
 - **Funcionalidades Implementadas:**
@@ -28,6 +26,13 @@
   - Integração dupla para boletos: busca via ID do Asaas e fallback por data/valor no Supabase.
   - Visualização de recibos via link externo ou modal de impressão local.
 - **Onde paramos:** O sistema de filtros e ordenação está funcional, sincronizando com os parâmetros da URL.
+
+### 📝 Módulo de Avaliações (Portal do Aluno)
+- **Funcionalidades Implementadas:**
+  - Tela de realização de provas e atividades online com cronômetro e suporte a imagens de apoio (MinIO).
+  - **Autocorreção 100% Automática:** O backend do portal (`server.js`) recebe as respostas, compara com o gabarito (`correctOptionIndex`), calcula o percentual de acertos e a nota proporcional ao peso da prova (`finalScore`).
+  - **Lançamento Automático no Boletim:** A nota calculada é salva no PostgreSQL (`provas_submissoes`) e injetada instantaneamente na tabela de notas (`grades`) do `school_data`.
+  - Bloqueio inteligente contra dupla submissão da mesma prova.
 
 ### ⚙️ Módulo de Configurações e Infra (Manager)
 - **Arquitetura de Armazenamento:** Implementada a transição para **Self-Hosted Storage (MinIO)**. 

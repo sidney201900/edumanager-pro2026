@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { SchoolData, Class, Student, Subject, Grade, Period } from '../types';
 import { dbService } from '../services/dbService';
 import { useDialog } from '../DialogContext';
-import { 
-  FileText, 
-  Plus, 
-  Trash2, 
-  ChevronRight, 
-  Save, 
-  GraduationCap, 
-  BookOpen, 
-  User, 
+import {
+  FileText,
+  Plus,
+  Trash2,
+  ChevronRight,
+  Save,
+  GraduationCap,
+  BookOpen,
+  User,
   X,
   Search,
   CheckCircle2,
@@ -33,7 +33,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showConfigManager, setShowConfigManager] = useState(false);
   const [configTab, setConfigTab] = useState<'subjects' | 'periods'>('subjects');
-  const [studentGrades, setStudentGrades] = useState<Record<string, Record<string, number>>>({}); // subjectId -> periodId -> value
+  const [studentGrades, setStudentGrades] = useState<Record<string, Record<string, any>>>({}); // subjectId -> periodId -> { examId: value }
 
   const subjects = data.subjects || [];
   const periods = data.periods || [];
@@ -44,12 +44,12 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     if (!url || typeof url !== 'string') return '';
     if (url.startsWith('data:image') || url.startsWith('blob:')) return url;
     if (url.startsWith('/storage/')) return url;
-    
+
     try {
       const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
       if (match) return `/storage/${match[1]}`;
-    } catch(e) {}
-    
+    } catch (e) { }
+
     return url;
   };
 
@@ -85,7 +85,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
   const handleDeleteSubject = (id: string) => {
     showConfirm(
-      'Excluir Disciplina', 
+      'Excluir Disciplina',
       '⚠️ Tem certeza que deseja excluir esta disciplina? Todas as notas vinculadas serão perdidas.',
       () => {
         const updatedSubjects = subjects.filter(s => s.id !== id);
@@ -98,7 +98,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
   const handleDeletePeriod = (id: string) => {
     showConfirm(
-      'Excluir Período', 
+      'Excluir Período',
       '⚠️ Tem certeza que deseja excluir este período? Todas as notas vinculadas serão perdidas.',
       () => {
         const updatedPeriods = periods.filter(p => p.id !== id);
@@ -111,16 +111,27 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
   const handleOpenStudentGrades = (student: Student) => {
     setSelectedStudent(student);
-    const initialGrades: Record<string, Record<string, number>> = {};
-    
+    const initialGrades: Record<string, Record<string, any>> = {};
+
     subjects.forEach(subject => {
       initialGrades[subject.id] = {};
       periods.forEach(period => {
-        const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id);
-        initialGrades[subject.id][period.id] = existingGrade ? existingGrade.value : 0;
+        const periodGrades: any = {};
+        const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.periodId === period.id && e.status === 'published');
+
+        if (linkedExams.length > 0) {
+          linkedExams.forEach(exam => {
+            const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id && (g as any).examId === exam.id);
+            periodGrades[exam.id] = existingGrade ? existingGrade.value : '';
+          });
+        } else {
+          const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id && !(g as any).examId);
+          periodGrades['direct'] = existingGrade ? existingGrade.value : '';
+        }
+        initialGrades[subject.id][period.id] = periodGrades;
       });
     });
-    
+
     setStudentGrades(initialGrades);
   };
 
@@ -130,16 +141,20 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     const newGradesList: Grade[] = [...grades.filter(g => g.studentId !== selectedStudent.id)];
 
     Object.entries(studentGrades).forEach(([subjectId, periodGrades]) => {
-      Object.entries(periodGrades).forEach(([periodId, value]) => {
-        if (value > 0) {
-          newGradesList.push({
-            id: crypto.randomUUID(),
-            studentId: selectedStudent.id,
-            subjectId,
-            period: periodId,
-            value
-          });
-        }
+      Object.entries(periodGrades).forEach(([periodId, examValues]) => {
+        Object.entries(examValues).forEach(([examId, value]) => {
+          const numValue = Number(value);
+          if (numValue > 0 || (value !== '' && numValue === 0)) {
+            newGradesList.push({
+              id: crypto.randomUUID(),
+              studentId: selectedStudent.id,
+              subjectId,
+              period: periodId,
+              value: numValue,
+              ...(examId !== 'direct' ? { examId } : {})
+            } as Grade);
+          }
+        });
       });
     });
 
@@ -153,11 +168,18 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     let totalSum = 0;
     let totalCount = 0;
 
-    Object.values(studentGrades).forEach(subjectPeriods => {
-      const periodValues = Object.values(subjectPeriods).filter((v): v is number => typeof v === 'number' && v > 0);
-      if (periodValues.length > 0) {
-        const subjectSum = periodValues.reduce((a, b) => a + b, 0);
-        const subjectAvg = subjectSum / periodValues.length;
+    Object.entries(studentGrades).forEach(([subjectId, subjectPeriods]) => {
+      const periodSums: number[] = [];
+
+      Object.values(subjectPeriods).forEach((examValues: any) => {
+        const sum = Object.values(examValues).reduce((a: number, b: any) => a + (b !== '' ? Number(b) : 0), 0);
+        if (Object.values(examValues).some(v => v !== '')) {
+          periodSums.push(sum);
+        }
+      });
+
+      if (periodSums.length > 0) {
+        const subjectAvg = periodSums.reduce((a, b) => a + b, 0) / periodSums.length;
         totalSum += subjectAvg;
         totalCount++;
       }
@@ -175,8 +197,17 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
     subjectsWithGrades.forEach(subId => {
       const subGrades = studentGradesList.filter(g => g.subjectId === subId);
-      const sum = subGrades.reduce((a, b) => a + b.value, 0);
-      subjectAverages.push(sum / subGrades.length);
+
+      const periodSums: Record<string, number> = {};
+      subGrades.forEach(g => {
+        periodSums[g.period] = (periodSums[g.period] || 0) + g.value;
+      });
+
+      const periodsCount = Object.keys(periodSums).length;
+      if (periodsCount > 0) {
+        const totalSum = Object.values(periodSums).reduce((a, b) => a + b, 0);
+        subjectAverages.push(totalSum / periodsCount);
+      }
     });
 
     if (subjectAverages.length === 0) return '0.00';
@@ -184,7 +215,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     return (totalSum / subjectAverages.length).toFixed(2);
   };
 
-  const filteredClasses = data.classes.filter(c => 
+  const filteredClasses = data.classes.filter(c =>
     (c.name || '').toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
@@ -195,7 +226,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Boletim Escolar</h2>
           <p className="text-slate-500 font-medium">Gerencie as notas e o desempenho dos alunos.</p>
         </div>
-        <button 
+        <button
           onClick={() => setShowConfigManager(!showConfigManager)}
           className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors font-bold text-sm flex items-center gap-2"
         >
@@ -213,13 +244,13 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
               <h3 className="text-lg font-black text-slate-800">Gerenciar Configurações</h3>
             </div>
             <div className="flex bg-slate-100 p-1 rounded-xl">
-              <button 
+              <button
                 onClick={() => setConfigTab('subjects')}
                 className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${configTab === 'subjects' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 DISCIPLINAS
               </button>
-              <button 
+              <button
                 onClick={() => setConfigTab('periods')}
                 className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${configTab === 'periods' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
@@ -231,14 +262,14 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
           {configTab === 'subjects' ? (
             <div className="space-y-6">
               <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Nome da disciplina (ex: Matemática, Inglês...)" 
+                <input
+                  type="text"
+                  placeholder="Nome da disciplina (ex: Matemática, Inglês...)"
                   className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
                   value={newSubjectName}
                   onChange={(e) => setNewSubjectName(e.target.value)}
                 />
-                <button 
+                <button
                   onClick={handleAddSubject}
                   className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all flex items-center gap-2"
                 >
@@ -250,7 +281,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                 {subjects.map(subject => (
                   <div key={subject.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 group">
                     <span className="font-bold text-slate-700">{subject.name}</span>
-                    <button 
+                    <button
                       onClick={() => handleDeleteSubject(subject.id)}
                       className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                     >
@@ -266,14 +297,14 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
           ) : (
             <div className="space-y-6">
               <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Nome do período (ex: 1º Bimestre, Recuperação...)" 
+                <input
+                  type="text"
+                  placeholder="Nome do período (ex: 1º Bimestre, Recuperação...)"
                   className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
                   value={newPeriodName}
                   onChange={(e) => setNewPeriodName(e.target.value)}
                 />
-                <button 
+                <button
                   onClick={handleAddPeriod}
                   className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all flex items-center gap-2"
                 >
@@ -285,7 +316,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                 {periods.map(period => (
                   <div key={period.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 group">
                     <span className="font-bold text-slate-700">{period.name}</span>
-                    <button 
+                    <button
                       onClick={() => handleDeletePeriod(period.id)}
                       className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                     >
@@ -306,9 +337,9 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
             <>
               <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input 
-                  type="text" 
-                  placeholder="Buscar turmas..." 
+                <input
+                  type="text"
+                  placeholder="Buscar turmas..."
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm shadow-sm"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -320,8 +351,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                   const course = data.courses.find(c => c.id === cls.courseId);
                   const studentCount = data.students.filter(s => s.classId === cls.id).length;
                   return (
-                    <div 
-                      key={cls.id} 
+                    <div
+                      key={cls.id}
                       onClick={() => setSelectedClass(cls)}
                       className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all cursor-pointer group relative overflow-hidden"
                     >
@@ -348,7 +379,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
             </>
           ) : (
             <div className="space-y-6 animate-in slide-in-from-left-4">
-              <button 
+              <button
                 onClick={() => setSelectedClass(null)}
                 className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold text-sm transition-colors"
               >
@@ -371,36 +402,36 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                     .filter(s => s.classId === selectedClass.id)
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .map(student => (
-                    <div 
-                      key={student.id} 
-                      className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-all flex items-center justify-between group"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 flex-shrink-0 overflow-hidden">
-                          {student.photo ? (
-                            <img src={normalizePhotoUrl(student.photo)} alt={student.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <User size={20} />
-                          )}
+                      <div
+                        key={student.id}
+                        className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-all flex items-center justify-between group"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 flex-shrink-0 overflow-hidden">
+                            {student.photo ? (
+                              <img src={normalizePhotoUrl(student.photo)} alt={student.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <User size={20} />
+                            )}
+                          </div>
+                          <span className="font-bold text-slate-700 text-sm">{student.name}</span>
                         </div>
-                        <span className="font-bold text-slate-700 text-sm">{student.name}</span>
-                      </div>
-                      <div className="flex items-center gap-4 flex-shrink-0 ml-4">
-                        <div className="hidden sm:flex flex-col items-end">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Média Geral</span>
-                          <span className={`text-sm font-black ${parseFloat(getStudentGeneralAverage(student.id)) >= 6 ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {getStudentGeneralAverage(student.id)}
-                          </span>
+                        <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                          <div className="hidden sm:flex flex-col items-end">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Média Geral</span>
+                            <span className={`text-sm font-black ${parseFloat(getStudentGeneralAverage(student.id)) >= 6 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {getStudentGeneralAverage(student.id)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleOpenStudentGrades(student)}
+                            className="px-3 py-1.5 bg-white text-indigo-600 border border-indigo-100 rounded-lg hover:bg-indigo-600 hover:text-white transition-all font-bold text-xs flex items-center gap-1.5 shadow-sm"
+                          >
+                            <FileText size={14} /> Notas
+                          </button>
                         </div>
-                        <button 
-                          onClick={() => handleOpenStudentGrades(student)}
-                          className="px-3 py-1.5 bg-white text-indigo-600 border border-indigo-100 rounded-lg hover:bg-indigo-600 hover:text-white transition-all font-bold text-xs flex items-center gap-1.5 shadow-sm"
-                        >
-                          <FileText size={14} /> Notas
-                        </button>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </div>
             </div>
@@ -422,7 +453,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Boletim Escolar • {selectedClass?.name}</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedStudent(null)}
                 className="p-2 bg-white text-slate-400 hover:text-red-500 rounded-xl shadow-sm transition-all"
               >
@@ -435,10 +466,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                 <div className="text-center py-12 space-y-4">
                   <AlertCircle size={48} className="mx-auto text-amber-500 opacity-50" />
                   <p className="text-slate-500 font-medium">
-                    {subjects.length === 0 ? 'Nenhuma disciplina cadastrada.' : 'Nenhum período cadastrado.'} 
+                    {subjects.length === 0 ? 'Nenhuma disciplina cadastrada.' : 'Nenhum período cadastrado.'}
                     Por favor, complete as configurações primeiro.
                   </p>
-                  <button 
+                  <button
                     onClick={() => { setSelectedStudent(null); setShowConfigManager(true); }}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm"
                   >
@@ -450,66 +481,121 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                   {subjects.map(subject => {
                     // Encontrar provas vinculadas a esta disciplina
                     const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.status === 'published');
-                    
+
                     return (
-                    <div key={subject.id} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-indigo-600">
-                          <BookOpen size={18} />
-                          <h4 className="font-black text-slate-800 uppercase tracking-wider text-sm">{subject.name}</h4>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {linkedExams.length > 0 && (
-                            <div className="px-3 py-1 bg-violet-50 border border-violet-200 rounded-lg text-[10px] font-black text-violet-600 flex items-center gap-1">
-                              <FileText size={12} />
-                              {linkedExams.length} {linkedExams.length === 1 ? 'Prova' : 'Provas'}
-                            </div>
-                          )}
-                          <div className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-500">
-                            MÉDIA: {(() => {
-                              const subjectGrades = studentGrades[subject.id] || {};
-                              const vals = Object.values(subjectGrades).filter((v): v is number => typeof v === 'number' && v > 0);
-                              return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : '0.0';
-                            })()}
+                      <div key={subject.id} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-indigo-600">
+                            <BookOpen size={18} />
+                            <h4 className="font-black text-slate-800 uppercase tracking-wider text-sm">{subject.name}</h4>
                           </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {periods.map(period => {
-                          // Verificar se há uma prova vinculada a esta disciplina+período
-                          const linkedExam = (data.exams || []).find(e => e.subjectId === subject.id && e.periodId === period.id && e.status === 'published');
-                          
-                          return (
-                          <div key={period.id} className="space-y-1.5">
-                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">{period.name}</label>
-                            <input 
-                              type="number" 
-                              min="0" 
-                              max="10" 
-                              step="0.1"
-                              className={`w-full px-3 py-2 bg-white border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm font-bold text-center ${linkedExam ? 'border-violet-300 ring-1 ring-violet-100' : 'border-slate-200'}`}
-                              value={studentGrades[subject.id]?.[period.id] || 0}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value) || 0;
-                                setStudentGrades(prev => ({
-                                  ...prev,
-                                  [subject.id]: {
-                                    ...prev[subject.id],
-                                    [period.id]: val
-                                  }
-                                }));
-                              }}
-                            />
-                            {linkedExam && (
-                              <p className="text-[9px] font-bold text-violet-500 truncate ml-1" title={linkedExam.title}>
-                                📝 {linkedExam.title}
-                              </p>
+                          <div className="flex items-center gap-2">
+                            {linkedExams.length > 0 && (
+                              <div className="px-3 py-1 bg-violet-50 border border-violet-200 rounded-lg text-[10px] font-black text-violet-600 flex items-center gap-1">
+                                <FileText size={12} />
+                                {linkedExams.length} {linkedExams.length === 1 ? 'Prova' : 'Provas'}
+                              </div>
                             )}
+                            <div className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-500">
+                              MÉDIA: {(() => {
+                                const subjectGrades = studentGrades[subject.id] || {};
+                                const pSums = Object.values(subjectGrades).map((exVals: any) => Object.values(exVals).reduce((a: number, b: any) => a + (b !== '' ? Number(b) : 0), 0));
+                                const valid = pSums.filter(s => s > 0);
+                                return valid.length > 0 ? (valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(1) : '0.0';
+                              })()}
+                            </div>
                           </div>
-                          );
-                        })}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                          {periods.map(period => {
+                            const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.periodId === period.id && e.status === 'published');
+                            const periodGrades = studentGrades[subject.id]?.[period.id] || {};
+                            const periodSum = Object.values(periodGrades).reduce((a: number, b: any) => a + (b !== '' ? Number(b) : 0), 0);
+
+                            return (
+                              <div key={period.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 relative">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                                  <label className="block text-xs font-black text-slate-700 uppercase tracking-widest">{period.name}</label>
+                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-md">Total: {periodSum.toFixed(1)}</span>
+                                </div>
+
+                                {linkedExams.length > 0 ? (
+                                  <div className="space-y-3">
+                                    {linkedExams.map(exam => {
+                                      const isActivity = (exam as any).evaluationType === 'activity';
+                                      const maxScore = (exam as any).maxScore ?? 10;
+                                      return (
+                                        <div key={exam.id} className="space-y-1">
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className="text-[10px] font-bold text-slate-600 truncate pr-2" title={exam.title}>
+                                              <span className={`mr-1 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider ${isActivity ? 'bg-sky-100 text-sky-700' : 'bg-violet-100 text-violet-700'}`}>
+                                                {isActivity ? 'Ativ' : 'Prova'}
+                                              </span>
+                                              {exam.title}
+                                            </span>
+                                            <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap shrink-0">Vale {maxScore}</span>
+                                          </div>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max={maxScore}
+                                            step="0.1"
+                                            placeholder="—"
+                                            className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm font-bold text-center"
+                                            value={studentGrades[subject.id]?.[period.id]?.[exam.id] ?? ''}
+                                            onChange={(e) => {
+                                              let val = parseFloat(e.target.value);
+                                              if (val > maxScore) val = maxScore;
+                                              if (val < 0) val = 0;
+                                              setStudentGrades(prev => ({
+                                                ...prev,
+                                                [subject.id]: {
+                                                  ...prev[subject.id],
+                                                  [period.id]: {
+                                                    ...prev[subject.id]?.[period.id],
+                                                    [exam.id]: isNaN(val) ? '' : val
+                                                  }
+                                                }
+                                              }));
+                                            }}
+                                          />
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1.5 mt-2">
+                                    <p className="text-[9px] text-slate-400 font-medium mb-1">Nota Direta (Sem avaliação vinculada)</p>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="10"
+                                      step="0.1"
+                                      placeholder="—"
+                                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm font-bold text-center"
+                                      value={studentGrades[subject.id]?.[period.id]?.direct ?? ''}
+                                      onChange={(e) => {
+                                        let val = parseFloat(e.target.value);
+                                        if (val > 10) val = 10;
+                                        if (val < 0) val = 0;
+                                        setStudentGrades(prev => ({
+                                          ...prev,
+                                          [subject.id]: {
+                                            ...prev[subject.id],
+                                            [period.id]: {
+                                              direct: isNaN(val) ? '' : val
+                                            }
+                                          }
+                                        }));
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
                     );
                   })}
 
@@ -533,13 +619,13 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
             </div>
 
             <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-              <button 
+              <button
                 onClick={() => setSelectedStudent(null)}
                 className="px-6 py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold text-sm hover:bg-slate-100 transition-all"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={handleSaveGrades}
                 className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
               >

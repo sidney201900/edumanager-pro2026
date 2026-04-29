@@ -250,7 +250,14 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
     const courseSubjects = subjects.filter(s => !s.classId || s.classId === student?.classId);
     const enrichedGrades = grades.map((g) => {
       const subject = subjects.find((s) => s.id === g.subjectId);
-      return { ...g, subjectName: subject?.name || 'Disciplina desconhecida' };
+      const exam = g.examId ? (schoolData.exams || []).find(e => e.id === g.examId) : null;
+      return { 
+        ...g, 
+        subjectName: subject?.name || 'Disciplina desconhecida',
+        examTitle: exam?.title,
+        evaluationType: exam?.evaluationType || 'exam',
+        maxScore: exam?.maxScore
+      };
     });
     const periods = [...new Set(grades.map((g) => g.period))];
     if (periods.length === 0) periods.push('1º Bimestre', '2º Bimestre', '3º Bimestre', '4º Bimestre');
@@ -308,7 +315,7 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
     }
 
     notifications.push({
-      id: `notif-${Date.now()}`, 
+      id: `notif-${Date.now()}`,
       studentId: 'admin',
       fromStudentId: req.user.studentId, // Identificador para navegação no Manager
       title: 'Nova Justificativa de Falta',
@@ -316,8 +323,8 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
         text: `${student?.name || 'Aluno'} enviou uma justificativa para a aula de ${date}.`,
         motivo: motivo.trim()
       }),
-      attachment: publicUrl, 
-      read: false, 
+      attachment: publicUrl,
+      read: false,
       createdAt: new Date().toISOString(),
     });
 
@@ -531,7 +538,8 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
 
     const wrongCount = totalQuestions - correctCount;
     const percentage = totalQuestions > 0 ? parseFloat(((correctCount / totalQuestions) * 100).toFixed(2)) : 0;
-    const finalScore = totalQuestions > 0 ? parseFloat(((correctCount / totalQuestions) * 10).toFixed(2)) : 0;
+    const maxScore = exam.maxScore != null ? Number(exam.maxScore) : 10;
+    const finalScore = totalQuestions > 0 ? parseFloat(((correctCount / totalQuestions) * maxScore).toFixed(2)) : 0;
 
     // Salvar no PostgreSQL
     await pool.query(
@@ -543,11 +551,18 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
     // Integrar com grades no school_data
     if (exam.subjectId && exam.periodId) {
       const grades = schoolData.grades || [];
-      const existingGradeIndex = grades.findIndex(g => g.studentId === req.user.studentId && g.subjectId === exam.subjectId && g.period === exam.periodId);
+      const existingGradeIndex = grades.findIndex(g => g.studentId === req.user.studentId && g.subjectId === exam.subjectId && g.period === exam.periodId && g.examId === examId);
       if (existingGradeIndex >= 0) {
         grades[existingGradeIndex].value = finalScore;
       } else {
-        grades.push({ id: `grade-${Date.now()}-${Math.random().toString(36).substring(7)}`, studentId: req.user.studentId, subjectId: exam.subjectId, period: exam.periodId, value: finalScore });
+        grades.push({
+          id: `grade-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+          studentId: req.user.studentId,
+          subjectId: exam.subjectId,
+          period: exam.periodId,
+          value: finalScore,
+          examId: examId
+        });
       }
       schoolData.grades = grades;
       await saveSchoolData(schoolData);

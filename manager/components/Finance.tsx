@@ -51,6 +51,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isFetchingCarne, setIsFetchingCarne] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   React.useEffect(() => {
     syncAsaasPayments();
@@ -494,6 +495,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
 
   const handleCreatePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isCreating) return;
 
     if (!formData.studentId || formData.amount <= 0) {
       showAlert('Atenção', '⚠️ Por favor, selecione um aluno e informe um valor válido.', 'warning');
@@ -506,7 +508,9 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
       return;
     }
 
-    const newPayments: Payment[] = [];
+    setIsCreating(true);
+    try {
+      const newPayments: Payment[] = [];
 
     let baseDateStr = formData.dueDate;
     if (dueDateDisplay.length === 10) {
@@ -573,16 +577,19 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
       // Validação de campos obrigatórios para o Asaas Oficial
       if (!finalCpf || finalCpf.length < 11) {
         showAlert('Erro de Cadastro', `O ${isMinor ? 'responsável' : 'aluno'} precisa ter um CPF válido cadastrado para gerar cobrança no Asaas Oficial.`, 'error');
+        setIsCreating(false);
         return;
       }
 
       if (!student.addressZip || student.addressZip.length < 8) {
         showAlert('Erro de Cadastro', 'O CEP do aluno é obrigatório e deve ser válido para o Asaas Oficial.', 'error');
+        setIsCreating(false);
         return;
       }
 
       if (!student.addressStreet || !student.addressNumber) {
         showAlert('Erro de Cadastro', 'Endereço e Número são obrigatórios no cadastro do aluno para gerar cobrança.', 'error');
+        setIsCreating(false);
         return;
       }
 
@@ -667,6 +674,9 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
     });
     showAlert('Sucesso', 'Nova cobrança gerada com sucesso.', 'success');
     closeModal();
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const closeModal = () => {
@@ -1317,7 +1327,15 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
               </div>
               <div className="pt-4 flex gap-4">
                 <button type="button" onClick={closeModal} className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors font-bold text-xs">Cancelar</button>
-                <button type="submit" className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg font-bold text-xs">Gerar Lançamento</button>
+                <button type="submit" disabled={isCreating} className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg font-bold text-xs disabled:opacity-50 disabled:cursor-wait">
+                  {isCreating ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <RefreshCw size={14} className="animate-spin" /> Gerando...
+                    </span>
+                  ) : (
+                    'Gerar Lançamento'
+                  )}
+                </button>
               </div>
             </form>
           </div>
