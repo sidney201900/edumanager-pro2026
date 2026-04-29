@@ -34,6 +34,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
   const [showConfigManager, setShowConfigManager] = useState(false);
   const [configTab, setConfigTab] = useState<'subjects' | 'periods'>('subjects');
   const [studentGrades, setStudentGrades] = useState<Record<string, Record<string, any>>>({}); // subjectId -> periodId -> { examId: value }
+  const [studentSubmissions, setStudentSubmissions] = useState<Record<string, {acertos: number, erros: number}>>({}); // examId -> { acertos, erros }
 
   const subjects = data.subjects || [];
   const periods = data.periods || [];
@@ -109,9 +110,23 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     );
   };
 
-  const handleOpenStudentGrades = (student: Student) => {
+  const handleOpenStudentGrades = async (student: Student) => {
     setSelectedStudent(student);
     const initialGrades: Record<string, Record<string, any>> = {};
+    
+    try {
+      const res = await fetch(`/api/student-submissions/${student.id}`);
+      if (res.ok) {
+        const { submissions } = await res.json();
+        const subsMap: Record<string, {acertos: number, erros: number}> = {};
+        (submissions || []).forEach((s: any) => {
+          subsMap[s.prova_id] = { acertos: s.acertos, erros: s.erros };
+        });
+        setStudentSubmissions(subsMap);
+      }
+    } catch(e) {
+      console.error('Error fetching submissions:', e);
+    }
 
     subjects.forEach(subject => {
       initialGrades[subject.id] = {};
@@ -549,9 +564,17 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                                                 </span>
                                                 {exam.title}
                                               </div>
-                                              {exam.description && (
-                                                <p className="text-xs text-slate-500 leading-snug pr-2">{exam.description}</p>
-                                              )}
+                                              <div className="flex flex-col gap-1">
+                                                {exam.description && (
+                                                  <p className="text-xs text-slate-500 leading-snug pr-2">{exam.description}</p>
+                                                )}
+                                                {studentSubmissions[exam.id] && (
+                                                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider mt-1">
+                                                    <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">{studentSubmissions[exam.id].acertos} Acertos</span>
+                                                    <span className="text-red-500 bg-red-50 px-2 py-0.5 rounded-md">{studentSubmissions[exam.id].erros} Erros</span>
+                                                  </div>
+                                                )}
+                                              </div>
                                             </div>
                                           </div>
                                           

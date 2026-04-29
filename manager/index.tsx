@@ -101,6 +101,8 @@ const App = () => {
             setSyncStatus('saved');
           } else if (result.reason === 'newer_version') {
             setSyncStatus('conflict');
+            console.warn("⚠️ Conflito de versão detectado. Sincronizando com os dados mais recentes do servidor...");
+            forceSyncFromCloud();
           } else {
             setSyncStatus('error');
           }
@@ -144,11 +146,20 @@ const App = () => {
       
       try {
         const cloudData = await dbService.fetchFromCloud();
-        if (cloudData && cloudData.lastUpdated !== dataRef.current.lastUpdated) {
-          console.log("🔔 Polling: Novos dados detectados no servidor!");
-          setData(cloudData);
-          dbService.saveData(cloudData);
-          setSyncStatus('saved');
+        
+        if (cloudData && cloudData.lastUpdated && dataRef.current.lastUpdated) {
+          const cloudTime = new Date(cloudData.lastUpdated).getTime();
+          const localTime = new Date(dataRef.current.lastUpdated).getTime();
+          
+          // Regra crucial: Só substitui o estado local se o servidor tiver dados ESTRITAMENTE mais novos.
+          // Isso impede que verificações durante o "debounce" (espera de 2 segs) sobrescrevam o estado
+          // local com dados velhos do servidor, fazendo itens recém-criados "sumirem".
+          if (cloudTime > localTime) {
+            console.log("🔔 Polling: Novos dados detectados no servidor!");
+            setData(cloudData);
+            dbService.saveData(cloudData);
+            setSyncStatus('saved');
+          }
         }
       } catch (e) {
         // Silencioso em caso de erro de rede temporário

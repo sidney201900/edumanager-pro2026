@@ -9,6 +9,8 @@ interface GradeWithSubject extends Grade {
   evaluationType?: string;
   maxScore?: number;
   periodName?: string;
+  correctCount?: number;
+  wrongCount?: number;
 }
 
 export default function Notas() {
@@ -181,8 +183,15 @@ export default function Notas() {
                                       {isDirect ? 'Lançamento Direto (Professor)' : grade.examTitle || 'Avaliação sem título'}
                                     </div>
                                     {!isDirect && (
-                                      <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>
-                                        {isActivity ? 'ATIVIDADE' : 'PROVA'} • VALE: {maxScore} PTS
+                                      <div style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-secondary)', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <span>{isActivity ? 'ATIVIDADE' : 'PROVA'} • VALE: {maxScore} PTS</span>
+                                        {grade.correctCount !== undefined && grade.wrongCount !== undefined && (
+                                          <>
+                                            <span style={{ color: 'var(--glass-border)' }}>|</span>
+                                            <span style={{ color: 'var(--color-success)' }}>{grade.correctCount} Acertos</span>
+                                            <span style={{ color: 'var(--color-danger)' }}>{grade.wrongCount} Erros</span>
+                                          </>
+                                        )}
                                       </div>
                                     )}
                                   </div>

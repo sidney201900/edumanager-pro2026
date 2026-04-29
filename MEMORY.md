@@ -13,11 +13,14 @@
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
 - [x] Correção do Sino de Notificações: Botões sempre visíveis, suporte a anexo via chave `arquivo` e exibição do **Motivo da Falta** direto na lista do sino.
 - [x] **Segurança Financeira:** Implementada trava de segurança (`isCreating`) contra cliques múltiplos em formulários financeiros, resolvendo a duplicidade de cobranças no Asaas.
-- [x] **Boletim Detalhado (Manager):** Upgrade para layout de lista (Full-Width) com cores distintas: **Violeta (Provas)** e **Azul (Atividades)**.
-- [x] **Retake Logic:** Implementada possibilidade de refazer Provas/Atividades no Portal, com substituição automática da nota anterior e limpeza de submissão no banco.
-- [x] **Mapeamento de Períodos:** Corrigido o bug que exibia UUIDs (códigos) no boletim do aluno; agora exibe os nomes amigáveis (ex: 1º Bimestre).
-- [x] **Nomenclatura Unificada:** Alterado "Avaliações" para **"Atividades e Provas"** em todo o ecossistema (Portal e Manager).
-- [ ] Próximo Passo: Analisar a necessidade de pesos diferenciados (médias ponderadas) entre Atividades e Provas no cálculo do boletim.
+- [x] **Boletim Detalhado (Manager):** Refatoração para suportar N avaliações por bimestre, com interface que diferencia Provas de Atividades.
+- [x] **Ambiente de Provas (Portal):** Implementado modo imersivo com cronômetro pulsante (alerta vermelho < 1min) e etiquetas dinâmicas por tipo de avaliação.
+- [x] **Boletim Analítico (Portal):** Nova interface de notas que mostra o extrato completo de cada avaliação realizada, separada por matéria e bimestre.
+- [x] **Sincronia Total:** Integração via `examId` garantindo que notas do portal preencham automaticamente o boletim administrativo.
+- [x] **Financeiro Inteligente:** Adicionado suporte ao tipo **"Apostila"** e grupo **"Taxas de Matrícula"** (buscadas dos cards de cursos). Implementado autocompletar inteligente que define o tipo de cobrança baseado na referência selecionada.
+- [x] **Storage Explorer (MinIO):** Criada interface de gerenciamento de arquivos que permite navegar por buckets (pastas), visualizar (lightbox), baixar e excluir arquivos físicos individualmente.
+- [x] **Database Explorer (PostgreSQL):** Implementado explorador dinâmico que lista todas as tabelas do banco em tempo real, mostrando contagem de registros e tamanho ocupado.
+- [ ] Próximo Passo: Iniciar testes de estresse no servidor self-hosted para submissão massiva de fotos de frequência.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)
 - **Funcionalidades Implementadas:**
@@ -54,6 +57,7 @@
   - [x] **Frequência e Biometria (AttendanceQuery):** Corrigido bug de contagem, deduplicação de aulas e janela de 30 minutos para validação facial.
   - [x] **Financeiro (Manager):** Migração total para API PostgreSQL local, eliminando o Supabase Sync que causava erros na aba financeira.
   - [x] **Telemetria do Sistema (Settings):** Cards reais de monitoramento de disco (Postgres) e objetos (MinIO).
+- [x] **Exploradores de Infraestrutura:** Implementado acesso via botões nos cards de monitoramento para abrir janelas modais de exploração profunda (Arquivos e Banco de Dados) com navegação fluida e lightbox.
 
 ### 🚀 Infraestrutura e Deploy
 - **Estado Atual:** Pipeline 100% estabilizado no GitHub Actions usando `self-hosted` runner (Oracle ARM64 nativo). 

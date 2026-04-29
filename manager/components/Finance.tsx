@@ -457,7 +457,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
 
     if (!val) {
       setSelectedItemType('');
-      setFormData(prev => ({ ...prev, amount: 0, description: '' }));
+      setFormData(prev => ({ ...prev, amount: 0, description: '', type: 'other' }));
       return;
     }
 
@@ -476,6 +476,20 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
           interest: course.interestPercentage || 0
         }));
       }
+    } else if (val.startsWith('registration_')) {
+      const courseId = val.replace('registration_', '');
+      const course = data.courses.find(c => c.id === courseId);
+      if (course) {
+        setSelectedItemType('course');
+        setFormData(prev => ({
+          ...prev,
+          amount: course.registrationFee || 0,
+          description: `Taxa de Matrícula - ${course.name}`,
+          type: 'registration',
+          fine: course.finePercentage || 0,
+          interest: course.interestPercentage || 0
+        }));
+      }
     } else if (val.startsWith('handout_')) {
       const handoutId = val.replace('handout_', '');
       const handout = data.handouts?.find(h => h.id === handoutId);
@@ -485,7 +499,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
           ...prev,
           amount: handout.price,
           description: `Apostila - ${handout.name}`,
-          type: 'other',
+          type: 'handout',
           fine: handout.finePercentage || 0,
           interest: handout.interestPercentage || 0
         }));
@@ -1262,8 +1276,11 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Referente a (Opcional)</label>
                 <select className={inputClass + " w-full"} value={selectedItemId} onChange={handleItemSelect}>
                   <option value="">Lançamento Avulso / Personalizado</option>
-                  <optgroup label="Cursos">
+                  <optgroup label="Cursos (Mensalidade)">
                     {data.courses?.map(c => <option key={`course_${c.id}`} value={`course_${c.id}`}>{c.name} - R$ {c.monthlyFee.toFixed(2)}</option>)}
+                  </optgroup>
+                  <optgroup label="Taxas de Matrícula">
+                    {data.courses?.map(c => <option key={`registration_${c.id}`} value={`registration_${c.id}`}>Matrícula - {c.name} - R$ {(c.registrationFee || 0).toFixed(2)}</option>)}
                   </optgroup>
                   <optgroup label="Apostilas">
                     {data.handouts?.map(h => <option key={`handout_${h.id}`} value={`handout_${h.id}`}>{h.name} - R$ {h.price.toFixed(2)}</option>)}
@@ -1276,6 +1293,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                   <select className={inputClass + " w-full"} value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value as any })}>
                     <option value="monthly">Mensalidade</option>
                     <option value="registration">Matrícula</option>
+                    <option value="handout">Apostila</option>
                     <option value="other">Outros</option>
                   </select>
                 </div>

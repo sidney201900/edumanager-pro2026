@@ -101,7 +101,7 @@ export interface Payment {
   dueDate: string;
   status: 'pending' | 'paid' | 'overdue';
   paidDate?: string;
-  type: 'monthly' | 'registration' | 'other';
+  type: 'monthly' | 'registration' | 'other' | 'handout';
   installmentNumber?: number;
   totalInstallments?: number;
   description?: string;

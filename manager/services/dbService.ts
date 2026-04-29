@@ -231,8 +231,7 @@ export const dbService = {
 
   saveData: async (data: SchoolData) => {
     try {
-      // Update timestamp
-      data.lastUpdated = new Date().toISOString();
+      // Note: timestamp updating is handled by updateData in index.tsx to avoid mutating React state.
 
       // Save to IndexedDB (cache local)
       const db = await openDB();

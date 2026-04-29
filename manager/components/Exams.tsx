@@ -406,7 +406,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
             onClick={() => handleSave('published')}
             className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-black tracking-wide hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all"
           >
-            <CheckCircle size={20} /> Publicar Avaliação
+            <CheckCircle size={20} /> {(editingExam as any).evaluationType === 'activity' ? 'Publicar Atividade' : 'Publicar Prova'}
           </button>
         </div>
       </div>

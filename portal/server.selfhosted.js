@@ -248,17 +248,29 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
     const grades = (schoolData.grades || []).filter((g) => g.studentId === req.user.studentId);
     const subjects = schoolData.subjects || [];
     const courseSubjects = subjects.filter(s => !s.classId || s.classId === student?.classId);
+    
+    // Buscar submissões para pegar acertos e erros
+    const { rows: submissions } = await pool.query(
+      'SELECT prova_id, acertos, erros FROM provas_submissoes WHERE aluno_id = $1',
+      [req.user.studentId]
+    );
+
     const enrichedGrades = grades.map((g) => {
       const subject = subjects.find((s) => s.id === g.subjectId);
       const exam = g.examId ? (schoolData.exams || []).find(e => e.id === g.examId) : null;
       const periodObj = (schoolData.periods || []).find(p => p.id === g.period);
+      
+      const submission = g.examId ? submissions.find(s => s.prova_id === g.examId) : null;
+
       return { 
         ...g, 
         subjectName: subject?.name || 'Disciplina desconhecida',
         examTitle: exam?.title,
         evaluationType: exam?.evaluationType || 'exam',
         maxScore: exam?.maxScore,
-        periodName: periodObj ? periodObj.name : g.period
+        periodName: periodObj ? periodObj.name : g.period,
+        correctCount: submission?.acertos,
+        wrongCount: submission?.erros
       };
     });
     const periods = [...new Set(enrichedGrades.map((g) => g.periodName))];
@@ -332,6 +344,7 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
 
     schoolData.attendance = attendance;
     schoolData.notifications = notifications;
+    schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
 
     res.json({ message: 'Justificativa enviada com sucesso', record: attendance[recordIndex] });
@@ -422,6 +435,7 @@ app.put('/api/portal/notificacoes/ler/:id', authMiddleware, async (req, res) => 
     if (idx === -1) return res.status(404).json({ error: 'Notificação não encontrada' });
     notifications[idx] = { ...notifications[idx], read: true };
     schoolData.notifications = notifications;
+    schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
     res.json({ success: true });
   } catch (err) {
@@ -437,6 +451,7 @@ app.delete('/api/portal/notificacoes/:id', authMiddleware, async (req, res) => {
     schoolData.notifications = (schoolData.notifications || []).filter(
       n => !(n.id === id && n.studentId === req.user.studentId)
     );
+    schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
     res.json({ success: true });
   } catch (err) {
@@ -462,6 +477,7 @@ app.put('/api/portal/alterar-senha', authMiddleware, async (req, res) => {
 
     students[studentIndex] = { ...student, portalPassword: newPassword };
     schoolData.students = students;
+    schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
 
     res.json({ message: 'Senha alterada com sucesso' });
@@ -572,6 +588,7 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
         });
       }
       schoolData.grades = grades;
+      schoolData.lastUpdated = new Date().toISOString(); // Garante que o Manager detecte a mudança
       await saveSchoolData(schoolData);
     }
 

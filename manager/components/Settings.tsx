@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { SchoolData, SchoolProfile } from '../types';
 import { dbService } from '../services/dbService';
-import { Download, Upload, Trash2, Database, School, Camera, FileText, Info, AlertTriangle, X, CheckCircle, AlertCircle, Cloud, HelpCircle, RefreshCw, Plus, User } from 'lucide-react';
+import { Download, Upload, Trash2, Database, School, Camera, FileText, Info, AlertTriangle, X, CheckCircle, AlertCircle, Cloud, HelpCircle, RefreshCw, Plus, User, Folder, File as FileIcon, Eye, ExternalLink, Image as ImageIcon, List } from 'lucide-react';
 import { isSupabaseConfigured, uploadLogo } from '../services/supabase';
 import { useDialog } from '../DialogContext';
 import imageCompression from 'browser-image-compression';
@@ -73,6 +73,70 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
     return url;
   };
   const [systemStats, setSystemStats] = useState<any>(null);
+
+  // Storage Explorer State
+  const [showStorageManagerModal, setShowStorageManagerModal] = useState(false);
+  const [selectedStorageBucket, setSelectedStorageBucket] = useState<string | null>(null);
+  const [storageObjects, setStorageObjects] = useState<any[]>([]);
+  const [loadingBucket, setLoadingBucket] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Database Explorer State
+  const [showDatabaseExplorerModal, setShowDatabaseExplorerModal] = useState(false);
+  const [dbTables, setDbTables] = useState<any[]>([]);
+  const [loadingDbTables, setLoadingDbTables] = useState(false);
+
+  const openDatabaseExplorer = async () => {
+    setShowDatabaseExplorerModal(true);
+    setLoadingDbTables(true);
+    try {
+      const res = await fetch('/api/database/tables');
+      const data = await res.json();
+      setDbTables(data.tables || []);
+    } catch (e) {
+      console.error(e);
+      showAlert('Erro', 'Não foi possível carregar as tabelas.', 'error');
+    } finally {
+      setLoadingDbTables(false);
+    }
+  };
+
+
+  const openBucket = async (bucketName: string) => {
+    setSelectedStorageBucket(bucketName);
+    setLoadingBucket(true);
+    try {
+      const res = await fetch(`/api/storage/buckets/${bucketName}/objects`);
+      const data = await res.json();
+      setStorageObjects(data.objects || []);
+    } catch (e) {
+      console.error(e);
+      showAlert('Erro', 'Não foi possível carregar os arquivos.', 'error');
+    } finally {
+      setLoadingBucket(false);
+    }
+  };
+
+  const deleteStorageObject = (bucket: string, key: string) => {
+    showConfirm('Excluir Arquivo', `Apagar permanentemente: ${key}?`, async () => {
+      try {
+        const res = await fetch(`/api/storage/buckets/${bucket}/objects`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key })
+        });
+        if (res.ok) {
+          setStorageObjects(prev => prev.filter(o => o.key !== key));
+          showAlert('Sucesso', 'Arquivo removido do disco físico.', 'success');
+          fetchStats(); // Update numbers
+        } else {
+          showAlert('Erro', 'Falha ao excluir arquivo.', 'error');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    });
+  };
 
   const fetchStats = () => {
     fetch('/api/system-stats')
@@ -464,6 +528,15 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
                   <p className="text-xl font-black text-slate-800">{systemStats?.postgres?.tableCount || '--'} <span className="text-sm font-medium text-slate-400">PostgreSQL</span></p>
                 </div>
               </div>
+
+              <div className="pt-4 border-t border-slate-100 mt-4 relative z-10">
+                <button 
+                  onClick={openDatabaseExplorer}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-all font-black text-sm shadow-sm hover:-translate-y-0.5"
+                >
+                  <List size={18} /> Explorar Estrutura de Dados
+                </button>
+              </div>
             </div>
 
             {/* MINIO STORAGE CARD */}
@@ -498,24 +571,14 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
                 </div>
               </div>
 
-              {systemStats?.minio?.buckets && systemStats.minio.buckets.length > 0 && (
-                <div className="pt-4 border-t border-slate-100 mt-2 relative z-10">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Buckets Mapeados</p>
-                  <div className="space-y-2">
-                    {systemStats.minio.buckets.map((b: any, idx: number) => (
-                      <div key={idx} className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-100 shadow-sm hover:border-red-200 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm shadow-red-200"></div>
-                          <span className="text-sm font-bold text-slate-700">{b.name}</span>
-                        </div>
-                        <div className="text-xs font-bold text-slate-400">
-                          <span className="text-slate-600">{b.items}</span> itens • <span className="text-slate-600">{b.sizeMB}</span> MB
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="pt-4 border-t border-slate-100 mt-4 relative z-10">
+                <button 
+                  onClick={() => setShowStorageManagerModal(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all font-black text-sm shadow-sm hover:-translate-y-0.5"
+                >
+                  <Folder size={18} /> Abrir Gerenciador de Arquivos
+                </button>
+              </div>
             </div>
 
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xl space-y-4">
@@ -708,6 +771,201 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
                 <CheckCircle size={18} /> Confirmar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Storage Explorer Modal */}
+      {showStorageManagerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent animate-in fade-in duration-300 pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.15)] w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-slide-up border border-slate-100">
+            {/* Header */}
+            <div className="px-8 py-6 border-b border-slate-200/50 flex items-center justify-between bg-white/50">
+              <div className="flex items-center gap-4 text-slate-800">
+                {selectedStorageBucket ? (
+                  <button onClick={() => setSelectedStorageBucket(null)} className="p-3 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl shadow-sm transition-all" title="Voltar para Pastas">
+                    <Cloud size={24} />
+                  </button>
+                ) : (
+                  <div className="p-3 bg-red-100 text-red-600 rounded-2xl shadow-sm">
+                    <Cloud size={28} />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-2xl font-black tracking-tight">{selectedStorageBucket ? selectedStorageBucket : 'Gerenciador de Arquivos'}</h3>
+                  <p className="text-sm font-bold text-slate-500">
+                    {selectedStorageBucket ? `${storageObjects.length} arquivos encontrados.` : `${systemStats?.minio?.buckets?.length || 0} pastas na nuvem.`}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowStorageManagerModal(false); setSelectedStorageBucket(null); }}
+                className="p-3 bg-white text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl shadow-sm transition-all"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30">
+              {!selectedStorageBucket ? (
+                // Pastas (Buckets) View
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {systemStats?.minio?.buckets?.map((b: any, idx: number) => (
+                    <div key={idx} onClick={() => openBucket(b.name)} className="group bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-red-300 hover:shadow-xl transition-all cursor-pointer flex items-center gap-5 hover:-translate-y-1">
+                      <div className="p-4 bg-red-50 text-red-500 rounded-2xl group-hover:bg-red-500 group-hover:text-white transition-colors">
+                        <Folder size={32} />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-black text-slate-800">{b.name}</h4>
+                        <p className="text-sm font-bold text-slate-400 mt-1">{b.items} arquivos • {b.sizeMB} MB</p>
+                      </div>
+                    </div>
+                  ))}
+                  {(!systemStats?.minio?.buckets || systemStats.minio.buckets.length === 0) && (
+                    <div className="col-span-full py-10 text-center text-slate-400">
+                      <Folder size={64} className="mx-auto mb-4 opacity-20" />
+                      <p className="font-bold text-xl">Nenhuma pasta encontrada.</p>
+                    </div>
+                  )}
+                </div>
+              ) : loadingBucket ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <RefreshCw size={48} className="animate-spin mb-4 text-red-400" />
+                  <p className="font-bold">Acessando MinIO Storage...</p>
+                </div>
+              ) : storageObjects.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <Folder size={64} className="mb-4 opacity-20" />
+                  <p className="font-bold text-xl">Pasta Vazia</p>
+                  <p className="text-sm">Nenhum arquivo encontrado neste bucket.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                  {storageObjects.map((obj, i) => {
+                    const isImage = obj.key.match(/\.(jpeg|jpg|gif|png|webp)$/i);
+                    const isPdf = obj.key.match(/\.pdf$/i);
+                    const sizeKB = (obj.size / 1024).toFixed(1);
+
+                    return (
+                      <div key={i} className="group bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all overflow-hidden flex flex-col">
+                        {/* Thumbnail Area */}
+                        <div className="h-32 bg-slate-100 relative flex items-center justify-center overflow-hidden border-b border-slate-100">
+                          {isImage ? (
+                            <img src={obj.url} alt={obj.key} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
+                          ) : isPdf ? (
+                            <FileText size={48} className="text-red-400/50 group-hover:scale-110 transition-transform" />
+                          ) : (
+                            <FileIcon size={48} className="text-slate-300 group-hover:scale-110 transition-transform" />
+                          )}
+                          
+                          {/* Hover Actions Overlay */}
+                          <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-sm">
+                            {(isImage || isPdf) && (
+                              <button onClick={() => setPreviewUrl(obj.url)} className="p-2.5 bg-white/20 hover:bg-white text-white hover:text-slate-900 rounded-full transition-all" title="Visualizar">
+                                <Eye size={18} />
+                              </button>
+                            )}
+                            <a href={obj.url} download={obj.key} target="_blank" rel="noreferrer" className="p-2.5 bg-white/20 hover:bg-white text-white hover:text-indigo-600 rounded-full transition-all" title="Baixar Original">
+                              <Download size={18} />
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* File Info */}
+                        <div className="p-4 flex-1 flex flex-col">
+                          <p className="text-xs font-black text-slate-700 truncate" title={obj.key}>{obj.key.split('/').pop()}</p>
+                          <div className="mt-auto pt-3 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md">{sizeKB} KB</span>
+                            <button onClick={() => deleteStorageObject(selectedStorageBucket, obj.key)} className="text-slate-300 hover:text-red-500 transition-colors" title="Excluir Permanentemente">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Database Explorer Modal */}
+      {showDatabaseExplorerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent animate-in fade-in duration-300 pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.15)] w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-slide-up border border-slate-100">
+            {/* Header */}
+            <div className="px-8 py-6 border-b border-slate-200/50 flex items-center justify-between bg-white/50">
+              <div className="flex items-center gap-4 text-slate-800">
+                <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl shadow-sm">
+                  <Database size={28} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black tracking-tight">Database Explorer</h3>
+                  <p className="text-sm font-bold text-slate-500">
+                    {dbTables.length} tabelas no schema public do PostgreSQL.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowDatabaseExplorerModal(false)}
+                className="p-3 bg-white text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl shadow-sm transition-all"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30">
+              {loadingDbTables ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <RefreshCw size={48} className="animate-spin mb-4 text-blue-400" />
+                  <p className="font-bold">Analisando Estrutura do PostgreSQL...</p>
+                </div>
+              ) : dbTables.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <Database size={64} className="mb-4 opacity-20" />
+                  <p className="font-bold text-xl">Nenhuma tabela encontrada</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {dbTables.map((table, idx) => (
+                    <div key={idx} className="group bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-xl transition-all cursor-default flex items-center justify-between hover:-translate-y-1">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-50 text-blue-500 rounded-xl group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                          <List size={24} />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide">{table.table_name}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-bold text-slate-500">{table.row_count} registros</span>
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md">{table.total_size}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Preview */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-[60] bg-transparent flex items-center justify-center animate-in fade-in pointer-events-auto">
+          <button onClick={() => setPreviewUrl(null)} className="absolute top-6 right-6 p-3 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white shadow-lg rounded-full transition-colors z-[61]">
+            <X size={24} />
+          </button>
+          <div className="bg-white p-4 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-slate-100">
+            {previewUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+              <img src={previewUrl} alt="Preview" className="max-w-[85vw] max-h-[85vh] object-contain rounded-lg animate-in zoom-in-95" />
+            ) : (
+              <iframe src={previewUrl} className="w-[85vw] h-[85vh] rounded-lg animate-in zoom-in-95" title="PDF Preview" />
+            )}
           </div>
         </div>
       )}

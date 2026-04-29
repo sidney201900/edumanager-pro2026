@@ -28,7 +28,7 @@ import {
   getCobrancasByInstallmentId, updateCobrancaLinkCarne,
   updateCobrancaByField
 } from './services/database.js';
-import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats, s3Client } from './services/storage.js';
+import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats, s3Client, getBucketObjects, deleteMinioObject } from './services/storage.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -225,6 +225,71 @@ app.get('/api/system-stats', async (req, res) => {
     postgres: postgresStats,
     minio: minioStats
   });
+});
+
+// ============================================================
+// Database Explorer
+// ============================================================
+app.get('/api/database/tables', async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        relname as table_name,
+        pg_size_pretty(pg_total_relation_size(relid)) as total_size,
+        pg_total_relation_size(relid) as raw_size,
+        n_live_tup as row_count
+      FROM pg_stat_user_tables
+      ORDER BY raw_size DESC;
+    `;
+    const result = await pool.query(query);
+    res.json({ tables: result.rows });
+  } catch (error) {
+    console.error('Erro ao listar tabelas:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// MinIO Explorer
+// ============================================================
+app.get('/api/storage/buckets/:bucketName/objects', async (req, res) => {
+  try {
+    const { bucketName } = req.params;
+    const objects = await getBucketObjects(bucketName);
+    res.json({ objects });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/storage/buckets/:bucketName/objects', async (req, res) => {
+  try {
+    const { bucketName } = req.params;
+    const { key } = req.body;
+    if (!key) return res.status(400).json({ error: 'Key is required' });
+    
+    await deleteMinioObject(bucketName, key);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// Rota para buscar submissões (acertos/erros) do aluno
+// ============================================================
+app.get('/api/student-submissions/:studentId', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { rows } = await pool.query(
+      'SELECT prova_id, acertos, erros FROM provas_submissoes WHERE aluno_id = $1',
+      [studentId]
+    );
+    res.json({ submissions: rows });
+  } catch (err) {
+    console.error('Erro ao buscar submissões do aluno:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
 });
 
 // ============================================================

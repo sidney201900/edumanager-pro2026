@@ -4,7 +4,7 @@
  * Substitui todas as chamadas supabase.storage do sistema
  * ============================================================
  */
-import { S3Client, PutObjectCommand, GetObjectCommand, ListBucketsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, ListBucketsCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || 'minio';
 const MINIO_PORT = process.env.MINIO_PORT || '9000';
@@ -133,6 +133,34 @@ export async function getMinioStats() {
   } catch (error) {
     console.error('Erro ao buscar stats do MinIO:', error);
     return { error: true, message: error.message };
+  }
+}
+
+export async function getBucketObjects(bucketName) {
+  try {
+    const data = await s3Client.send(new ListObjectsV2Command({ Bucket: bucketName }));
+    if (!data.Contents) return [];
+    
+    return data.Contents.map(obj => ({
+      key: obj.Key,
+      size: obj.Size,
+      lastModified: obj.LastModified,
+      url: `/storage/${bucketName}/${obj.Key}`
+    }));
+  } catch (error) {
+    console.error(`Erro ao listar objetos do bucket ${bucketName}:`, error);
+    throw error;
+  }
+}
+
+export async function deleteMinioObject(bucketName, key) {
+  try {
+    const command = new DeleteObjectCommand({ Bucket: bucketName, Key: key });
+    await s3Client.send(command);
+    return true;
+  } catch (error) {
+    console.error(`Erro ao deletar objeto ${key} do bucket ${bucketName}:`, error);
+    throw error;
   }
 }
 
