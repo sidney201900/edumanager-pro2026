@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { SchoolData, Exam, Question } from '../types';
-import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X } from 'lucide-react';
+import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X, RefreshCw, Lock, Unlock } from 'lucide-react';
 import { uploadExamImage } from '../services/supabase';
+import { useDialog } from '../DialogContext';
+import { dbService } from '../services/dbService';
 
 interface ExamsProps {
   data: SchoolData;
@@ -13,6 +15,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const [currentView, setCurrentView] = useState<'list' | 'builder'>('list');
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const { showAlert, showConfirm } = useDialog();
 
   const normalizePhotoUrl = (url?: string) => {
     if (!url) return '';
@@ -48,6 +51,30 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const handleEditExam = (exam: Exam) => {
     setEditingExam({ ...exam });
     setCurrentView('builder');
+  };
+
+  const handleToggleRetake = (examId: string) => {
+    const updatedExams = exams.map(e => {
+      if (e.id === examId) {
+        return { ...e, allowRetake: !e.allowRetake };
+      }
+      return e;
+    });
+    updateData({ exams: updatedExams });
+    dbService.saveData({ ...data, exams: updatedExams });
+  };
+
+  const handleDeleteExam = (examId: string) => {
+    showConfirm(
+      'Excluir Avaliação',
+      'Tem certeza que deseja excluir esta avaliação? Esta ação não pode ser desfeita e notas vinculadas no boletim perderão o vínculo.',
+      () => {
+        const updatedExams = exams.filter(e => e.id !== examId);
+        updateData({ exams: updatedExams });
+        dbService.saveData({ ...data, exams: updatedExams });
+        showAlert('Sucesso', 'Avaliação excluída com sucesso.', 'success');
+      }
+    );
   };
 
   const handleAddQuestion = () => {
@@ -510,12 +537,28 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                     </p>
                   )}
                 </div>
-                <div className="border-t border-slate-100 pt-4 flex justify-end">
+                <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleRetake(exam.id)}
+                      className={`p-2 rounded-lg transition-colors ${exam.allowRetake ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                      title={exam.allowRetake ? 'Refação Permitida (Clique para bloquear)' : 'Refação Bloqueada (Clique para permitir)'}
+                    >
+                      {exam.allowRetake ? <Unlock size={18} /> : <Lock size={18} />}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteExam(exam.id)}
+                      className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
+                      title="Excluir"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                   <button
                     onClick={() => handleEditExam(exam)}
                     className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 group-hover:translate-x-1 transition-transform"
                   >
-                    Editar Avaliação
+                    Editar {exam.evaluationType === 'activity' ? 'Atividade' : 'Prova'}
                   </button>
                 </div>
               </div>

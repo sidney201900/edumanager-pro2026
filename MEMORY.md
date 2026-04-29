@@ -19,7 +19,10 @@
 - [x] **Sincronia Total:** Integração via `examId` garantindo que notas do portal preencham automaticamente o boletim administrativo.
 - [x] **Financeiro Inteligente:** Adicionado suporte ao tipo **"Apostila"** e grupo **"Taxas de Matrícula"** (buscadas dos cards de cursos). Implementado autocompletar inteligente que define o tipo de cobrança baseado na referência selecionada.
 - [x] **Storage Explorer (MinIO):** Criada interface de gerenciamento de arquivos que permite navegar por buckets (pastas), visualizar (lightbox), baixar e excluir arquivos físicos individualmente.
-- [x] **Database Explorer (PostgreSQL):** Implementado explorador dinâmico que lista todas as tabelas do banco em tempo real, mostrando contagem de registros e tamanho ocupado.
+- [x] **Database Data Viewer:** Implementada a visualização de registros (linhas) diretamente no Database Explorer, com suporte a redimensionamento automático de colunas e truncamento de dados longos.
+- [x] **Controle de Refação (Retake Policy):** Adicionado botão de cadeado nos cards de Avaliações para permitir ou bloquear que alunos refaçam provas no portal (Regra 15).
+- [x] **UI de Avaliações:** Padronização dos botões de edição ("Editar Prova" vs "Editar Atividade") e adição de botão de exclusão rápida direto no card.
+- [x] **Correção de Vínculo de Notas:** Garantido que o `examId` seja sempre salvo nas notas geradas pelo Portal para preenchimento automático do Boletim Escolar no Manager.
 - [ ] Próximo Passo: Iniciar testes de estresse no servidor self-hosted para submissão massiva de fotos de frequência.
 
 ### 💳 Módulo Financeiro (Portal do Aluno)

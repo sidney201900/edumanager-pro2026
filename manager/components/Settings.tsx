@@ -85,10 +85,14 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
   const [showDatabaseExplorerModal, setShowDatabaseExplorerModal] = useState(false);
   const [dbTables, setDbTables] = useState<any[]>([]);
   const [loadingDbTables, setLoadingDbTables] = useState(false);
+  const [selectedDbTable, setSelectedDbTable] = useState<string | null>(null);
+  const [tableData, setTableData] = useState<{rows: any[], fields: string[]}>({rows: [], fields: []});
+  const [loadingTableData, setLoadingTableData] = useState(false);
 
   const openDatabaseExplorer = async () => {
     setShowDatabaseExplorerModal(true);
     setLoadingDbTables(true);
+    setSelectedDbTable(null);
     try {
       const res = await fetch('/api/database/tables');
       const data = await res.json();
@@ -101,7 +105,20 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
     }
   };
 
-
+  const openTable = async (tableName: string) => {
+    setSelectedDbTable(tableName);
+    setLoadingTableData(true);
+    try {
+      const res = await fetch(`/api/database/tables/${tableName}/data`);
+      const data = await res.json();
+      setTableData({ rows: data.rows || [], fields: data.fields || [] });
+    } catch (e) {
+      console.error(e);
+      showAlert('Erro', 'Não foi possível carregar os dados da tabela.', 'error');
+    } finally {
+      setLoadingTableData(false);
+    }
+  };
   const openBucket = async (bucketName: string) => {
     setSelectedStorageBucket(bucketName);
     setLoadingBucket(true);
@@ -899,18 +916,24 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
             {/* Header */}
             <div className="px-8 py-6 border-b border-slate-200/50 flex items-center justify-between bg-white/50">
               <div className="flex items-center gap-4 text-slate-800">
-                <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl shadow-sm">
-                  <Database size={28} />
-                </div>
+                {selectedDbTable ? (
+                  <button onClick={() => setSelectedDbTable(null)} className="p-3 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-2xl shadow-sm transition-all" title="Voltar para Tabelas">
+                    <Database size={24} />
+                  </button>
+                ) : (
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl shadow-sm">
+                    <Database size={28} />
+                  </div>
+                )}
                 <div>
-                  <h3 className="text-2xl font-black tracking-tight">Database Explorer</h3>
+                  <h3 className="text-2xl font-black tracking-tight">{selectedDbTable ? selectedDbTable : 'Database Explorer'}</h3>
                   <p className="text-sm font-bold text-slate-500">
-                    {dbTables.length} tabelas no schema public do PostgreSQL.
+                    {selectedDbTable ? `${tableData.rows.length} registros exibidos.` : `${dbTables.length} tabelas no schema public do PostgreSQL.`}
                   </p>
                 </div>
               </div>
               <button 
-                onClick={() => setShowDatabaseExplorerModal(false)}
+                onClick={() => { setShowDatabaseExplorerModal(false); setSelectedDbTable(null); }}
                 className="p-3 bg-white text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl shadow-sm transition-all"
               >
                 <X size={24} />
@@ -919,34 +942,80 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
             
             {/* Content Body */}
             <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30">
-              {loadingDbTables ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                  <RefreshCw size={48} className="animate-spin mb-4 text-blue-400" />
-                  <p className="font-bold">Analisando Estrutura do PostgreSQL...</p>
-                </div>
-              ) : dbTables.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                  <Database size={64} className="mb-4 opacity-20" />
-                  <p className="font-bold text-xl">Nenhuma tabela encontrada</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {dbTables.map((table, idx) => (
-                    <div key={idx} className="group bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-xl transition-all cursor-default flex items-center justify-between hover:-translate-y-1">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 bg-blue-50 text-blue-500 rounded-xl group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                          <List size={24} />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide">{table.table_name}</h4>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs font-bold text-slate-500">{table.row_count} registros</span>
+              {!selectedDbTable ? (
+                // Lista de Tabelas
+                loadingDbTables ? (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                    <RefreshCw size={48} className="animate-spin mb-4 text-blue-400" />
+                    <p className="font-bold">Analisando Estrutura do PostgreSQL...</p>
+                  </div>
+                ) : dbTables.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                    <Database size={64} className="mb-4 opacity-20" />
+                    <p className="font-bold text-xl">Nenhuma tabela encontrada</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {dbTables.map((table, idx) => (
+                      <div key={idx} onClick={() => openTable(table.table_name)} className="group bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-xl transition-all cursor-pointer flex items-center justify-between hover:-translate-y-1">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-blue-50 text-blue-500 rounded-xl group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                            <List size={24} />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide">{table.table_name}</h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs font-bold text-slate-500">{table.row_count} registros</span>
+                            </div>
                           </div>
                         </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md">{table.total_size}</span>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded-md">{table.total_size}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )
+              ) : loadingTableData ? (
+                // Carregando Dados da Tabela
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <RefreshCw size={48} className="animate-spin mb-4 text-blue-400" />
+                  <p className="font-bold">Buscando registros...</p>
+                </div>
+              ) : tableData.rows.length === 0 ? (
+                // Tabela Vazia
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <List size={64} className="mb-4 opacity-20" />
+                  <p className="font-bold text-xl">Tabela Vazia</p>
+                  <p className="text-sm">Nenhum registro encontrado nesta tabela.</p>
+                </div>
+              ) : (
+                // Visualização de Dados (Grid)
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-600">
+                      <thead className="text-xs text-slate-700 uppercase bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          {tableData.fields.map((field, idx) => (
+                            <th key={idx} scope="col" className="px-6 py-4 font-black whitespace-nowrap">
+                              {field}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tableData.rows.map((row, rowIdx) => (
+                          <tr key={rowIdx} className="bg-white border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                            {tableData.fields.map((field, colIdx) => (
+                              <td key={colIdx} className="px-6 py-4 whitespace-nowrap">
+                                {typeof row[field] === 'object' && row[field] !== null 
+                                  ? JSON.stringify(row[field]).substring(0, 50) + (JSON.stringify(row[field]).length > 50 ? '...' : '')
+                                  : String(row[field] ?? '').substring(0, 50) + (String(row[field] ?? '').length > 50 ? '...' : '')}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -956,15 +1025,24 @@ const Settings: React.FC<SettingsProps> = ({ data, updateData, setData }) => {
 
       {/* Lightbox Preview */}
       {previewUrl && (
-        <div className="fixed inset-0 z-[60] bg-transparent flex items-center justify-center animate-in fade-in pointer-events-auto">
-          <button onClick={() => setPreviewUrl(null)} className="absolute top-6 right-6 p-3 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white shadow-lg rounded-full transition-colors z-[61]">
-            <X size={24} />
-          </button>
-          <div className="bg-white p-4 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-slate-100">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center animate-in fade-in pointer-events-auto">
+          {/* Overlay transparente para fechar ao clicar fora */}
+          <div className="absolute inset-0 bg-slate-900/10 cursor-pointer" onClick={() => setPreviewUrl(null)}></div>
+          
+          <div className="bg-white p-4 rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.3)] border border-slate-100 relative z-[61] animate-in zoom-in-95">
+            {/* Botão de fechar fixado na moldura */}
+            <button 
+              onClick={() => setPreviewUrl(null)} 
+              className="absolute -top-5 -right-5 p-3 bg-red-500 text-white shadow-xl rounded-full hover:bg-red-600 transition-all z-[62] border-4 border-white"
+              title="Fechar Visualização"
+            >
+              <X size={24} />
+            </button>
+            
             {previewUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-              <img src={previewUrl} alt="Preview" className="max-w-[85vw] max-h-[85vh] object-contain rounded-lg animate-in zoom-in-95" />
+              <img src={previewUrl} alt="Preview" className="max-w-[85vw] max-h-[85vh] object-contain rounded-lg" />
             ) : (
-              <iframe src={previewUrl} className="w-[85vw] h-[85vh] rounded-lg animate-in zoom-in-95" title="PDF Preview" />
+              <iframe src={previewUrl} className="w-[85vw] h-[85vh] rounded-lg" title="PDF Preview" />
             )}
           </div>
         </div>

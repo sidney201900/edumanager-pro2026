@@ -537,21 +537,26 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
     const { examId, answers } = req.body;
     if (!examId || !answers) return res.status(400).json({ error: 'Dados obrigatórios' });
 
-    // Verificar se já submeteu e deletar a submissão anterior para permitir refazer
+    const schoolData = await getSchoolData();
+    const exam = (schoolData.exams || []).find(e => e.id === examId);
+    if (!exam) return res.status(404).json({ error: 'Prova não encontrada.' });
+
+    // Verificar se já submeteu
     const { rows: existing } = await pool.query(
       'SELECT * FROM provas_submissoes WHERE aluno_id = $1 AND prova_id = $2 LIMIT 1',
       [req.user.studentId, examId]
     );
+
     if (existing.length > 0) {
+      if (!exam.allowRetake) {
+        return res.status(409).json({ error: 'Você já realizou esta avaliação e ela não permite refação.' });
+      }
+      // Se permite refazer, deleta a anterior
       await pool.query(
         'DELETE FROM provas_submissoes WHERE aluno_id = $1 AND prova_id = $2',
         [req.user.studentId, examId]
       );
     }
-
-    const schoolData = await getSchoolData();
-    const exam = (schoolData.exams || []).find(e => e.id === examId);
-    if (!exam) return res.status(404).json({ error: 'Prova não encontrada.' });
 
     const totalQuestions = exam.questions.length;
     let correctCount = 0;

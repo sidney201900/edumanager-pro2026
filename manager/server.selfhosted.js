@@ -249,6 +249,24 @@ app.get('/api/database/tables', async (req, res) => {
   }
 });
 
+app.get('/api/database/tables/:tableName/data', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    
+    // Basic validation to prevent SQL injection on table name
+    if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+      return res.status(400).json({ error: 'Nome de tabela inválido' });
+    }
+
+    const query = `SELECT * FROM "${tableName}" LIMIT 100;`;
+    const result = await pool.query(query);
+    res.json({ rows: result.rows, fields: result.fields.map(f => f.name) });
+  } catch (error) {
+    console.error(\`Erro ao buscar dados da tabela \${req.params.tableName}:\`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============================================================
 // MinIO Explorer
 // ============================================================

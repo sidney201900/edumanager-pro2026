@@ -249,6 +249,9 @@ export interface Exam {
   durationMinutes: number;
   status: 'draft' | 'published';
   questions: Question[];
+  allowRetake?: boolean;
+  evaluationType?: 'exam' | 'activity';
+  maxScore?: number;
 }
 
 export interface SchoolData {
