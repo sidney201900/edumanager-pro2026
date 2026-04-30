@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { SchoolData, Exam, Question } from '../types';
-import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X, RefreshCw, Lock, Unlock } from 'lucide-react';
+import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X, RefreshCw, Lock, Unlock, AlertTriangle } from 'lucide-react';
 import { uploadExamImage } from '../services/supabase';
 import { useDialog } from '../DialogContext';
 import { dbService } from '../services/dbService';
@@ -165,7 +165,16 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     if (!editingExam) return;
 
     if (!editingExam.title || !editingExam.classId) {
-      alert('Preencha o título e a turma antes de salvar.');
+      showAlert('Atenção', 'Preencha o título e a turma antes de salvar.', 'warning');
+      return;
+    }
+
+    if (status === 'published' && (!editingExam.subjectId || !editingExam.periodId)) {
+      showAlert(
+        'Vínculo Obrigatório',
+        'Para PUBLICAR a avaliação e permitir que as notas entrem no Boletim Escolar, você precisa vincular uma Disciplina e um Período.',
+        'warning'
+      );
       return;
     }
 
@@ -266,7 +275,9 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Disciplina (Boletim)</label>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                Disciplina (Boletim) <span className="text-amber-500" title="Obrigatório para publicar">*</span>
+              </label>
               <select
                 value={editingExam.subjectId || ''}
                 onChange={e => setEditingExam({ ...editingExam, subjectId: e.target.value || undefined })}
@@ -277,10 +288,12 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-400 mt-1.5">Vincule a uma disciplina do Boletim Escolar para lançar notas automaticamente.</p>
+              <p className="text-[11px] text-amber-600 mt-1.5 font-semibold">Obrigatório para Publicar. A nota irá automaticamente para o boletim.</p>
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Período (Boletim)</label>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                Período (Boletim) <span className="text-amber-500" title="Obrigatório para publicar">*</span>
+              </label>
               <select
                 value={editingExam.periodId || ''}
                 onChange={e => setEditingExam({ ...editingExam, periodId: e.target.value || undefined })}
@@ -291,7 +304,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-400 mt-1.5">Vincule a um período para que a nota apareça no campo correto do boletim.</p>
+              <p className="text-[11px] text-amber-600 mt-1.5 font-semibold">Obrigatório para Publicar. Define em qual coluna do boletim a nota entra.</p>
             </div>
           </div>
         </div>
@@ -535,6 +548,17 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                       <span className="font-bold text-slate-700">Período:</span>
                       {(data.periods || []).find(p => p.id === exam.periodId)?.name || '—'}
                     </p>
+                  )}
+                  
+                  {/* ALERTA DE BOLETIM */}
+                  {exam.status === 'published' && (!exam.subjectId || !exam.periodId) && (
+                    <div className="flex items-start gap-2 bg-amber-50 p-3 rounded-xl border border-amber-200 mt-3">
+                      <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                      <p className="text-[11px] font-medium text-amber-700 leading-tight">
+                        <strong>Boletim Desconectado!</strong><br />
+                        As notas desta avaliação não aparecerão no boletim do aluno porque faltou vincular a Disciplina ou o Período. Edite a prova para corrigir.
+                      </p>
+                    </div>
                   )}
                 </div>
                 <div className="border-t border-slate-100 pt-4 flex items-center justify-between">

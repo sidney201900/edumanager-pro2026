@@ -19,6 +19,12 @@
 > Ao realizar a migração completa dos dados do sistema legado 'schoodat' para o nosso banco de dados local Postgres, **é terminantemente proibido alterar, resetar ou re-hashear as senhas existentes.**
 > As credenciais devem ser mantidas exatamente como estão para garantir que o acesso dos usuários não seja interrompido.
 
+## 🚨 Regras de Fluxo de Trabalho (CRÍTICO)
+
+> [!CAUTION]
+> **Git Push Proibido Sem Demanda Explícita:**
+> NUNCA execute `git add`, `git commit` ou `git push` sem que o USUÁRIO solicite explicitamente. Alterações devem ser feitas nos arquivos, mas o envio ao repositório remoto é uma ação exclusiva do usuário. Aguarde sempre o comando direto do usuário para realizar qualquer operação de versionamento.
+
 ## 📜 Padrões de Desenvolvimento
 1. **Design System:** Estética Premium, Dark Mode por padrão (ou glassmorphism), micro-animações e ausência de placeholders.
 2. **Segurança:** Todas as rotas sensíveis devem validar o token JWT local (via secrets do ambiente). Proibido usar Supabase SDK para lógica de autenticação ou sincronização no frontend.

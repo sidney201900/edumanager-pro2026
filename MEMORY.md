@@ -1,5 +1,7 @@
 # MEMORY.md - Contexto de Desenvolvimento
 
+> **🚨 REGRA ABSOLUTA:** NUNCA execute `git add/commit/push` sem que o usuário peça explicitamente. Alterações nos arquivos são livres, mas versionamento é ação EXCLUSIVA do usuário.
+
 ## 📅 Estado Atual (30/04/2026)
 
 - [x] **Automação de Mensagens (Cron Jobs):** Implementados dois disparadores independentes (`preventivo` e `atrasado`) via `node-cron`.
@@ -10,7 +12,9 @@
 - [x] **Auto-Initialization DB:** Script de boot que garante a existência das colunas `overdue_warnings_count` e `last_overdue_warning_at` na tabela `alunos_cobrancas`.
 - [x] **Correção de Crash no Portal:** Resolvido erro de `.toFixed()` que quebrava as abas de "Avaliações" e "Notas" devido ao retorno de tipos `NUMERIC` do PostgreSQL como strings.
 - [x] **Persistência de UI (Mensagens):** Integrada chamada ao `updateData` ao salvar agendamentos, garantindo que o estado do toggle não seja perdido ao trocar de aba no Manager.
+- [x] **Sincronização de Boletim (Provas):** Adicionada validação rigorosa no Manager (`Exams.tsx`) para impedir a publicação de provas sem vínculo com `subjectId` e `periodId`. Inserido alerta visual para provas legadas desconectadas, garantindo que as notas feitas no Portal sejam corretamente injetadas no Boletim.
 - [ ] Próximo Passo: Monitorar o log de disparos automáticos (`[Cron]`) e validar a taxa de entrega via Evolution API.
+
 
 ## 📅 Histórico Anterior (22/04/2026)
 
