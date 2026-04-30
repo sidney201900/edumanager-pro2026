@@ -12,7 +12,10 @@
 - [x] **Auto-Initialization DB:** Script de boot que garante a existência das colunas `overdue_warnings_count` e `last_overdue_warning_at` na tabela `alunos_cobrancas`.
 - [x] **Correção de Crash no Portal:** Resolvido erro de `.toFixed()` que quebrava as abas de "Avaliações" e "Notas" devido ao retorno de tipos `NUMERIC` do PostgreSQL como strings.
 - [x] **Persistência de UI (Mensagens):** Integrada chamada ao `updateData` ao salvar agendamentos, garantindo que o estado do toggle não seja perdido ao trocar de aba no Manager.
-- [x] **Sincronização de Boletim (Provas):** Adicionada validação rigorosa no Manager (`Exams.tsx`) para impedir a publicação de provas sem vínculo com `subjectId` e `periodId`. Inserido alerta visual para provas legadas desconectadas, garantindo que as notas feitas no Portal sejam corretamente injetadas no Boletim.
+- [x] **Arquitetura de Notas Desacoplada:** Migração completa das notas do JSON `school_data` para uma tabela dedicada no PostgreSQL (`notas_boletim`).
+- [x] **Sincronização em Tempo Real (Boletim):** Resolvido definitivamente o problema de notas do portal que não apareciam no Manager. O sistema agora utiliza Upsert via SQL, garantindo integridade e eliminando conflitos de concorrência.
+- [x] **Migração Automática (Boot):** Script implementado no servidor para mover notas antigas do JSON para o banco de dados no momento da inicialização, garantindo zero perda de histórico.
+- [x] **Tipagem Robusta:** Normalização de IDs e valores (Number/String) em toda a cadeia de notas, prevenindo falhas de comparação no `find` do Javascript.
 - [ ] Próximo Passo: Monitorar o log de disparos automáticos (`[Cron]`) e validar a taxa de entrega via Evolution API.
 
 

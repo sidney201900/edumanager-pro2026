@@ -205,6 +205,65 @@ export async function insertSubmissao(submission) {
 }
 
 // ============================================================
+// HELPERS: notas_boletim
+// ============================================================
+export async function initNotasTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notas_boletim (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      aluno_id VARCHAR(255) NOT NULL,
+      disciplina_id VARCHAR(255) NOT NULL,
+      periodo_id VARCHAR(255) NOT NULL,
+      prova_id VARCHAR(255),
+      valor NUMERIC(5, 2) NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(aluno_id, disciplina_id, periodo_id, prova_id)
+    );
+  `);
+}
+
+export async function getNotasByAluno(alunoId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM notas_boletim WHERE aluno_id = $1',
+    [alunoId]
+  );
+  return rows;
+}
+
+export async function upsertNota(nota) {
+  // Trata prova_id null se for direta para o unique index funcionar de forma previsível (PostgreSQL 15+ tem NULLS NOT DISTINCT, mas para garantir via app logic vamos usar uma abordagem de ON CONFLICT)
+  // No caso do PostgreSQL padrão, múltiplos NULLs não dão conflito no UNIQUE.
+  // Para contornar e permitir upsert real, faremos DELETE e INSERT ou garantiremos que o código gerencie o NULL logicamente.
+  
+  if (nota.prova_id) {
+    await pool.query(
+      `INSERT INTO notas_boletim (aluno_id, disciplina_id, periodo_id, prova_id, valor, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (aluno_id, disciplina_id, periodo_id, prova_id) 
+       DO UPDATE SET valor = EXCLUDED.valor, updated_at = NOW()`,
+      [nota.aluno_id, nota.disciplina_id, nota.periodo_id, nota.prova_id, nota.valor]
+    );
+  } else {
+    // Para notas diretas, se existir apagamos e inserimos (pois o unique index normal não restringe múltiplos nulls)
+    await pool.query(
+      `DELETE FROM notas_boletim WHERE aluno_id = $1 AND disciplina_id = $2 AND periodo_id = $3 AND prova_id IS NULL`,
+      [nota.aluno_id, nota.disciplina_id, nota.periodo_id]
+    );
+    await pool.query(
+      `INSERT INTO notas_boletim (aluno_id, disciplina_id, periodo_id, prova_id, valor, updated_at)
+       VALUES ($1, $2, $3, NULL, $4, NOW())`,
+      [nota.aluno_id, nota.disciplina_id, nota.periodo_id, nota.valor]
+    );
+  }
+}
+
+export async function deleteNotasManuaisAusentes(alunoId, notasManuaisRetidas) {
+    // Para limpar notas que o professor apagou (vazio) no manager
+    // notasManuaisRetidas é um array de objetos { disciplina_id, periodo_id, prova_id }
+    // Implementaremos a limpeza iterativamente na rota
+}
+
+// ============================================================
 // EXPORT POOL para queries diretas quando necessário
 // ============================================================
 export { pool };

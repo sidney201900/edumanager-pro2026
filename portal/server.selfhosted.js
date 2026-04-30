@@ -245,7 +245,15 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
   try {
     const schoolData = await getSchoolData();
     const student = (schoolData.students || []).find(s => s.id === req.user.studentId);
-    const grades = (schoolData.grades || []).filter((g) => g.studentId === req.user.studentId);
+    
+    // Buscar notas direto da nova tabela
+    const { rows: dbGrades } = await pool.query(
+      'SELECT id, aluno_id as "studentId", disciplina_id as "subjectId", periodo_id as "period", prova_id as "examId", valor as "value" FROM notas_boletim WHERE aluno_id = $1',
+      [req.user.studentId]
+    );
+    // Converter valor numérico
+    const grades = dbGrades.map(g => ({ ...g, value: Number(g.value) }));
+
     const subjects = schoolData.subjects || [];
     const courseSubjects = subjects.filter(s => !s.classId || s.classId === student?.classId);
     
@@ -260,7 +268,7 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
       const exam = g.examId ? (schoolData.exams || []).find(e => e.id === g.examId) : null;
       const periodObj = (schoolData.periods || []).find(p => p.id === g.period);
       
-      const submission = g.examId ? submissions.find(s => s.prova_id === g.examId) : null;
+      const submission = g.examId ? submissions.find(s => String(s.prova_id) === String(g.examId)) : null;
 
       return { 
         ...g, 
@@ -577,25 +585,15 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
       [req.user.studentId, examId, totalQuestions, correctCount, wrongCount, percentage, finalScore, JSON.stringify(answers), new Date().toISOString()]
     );
 
-    // Integrar com grades no school_data
+    // Integrar com notas_boletim (Nova Tabela) em vez de school_data
     if (exam.subjectId && exam.periodId) {
-      const grades = schoolData.grades || [];
-      const existingGradeIndex = grades.findIndex(g => g.studentId === req.user.studentId && g.subjectId === exam.subjectId && g.period === exam.periodId && g.examId === examId);
-      if (existingGradeIndex >= 0) {
-        grades[existingGradeIndex].value = finalScore;
-      } else {
-        grades.push({
-          id: `grade-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-          studentId: req.user.studentId,
-          subjectId: exam.subjectId,
-          period: exam.periodId,
-          value: finalScore,
-          examId: examId
-        });
-      }
-      schoolData.grades = grades;
-      schoolData.lastUpdated = new Date().toISOString(); // Garante que o Manager detecte a mudança
-      await saveSchoolData(schoolData);
+      await pool.query(
+        `INSERT INTO notas_boletim (aluno_id, disciplina_id, periodo_id, prova_id, valor, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (aluno_id, disciplina_id, periodo_id, prova_id) 
+         DO UPDATE SET valor = EXCLUDED.valor, updated_at = NOW()`,
+        [req.user.studentId, exam.subjectId, exam.periodId, examId, finalScore]
+      );
     }
 
     res.json({ success: true, result: { total_questions: totalQuestions, correct_count: correctCount, wrong_count: wrongCount, percentage, final_score: finalScore } });

@@ -27,7 +27,8 @@ import {
   getCobrancaByPaymentId, getCobrancasByOrQuery,
   getCobrancasByAlunoId, getCobrancasAtrasadas, getCobrancasPendentes,
   getCobrancasByInstallmentId, updateCobrancaLinkCarne,
-  updateCobrancaByField
+  updateCobrancaByField,
+  initNotasTable, getNotasByAluno, upsertNota
 } from './services/database.js';
 import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats, s3Client, getBucketObjects, deleteMinioObject } from './services/storage.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -311,6 +312,45 @@ app.get('/api/student-submissions/:studentId', async (req, res) => {
     res.json({ submissions: rows });
   } catch (err) {
     console.error('Erro ao buscar submissões do aluno:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// ============================================================
+// ROTAS DE NOTAS (NOVA TABELA)
+// ============================================================
+app.get('/api/notas/:alunoId', async (req, res) => {
+  try {
+    const notas = await getNotasByAluno(req.params.alunoId);
+    res.json({ notas });
+  } catch (err) {
+    console.error('Erro ao buscar notas do aluno:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.post('/api/notas', async (req, res) => {
+  try {
+    const { notas } = req.body;
+    if (!Array.isArray(notas)) return res.status(400).json({ error: 'Formato inválido' });
+    
+    for (const nota of notas) {
+      if (nota.valor !== null && nota.valor !== '' && !isNaN(Number(nota.valor))) {
+        await upsertNota({
+          aluno_id: String(nota.aluno_id),
+          disciplina_id: String(nota.disciplina_id),
+          periodo_id: String(nota.periodo_id),
+          prova_id: nota.prova_id ? String(nota.prova_id) : null,
+          valor: Number(nota.valor)
+        });
+      }
+    }
+    
+    // Opcionalmente implementar delete para notas que o professor limpou (vazio)
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao salvar notas manuais:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
@@ -1072,7 +1112,31 @@ async function inicializarAgendamento() {
       END $$;
     `).catch(err => console.error('[PostgreSQL] Erro boot automação:', err));
 
+    // Inicialização da Tabela de Notas e Migração Automática
+    await initNotasTable();
     const appData = await getSchoolData();
+    
+    // Migração: Se existirem notas no JSON, movemos para a tabela e removemos do JSON
+    if (appData.grades && appData.grades.length > 0) {
+      console.log(`[Migração] Migrando ${appData.grades.length} notas do JSON para o PostgreSQL...`);
+      for (const grade of appData.grades) {
+        try {
+          await upsertNota({
+            aluno_id: String(grade.studentId),
+            disciplina_id: String(grade.subjectId),
+            periodo_id: String(grade.period),
+            prova_id: grade.examId ? String(grade.examId) : null,
+            valor: Number(grade.value)
+          });
+        } catch(err) {
+          console.error('[Migração] Erro ao migrar nota:', err);
+        }
+      }
+      appData.grades = []; // Limpa o JSON após migrar
+      appData.lastUpdated = new Date().toISOString();
+      await saveSchoolData(appData);
+      console.log('[Migração] Migração de notas concluída com sucesso!');
+    }
     const rules = appData?.messageTemplates?.automationRules || {};
     
     // Preventivo

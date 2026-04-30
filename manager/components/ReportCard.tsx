@@ -114,6 +114,18 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     setSelectedStudent(student);
     const initialGrades: Record<string, Record<string, any>> = {};
     
+    // Buscar notas do Postgres
+    let dbNotas: any[] = [];
+    try {
+      const resNotas = await fetch(`/api/notas/${student.id}`);
+      if (resNotas.ok) {
+        const json = await resNotas.json();
+        dbNotas = json.notas || [];
+      }
+    } catch(e) {
+      console.error('Error fetching notas:', e);
+    }
+    
     try {
       const res = await fetch(`/api/student-submissions/${student.id}`);
       if (res.ok) {
@@ -136,12 +148,12 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
         if (linkedExams.length > 0) {
           linkedExams.forEach(exam => {
-            const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id && g.examId === exam.id);
-            periodGrades[exam.id] = existingGrade ? existingGrade.value : '';
+            const existingGrade = dbNotas.find(g => String(g.disciplina_id) === String(subject.id) && String(g.periodo_id) === String(period.id) && String(g.prova_id) === String(exam.id));
+            periodGrades[exam.id] = existingGrade ? Number(existingGrade.valor) : '';
           });
         } else {
-          const existingGrade = grades.find(g => g.studentId === student.id && g.subjectId === subject.id && g.period === period.id && !g.examId);
-          periodGrades['direct'] = existingGrade ? existingGrade.value : '';
+          const existingGrade = dbNotas.find(g => String(g.disciplina_id) === String(subject.id) && String(g.periodo_id) === String(period.id) && !g.prova_id);
+          periodGrades['direct'] = existingGrade ? Number(existingGrade.valor) : '';
         }
         initialGrades[subject.id][period.id] = periodGrades;
       });
@@ -150,33 +162,44 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     setStudentGrades(initialGrades);
   };
 
-  const handleSaveGrades = () => {
+  const handleSaveGrades = async () => {
     if (!selectedStudent) return;
 
-    const newGradesList: Grade[] = [...grades.filter(g => g.studentId !== selectedStudent.id)];
+    const notasPayload: any[] = [];
 
     Object.entries(studentGrades).forEach(([subjectId, periodGrades]) => {
       Object.entries(periodGrades).forEach(([periodId, examValues]) => {
         Object.entries(examValues).forEach(([examId, value]) => {
           const numValue = Number(value);
           if (numValue > 0 || (value !== '' && numValue === 0)) {
-            newGradesList.push({
-              id: crypto.randomUUID(),
-              studentId: selectedStudent.id,
-              subjectId,
-              period: periodId,
-              value: numValue,
-              ...(examId !== 'direct' ? { examId } : {})
-            } as Grade);
+            notasPayload.push({
+              aluno_id: selectedStudent.id,
+              disciplina_id: subjectId,
+              periodo_id: periodId,
+              prova_id: examId !== 'direct' ? examId : null,
+              valor: numValue
+            });
           }
         });
       });
     });
 
-    updateData({ grades: newGradesList });
-    dbService.saveData({ ...data, grades: newGradesList });
-    setSelectedStudent(null);
-    showAlert('Sucesso', '✅ Notas salvas com sucesso!', 'success');
+    try {
+      const res = await fetch('/api/notas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notas: notasPayload })
+      });
+      if (res.ok) {
+        setSelectedStudent(null);
+        showAlert('Sucesso', '✅ Notas salvas com sucesso no banco de dados!', 'success');
+      } else {
+        showAlert('Erro', '❌ Falha ao salvar notas.', 'error');
+      }
+    } catch(e) {
+      console.error(e);
+      showAlert('Erro', '❌ Erro de conexão ao salvar notas.', 'error');
+    }
   };
 
   const calculateGeneralAverage = () => {
