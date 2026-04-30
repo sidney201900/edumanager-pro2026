@@ -9,6 +9,7 @@
 - [x] **Segurança Anti-Spam:** Desativado envio imediato de `PAYMENT_OVERDUE` via Webhook para garantir que cobranças ocorram apenas no horário agendado.
 - [x] **Auto-Initialization DB:** Script de boot que garante a existência das colunas `overdue_warnings_count` e `last_overdue_warning_at` na tabela `alunos_cobrancas`.
 - [x] **Correção de Crash no Portal:** Resolvido erro de `.toFixed()` que quebrava as abas de "Avaliações" e "Notas" devido ao retorno de tipos `NUMERIC` do PostgreSQL como strings.
+- [x] **Persistência de UI (Mensagens):** Integrada chamada ao `updateData` ao salvar agendamentos, garantindo que o estado do toggle não seja perdido ao trocar de aba no Manager.
 - [ ] Próximo Passo: Monitorar o log de disparos automáticos (`[Cron]`) e validar a taxa de entrega via Evolution API.
 
 ## 📅 Histórico Anterior (22/04/2026)

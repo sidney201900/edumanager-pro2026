@@ -411,6 +411,12 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                       });
                       const d = await resp.json();
                       setCronActive(d.preventive);
+                      
+                      // Persistir no estado global para não perder ao trocar de aba
+                      const newRules = { ...templates.automationRules, autoScheduleEnabled: newEnabled, autoScheduleTime: scheduleTime };
+                      setTemplates(prev => ({ ...prev, automationRules: newRules }));
+                      updateData({ messageTemplates: { ...templates, automationRules: newRules } });
+
                       showAlert('Sucesso', newEnabled ? `Rotina ativada para ${scheduleTime}!` : 'Rotina automática desativada.', 'success');
                     } catch {
                       showAlert('Erro', 'Erro ao salvar agendamento.', 'error');
@@ -452,6 +458,12 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                             });
                             const d = await resp.json();
                             setCronActive(d.preventive);
+
+                            // Persistir no estado global
+                            const newRules = { ...templates.automationRules, autoScheduleEnabled: true, autoScheduleTime: scheduleTime };
+                            setTemplates(prev => ({ ...prev, automationRules: newRules }));
+                            updateData({ messageTemplates: { ...templates, automationRules: newRules } });
+
                             showAlert('Sucesso', `Horário atualizado para ${scheduleTime}!`, 'success');
                           } catch {
                             showAlert('Erro', 'Erro ao atualizar horário.', 'error');
@@ -515,6 +527,12 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                       });
                       const d = await resp.json();
                       setCronOverdueActive(d.overdue);
+
+                      // Persistir no estado global
+                      const newRules = { ...templates.automationRules, autoScheduleOverdueEnabled: newEnabled, autoScheduleOverdueTime: scheduleOverdueTime };
+                      setTemplates(prev => ({ ...prev, automationRules: newRules }));
+                      updateData({ messageTemplates: { ...templates, automationRules: newRules } });
+
                       showAlert('Sucesso', newEnabled ? `Rotina de inadimplência ativada para ${scheduleOverdueTime}!` : 'Rotina de inadimplência desativada.', 'success');
                     } catch {
                       showAlert('Erro', 'Erro ao salvar agendamento.', 'error');
@@ -556,6 +574,12 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                             });
                             const d = await resp.json();
                             setCronOverdueActive(d.overdue);
+
+                            // Persistir no estado global
+                            const newRules = { ...templates.automationRules, autoScheduleOverdueEnabled: true, autoScheduleOverdueTime: scheduleOverdueTime };
+                            setTemplates(prev => ({ ...prev, automationRules: newRules }));
+                            updateData({ messageTemplates: { ...templates, automationRules: newRules } });
+
                             showAlert('Sucesso', `Horário atualizado para ${scheduleOverdueTime}!`, 'success');
                           } catch {
                             showAlert('Erro', 'Erro ao atualizar horário.', 'error');
