@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SchoolData } from '../types';
 import { useDialog } from '../DialogContext';
-import { MessageSquare, Save, Info, Settings, Send, Clock, AlertTriangle, FileText, CheckCircle, Cake, X } from 'lucide-react';
+import { MessageSquare, Save, Info, Settings, Send, Clock, AlertTriangle, FileText, CheckCircle, Cake, X, Power } from 'lucide-react';
 
 interface MessagesProps {
   data: SchoolData;
@@ -39,7 +39,27 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
     }
   });
 
-  const [isSending, setIsSending] = useState(false);
+  const [isSendingPreventive, setIsSendingPreventive] = useState(false);
+  const [isSendingOverdue, setIsSendingOverdue] = useState(false);
+
+  // Estado do Agendamento Automático - Preventivo
+  const [scheduleEnabled, setScheduleEnabled] = useState(!!initRules.autoScheduleEnabled);
+  const [scheduleTime, setScheduleTime] = useState(initRules.autoScheduleTime || '09:00');
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [cronActive, setCronActive] = useState(false);
+
+  // Estado do Agendamento Automático - Inadimplência
+  const [scheduleOverdueEnabled, setScheduleOverdueEnabled] = useState(!!initRules.autoScheduleOverdueEnabled);
+  const [scheduleOverdueTime, setScheduleOverdueTime] = useState(initRules.autoScheduleOverdueTime || '10:00');
+  const [isSavingScheduleOverdue, setIsSavingScheduleOverdue] = useState(false);
+  const [cronOverdueActive, setCronOverdueActive] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/cron/status').then(r => r.json()).then(d => {
+      setCronActive(d.preventive);
+      setCronOverdueActive(d.overdue);
+    }).catch(() => {});
+  }, []);
 
   // Estados WhatsApp em Massa
   const [targetType, setTargetType] = useState('todos');
@@ -132,7 +152,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
       'Disparar Cobranças',
       'Tem certeza que deseja processar e enviar as mensagens para TODOS os alunos com pagamentos ATRASADOS agora?',
       async () => {
-        setIsSending(true);
+        setIsSendingOverdue(true);
         try {
           const resp = await fetch('/api/disparar_cobrancas?tipo=atrasado', { method: 'POST' });
           const resData = await resp.json();
@@ -144,7 +164,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
         } catch (e: any) {
           showAlert('Erro', 'Erro de conexão ao disparar cobranças.', 'error');
         } finally {
-          setIsSending(false);
+          setIsSendingOverdue(false);
         }
       }
     );
@@ -155,7 +175,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
       'Lembretes Preventivos',
       'Tem certeza que deseja iniciar o envio dos LEMBRETES PREVENTIVOS para os boletos próximos do vencimento agora?',
       async () => {
-        setIsSending(true);
+        setIsSendingPreventive(true);
         try {
           const resp = await fetch('/api/disparar_cobrancas?tipo=preventivo', { method: 'POST' });
           const resData = await resp.json();
@@ -167,7 +187,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
         } catch (e: any) {
           showAlert('Erro', 'Erro de conexão.', 'error');
         } finally {
-          setIsSending(false);
+          setIsSendingPreventive(false);
         }
       }
     );
@@ -364,28 +384,203 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
             </p>
             <button 
               onClick={handleDispararPreventivos}
-              disabled={isSending || !data.evolutionConfig?.apiUrl}
+              disabled={isSendingPreventive || !data.evolutionConfig?.apiUrl}
               className={`w-full py-3.5 px-4 rounded-xl font-black text-sm text-white shadow-lg transition-all active:scale-95 ${
-                isSending || !data.evolutionConfig?.apiUrl ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700'
+                isSendingPreventive || !data.evolutionConfig?.apiUrl ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700'
               }`}
             >
-              {isSending ? 'Processando...' : 'Enviar Lembretes Agora'}
+              {isSendingPreventive ? 'Processando...' : 'Enviar Lembretes Agora'}
             </button>
+
+            {/* Agendamento Automático */}
+            <div className="mt-5 pt-5 border-t border-indigo-200">
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
+                  <Power size={13} /> Rotina Automática
+                </label>
+                <button
+                  onClick={async () => {
+                    const newEnabled = !scheduleEnabled;
+                    setScheduleEnabled(newEnabled);
+                    setIsSavingSchedule(true);
+                    try {
+                      const resp = await fetch('/api/cron/schedule', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enabled: newEnabled, time: scheduleTime, tipo: 'preventivo' })
+                      });
+                      const d = await resp.json();
+                      setCronActive(d.preventive);
+                      showAlert('Sucesso', newEnabled ? `Rotina ativada para ${scheduleTime}!` : 'Rotina automática desativada.', 'success');
+                    } catch {
+                      showAlert('Erro', 'Erro ao salvar agendamento.', 'error');
+                      setScheduleEnabled(!newEnabled);
+                    } finally {
+                      setIsSavingSchedule(false);
+                    }
+                  }}
+                  disabled={isSavingSchedule}
+                  className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
+                    scheduleEnabled ? 'bg-indigo-600' : 'bg-slate-300'
+                  }`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${
+                    scheduleEnabled ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {scheduleEnabled && (
+                <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div>
+                    <label className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1.5 ml-1">Horário do Disparo</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="time"
+                        value={scheduleTime}
+                        onChange={(e) => setScheduleTime(e.target.value)}
+                        className="flex-1 px-4 py-2.5 border border-indigo-200 rounded-xl text-sm font-bold text-center bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-sm"
+                      />
+                      <button
+                        onClick={async () => {
+                          setIsSavingSchedule(true);
+                          try {
+                            const resp = await fetch('/api/cron/schedule', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ enabled: true, time: scheduleTime, tipo: 'preventivo' })
+                            });
+                            const d = await resp.json();
+                            setCronActive(d.preventive);
+                            showAlert('Sucesso', `Horário atualizado para ${scheduleTime}!`, 'success');
+                          } catch {
+                            showAlert('Erro', 'Erro ao atualizar horário.', 'error');
+                          } finally {
+                            setIsSavingSchedule(false);
+                          }
+                        }}
+                        disabled={isSavingSchedule}
+                        className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-xs hover:bg-indigo-700 transition-all active:scale-95 shadow-md"
+                      >
+                        {isSavingSchedule ? '...' : 'Salvar'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className={`flex items-center gap-2 text-[10px] font-bold px-3 py-2 rounded-lg ${
+                    cronActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${
+                      cronActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                    }`} />
+                    {cronActive ? `Ativo — Próximo disparo às ${scheduleTime}` : 'Inativo'}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl shadow-lg">
             <h3 className="font-black text-amber-800 flex items-center gap-2 mb-3 text-sm uppercase tracking-widest">
               <AlertTriangle size={18} /> Inadimplência
             </h3>
+            <p className="text-[10px] text-amber-600 font-medium mb-4">
+              Envia cobranças para boletos com status atrasado.
+            </p>
             <button 
               onClick={handleDispararCobrancas}
-              disabled={isSending || !data.evolutionConfig?.apiUrl}
+              disabled={isSendingOverdue || !data.evolutionConfig?.apiUrl}
               className={`w-full py-3.5 px-4 rounded-xl font-black text-sm text-white shadow-lg transition-all active:scale-95 ${
-                isSending || !data.evolutionConfig?.apiUrl ? 'bg-slate-400' : 'bg-amber-500 hover:bg-amber-600'
+                isSendingOverdue || !data.evolutionConfig?.apiUrl ? 'bg-slate-400' : 'bg-amber-500 hover:bg-amber-600'
               }`}
             >
-              {isSending ? 'Processando...' : 'Disparar Cobranças Now'}
+              {isSendingOverdue ? 'Processando...' : 'Disparar Cobranças Agora'}
             </button>
+
+            {/* Agendamento Automático - Inadimplência */}
+            <div className="mt-5 pt-5 border-t border-amber-200">
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1.5">
+                  <Power size={13} /> Rotina Automática
+                </label>
+                <button
+                  onClick={async () => {
+                    const newEnabled = !scheduleOverdueEnabled;
+                    setScheduleOverdueEnabled(newEnabled);
+                    setIsSavingScheduleOverdue(true);
+                    try {
+                      const resp = await fetch('/api/cron/schedule', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enabled: newEnabled, time: scheduleOverdueTime, tipo: 'atrasado' })
+                      });
+                      const d = await resp.json();
+                      setCronOverdueActive(d.overdue);
+                      showAlert('Sucesso', newEnabled ? `Rotina de inadimplência ativada para ${scheduleOverdueTime}!` : 'Rotina de inadimplência desativada.', 'success');
+                    } catch {
+                      showAlert('Erro', 'Erro ao salvar agendamento.', 'error');
+                      setScheduleOverdueEnabled(!newEnabled);
+                    } finally {
+                      setIsSavingScheduleOverdue(false);
+                    }
+                  }}
+                  disabled={isSavingScheduleOverdue}
+                  className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
+                    scheduleOverdueEnabled ? 'bg-amber-500' : 'bg-slate-300'
+                  }`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${
+                    scheduleOverdueEnabled ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {scheduleOverdueEnabled && (
+                <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div>
+                    <label className="block text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1.5 ml-1">Horário do Disparo</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="time"
+                        value={scheduleOverdueTime}
+                        onChange={(e) => setScheduleOverdueTime(e.target.value)}
+                        className="flex-1 px-4 py-2.5 border border-amber-200 rounded-xl text-sm font-bold text-center bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-sm"
+                      />
+                      <button
+                        onClick={async () => {
+                          setIsSavingScheduleOverdue(true);
+                          try {
+                            const resp = await fetch('/api/cron/schedule', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ enabled: true, time: scheduleOverdueTime, tipo: 'atrasado' })
+                            });
+                            const d = await resp.json();
+                            setCronOverdueActive(d.overdue);
+                            showAlert('Sucesso', `Horário atualizado para ${scheduleOverdueTime}!`, 'success');
+                          } catch {
+                            showAlert('Erro', 'Erro ao atualizar horário.', 'error');
+                          } finally {
+                            setIsSavingScheduleOverdue(false);
+                          }
+                        }}
+                        disabled={isSavingScheduleOverdue}
+                        className="px-4 py-2.5 bg-amber-500 text-white rounded-xl font-black text-xs hover:bg-amber-600 transition-all active:scale-95 shadow-md"
+                      >
+                        {isSavingScheduleOverdue ? '...' : 'Salvar'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className={`flex items-center gap-2 text-[10px] font-bold px-3 py-2 rounded-lg ${
+                    cronOverdueActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${
+                      cronOverdueActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                    }`} />
+                    {cronOverdueActive ? `Ativo — Próximo disparo às ${scheduleOverdueTime}` : 'Inativo'}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="bg-pink-50 border border-pink-200 p-6 rounded-2xl shadow-lg">

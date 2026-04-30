@@ -514,14 +514,15 @@ app.get('/api/portal/avaliacoes', authMiddleware, async (req, res) => {
     );
 
     // Mapear nomes de colunas do banco para o formato esperado pelo frontend
+    // IMPORTANTE: NUMERIC(5,2) retorna como string do pg, precisa de Number()
     const mappedSubmissions = (submissions || []).map(s => ({
       ...s,
       exam_id: s.prova_id || s.exam_id,
       total_questions: s.total_questoes || s.total_questions,
       correct_count: s.acertos || s.correct_count,
       wrong_count: s.erros || s.wrong_count,
-      percentage: s.percentual || s.percentage,
-      final_score: s.nota_final || s.final_score,
+      percentage: Number(s.percentual || s.percentage || 0),
+      final_score: Number(s.nota_final || s.final_score || 0),
       answers_json: s.respostas || s.answers_json,
     }));
 

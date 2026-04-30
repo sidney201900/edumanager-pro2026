@@ -1,6 +1,17 @@
 # MEMORY.md - Contexto de Desenvolvimento
 
-## 📅 Estado Atual (22/04/2026)
+## 📅 Estado Atual (30/04/2026)
+
+- [x] **Automação de Mensagens (Cron Jobs):** Implementados dois disparadores independentes (`preventivo` e `atrasado`) via `node-cron`.
+- [x] **Persistência de Agendamento:** Configurações de horário e ativação salvas no `school_data` e restauradas automaticamente no boot do servidor.
+- [x] **Monitoramento em Tempo Real:** Indicadores visuais (bolinha pulsante) no card de mensagens que refletem o status real do Job no servidor.
+- [x] **Cobrança Inteligente (Inadimplência):** Refatorada lógica para respeitar `sendDaysAfter` (carência) e `repeatEveryDays` (intervalo), evitando spam diário.
+- [x] **Segurança Anti-Spam:** Desativado envio imediato de `PAYMENT_OVERDUE` via Webhook para garantir que cobranças ocorram apenas no horário agendado.
+- [x] **Auto-Initialization DB:** Script de boot que garante a existência das colunas `overdue_warnings_count` e `last_overdue_warning_at` na tabela `alunos_cobrancas`.
+- [x] **Correção de Crash no Portal:** Resolvido erro de `.toFixed()` que quebrava as abas de "Avaliações" e "Notas" devido ao retorno de tipos `NUMERIC` do PostgreSQL como strings.
+- [ ] Próximo Passo: Monitorar o log de disparos automáticos (`[Cron]`) e validar a taxa de entrega via Evolution API.
+
+## 📅 Histórico Anterior (22/04/2026)
 
 - [x] Correção do "Bug da Tela Preta" na câmera ao alternar para câmera traseira no celular.
 - [x] Unificação do servidor de produção: Dockerfile agora utiliza `server.selfhosted.js` (Manager e Portal).

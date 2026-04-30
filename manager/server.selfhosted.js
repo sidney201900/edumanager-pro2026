@@ -18,13 +18,14 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import sharp from 'sharp';
 import jwt from 'jsonwebtoken';
+import cron from 'node-cron';
 
 // === Novos módulos Self-Hosted (substituem Supabase) ===
 import {
   getSchoolData, saveSchoolData, pool,
   insertCobrancas, updateCobranca, deleteCobranca,
   getCobrancaByPaymentId, getCobrancasByOrQuery,
-  getCobrancasByAlunoId, getCobrancasAtrasadas,
+  getCobrancasByAlunoId, getCobrancasAtrasadas, getCobrancasPendentes,
   getCobrancasByInstallmentId, updateCobrancaLinkCarne,
   updateCobrancaByField
 } from './services/database.js';
@@ -48,6 +49,8 @@ app.use(cors());
 const cancelCache = new Set();
 const sentCache = new Set();
 const lockCache = new Set();
+let activeCronJob = null; // Referência global para o agendamento preventivo
+let activeCronJobOverdue = null; // Referência global para o agendamento de inadimplência
 
 // ============================================================
 // Proxy de Imagens do MinIO (acesso público via backend)
@@ -181,6 +184,12 @@ app.put('/api/school-data', async (req, res) => {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_pre_warning_at') THEN
           ALTER TABLE alunos_cobrancas ADD COLUMN last_pre_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='overdue_warnings_count') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN overdue_warnings_count INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_overdue_warning_at') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN last_overdue_warning_at TIMESTAMP WITH TIME ZONE;
         END IF;
       END $$;
     `).catch(err => console.error('[PostgreSQL] Erro ao inicializar colunas de automação:', err));
@@ -601,8 +610,9 @@ app.post('/api/webhook_asaas', async (req, res) => {
         const statusMap = { 'PENDING': 'PENDENTE', 'OVERDUE': 'ATRASADO', 'RECEIVED': 'PAGO', 'CONFIRMED': 'PAGO', 'RECEIVED_IN_CASH': 'PAGO', 'REFUNDED': 'CANCELADO', 'DELETED': 'CANCELADO' };
         updateData = { valor: payload.payment.value, vencimento: payload.payment.dueDate, status: statusMap[payload.payment.status] || undefined };
         Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
-        if (payload.event === 'PAYMENT_OVERDUE') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_OVERDUE');
-        else if (payload.event === 'PAYMENT_UPDATED') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_UPDATED');
+        // Ocultado PAYMENT_OVERDUE aqui para ser enviado apenas pela rotina/cron (conforme regras)
+        // if (payload.event === 'PAYMENT_OVERDUE') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_OVERDUE');
+        if (payload.event === 'PAYMENT_UPDATED') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_UPDATED');
         break;
 
       case 'PAYMENT_DELETED':
@@ -907,75 +917,250 @@ app.get('/api/alunos/:id/carne', async (req, res) => {
 // ============================================================
 // INICIALIZAÇÃO
 // ============================================================
+// ============================================================
+// LÓGICA REUTILIZÁVEL DE DISPARO DE COBRANÇAS
+// ============================================================
+async function executarRotinaCobrancas(tipo = 'ambos') {
+  const appData = await getSchoolData();
+  const rules = appData?.messageTemplates?.automationRules || {};
+  const sendDaysBefore = parseInt(rules.sendDaysBefore) || 3;
+  const maxPreWarnings = parseInt(rules.maxPreWarnings) || 1;
+  const sendDaysAfter = parseInt(rules.sendDaysAfter) || 1;
+  const repeatEveryDays = parseInt(rules.repeatEveryDays) || 3;
+
+  let enviadasAtraso = 0;
+  let enviadasAviso = 0;
+
+  // 1. Processar Atrasados
+  if (tipo === 'atrasado' || tipo === 'ambos') {
+    const atrasados = await getCobrancasAtrasadas();
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+
+    for (const cob of atrasados) {
+      if (!cob.asaas_payment_id || !cob.vencimento) continue;
+      
+      const vencimento = new Date(cob.vencimento);
+      vencimento.setHours(0,0,0,0);
+      const diffDiasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDiasAtraso >= sendDaysAfter) {
+        const lastWarn = cob.last_overdue_warning_at ? new Date(cob.last_overdue_warning_at) : null;
+        if (lastWarn) lastWarn.setHours(0,0,0,0);
+        
+        const diasDesdeUltimoAviso = lastWarn 
+            ? Math.floor((hoje.getTime() - lastWarn.getTime()) / (1000 * 60 * 60 * 24)) 
+            : null;
+
+        const jaEnviadoHoje = lastWarn && lastWarn.getTime() === hoje.getTime();
+
+        if (!jaEnviadoHoje && (diasDesdeUltimoAviso === null || diasDesdeUltimoAviso >= repeatEveryDays)) {
+          await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE');
+          
+          const currentCount = parseInt(cob.overdue_warnings_count) || 0;
+          await pool.query(
+            'UPDATE alunos_cobrancas SET overdue_warnings_count = $1, last_overdue_warning_at = NOW() WHERE asaas_payment_id = $2',
+            [currentCount + 1, cob.asaas_payment_id]
+          );
+          
+          enviadasAtraso++; 
+        }
+      }
+    }
+  }
+
+  // 2. Processar A Vencer (Lembretes Preventivos)
+  if (tipo === 'preventivo' || tipo === 'ambos') {
+    const pendentes = await getCobrancasPendentes();
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+
+    for (const cob of pendentes) {
+      if (!cob.asaas_payment_id || !cob.vencimento) continue;
+      
+      const vencimento = new Date(cob.vencimento);
+      vencimento.setHours(0,0,0,0);
+      
+      const diffDias = Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDias > 0 && diffDias <= sendDaysBefore) {
+        const currentCount = parseInt(cob.pre_warnings_count) || 0;
+        
+        if (currentCount < maxPreWarnings) {
+          const lastWarn = cob.last_pre_warning_at ? new Date(cob.last_pre_warning_at) : null;
+          const jaEnviadoHoje = lastWarn && lastWarn.toDateString() === hoje.toDateString();
+
+          if (!jaEnviadoHoje) {
+            await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING');
+            
+            await pool.query(
+              'UPDATE alunos_cobrancas SET pre_warnings_count = $1, last_pre_warning_at = NOW() WHERE asaas_payment_id = $2',
+              [currentCount + 1, cob.asaas_payment_id]
+            );
+            enviadasAviso++;
+          }
+        }
+      }
+    }
+  }
+
+  return { enviadasAtraso, enviadasAviso };
+}
+
+// ============================================================
+// AGENDADOR AUTOMÁTICO (node-cron) — Suporte a múltiplos tipos
+// ============================================================
+function agendarRotina(tipo, hora, minuto) {
+  const isPreventivo = tipo === 'preventivo';
+  const label = isPreventivo ? 'Preventivo' : 'Inadimplência';
+
+  // Cancela job anterior do mesmo tipo
+  if (isPreventivo && activeCronJob) {
+    activeCronJob.stop();
+    activeCronJob = null;
+    console.log(`[Cron:${label}] ⏹ Rotina anterior cancelada.`);
+  } else if (!isPreventivo && activeCronJobOverdue) {
+    activeCronJobOverdue.stop();
+    activeCronJobOverdue = null;
+    console.log(`[Cron:${label}] ⏹ Rotina anterior cancelada.`);
+  }
+
+  const h = parseInt(hora);
+  const m = parseInt(minuto);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    console.error(`[Cron:${label}] Horário inválido:`, hora, minuto);
+    return;
+  }
+
+  const cronTipo = isPreventivo ? 'preventivo' : 'atrasado';
+  const cronExpression = `${m} ${h} * * *`;
+  const job = cron.schedule(cronExpression, async () => {
+    console.log(`[Cron:${label}] ⏰ Rotina automática iniciada às ${new Date().toLocaleTimeString('pt-BR')}`);
+    try {
+      const resultado = await executarRotinaCobrancas(cronTipo);
+      const count = isPreventivo ? resultado.enviadasAviso : resultado.enviadasAtraso;
+      console.log(`[Cron:${label}] ✅ Concluído: ${count} mensagens processadas.`);
+    } catch (error) {
+      console.error(`[Cron:${label}] ❌ Erro na rotina automática:`, error.message);
+    }
+  }, { timezone: 'America/Sao_Paulo' });
+
+  if (isPreventivo) activeCronJob = job;
+  else activeCronJobOverdue = job;
+
+  console.log(`[Cron:${label}] ✅ Rotina agendada para ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} (America/Sao_Paulo)`);
+}
+
+async function inicializarAgendamento() {
+  try {
+    // Inicialização DB para colunas de automação (garantir no boot)
+    await pool.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='pre_warnings_count') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN pre_warnings_count INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_pre_warning_at') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN last_pre_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='overdue_warnings_count') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN overdue_warnings_count INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_overdue_warning_at') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN last_overdue_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+      END $$;
+    `).catch(err => console.error('[PostgreSQL] Erro boot automação:', err));
+
+    const appData = await getSchoolData();
+    const rules = appData?.messageTemplates?.automationRules || {};
+    
+    // Preventivo
+    if (rules.autoScheduleEnabled && rules.autoScheduleTime) {
+      const [h, m] = rules.autoScheduleTime.split(':');
+      agendarRotina('preventivo', h, m);
+    } else {
+      console.log('[Cron:Preventivo] ℹ Agendamento desativado.');
+    }
+
+    // Inadimplência
+    if (rules.autoScheduleOverdueEnabled && rules.autoScheduleOverdueTime) {
+      const [h, m] = rules.autoScheduleOverdueTime.split(':');
+      agendarRotina('atrasado', h, m);
+    } else {
+      console.log('[Cron:Inadimplência] ℹ Agendamento desativado.');
+    }
+  } catch (e) {
+    console.error('[Cron] Erro ao inicializar agendamento:', e.message);
+  }
+}
+
 async function startServer() {
 
   // Disparo Manual de Inadimplência e Lembretes
   app.post('/api/disparar_cobrancas', async (req, res) => {
     try {
       const tipo = req.query.tipo || 'ambos';
-      const appData = await getSchoolData();
-      const rules = appData?.messageTemplates?.automationRules || {};
-      const sendDaysBefore = parseInt(rules.sendDaysBefore) || 3;
-      const maxPreWarnings = parseInt(rules.maxPreWarnings) || 1;
-
-      let enviadasAtraso = 0;
-      let enviadasAviso = 0;
-
-      // 1. Processar Atrasados
-      if (tipo === 'atrasado' || tipo === 'ambos') {
-        const atrasados = await getCobrancasAtrasadas();
-        for (const cob of atrasados) {
-          if (cob.asaas_payment_id) { 
-            await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE'); 
-            enviadasAtraso++; 
-          }
-        }
-      }
-
-      // 2. Processar A Vencer (Lembretes Preventivos)
-      if (tipo === 'preventivo' || tipo === 'ambos') {
-        const pendentes = await getCobrancasPendentes();
-        const hoje = new Date();
-        hoje.setHours(0,0,0,0);
-
-        for (const cob of pendentes) {
-          if (!cob.asaas_payment_id || !cob.vencimento) continue;
-          
-          const vencimento = new Date(cob.vencimento);
-          vencimento.setHours(0,0,0,0);
-          
-          const diffDias = Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-          
-          if (diffDias > 0 && diffDias <= sendDaysBefore) {
-            const currentCount = parseInt(cob.pre_warnings_count) || 0;
-            
-            if (currentCount < maxPreWarnings) {
-              const lastWarn = cob.last_pre_warning_at ? new Date(cob.last_pre_warning_at) : null;
-              const jaEnviadoHoje = lastWarn && lastWarn.toDateString() === hoje.toDateString();
-
-              if (!jaEnviadoHoje) {
-                await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING');
-                
-                await pool.query(
-                  'UPDATE alunos_cobrancas SET pre_warnings_count = $1, last_pre_warning_at = NOW() WHERE asaas_payment_id = $2',
-                  [currentCount + 1, cob.asaas_payment_id]
-                );
-                enviadasAviso++;
-              }
-            }
-          }
-        }
-      }
+      const resultado = await executarRotinaCobrancas(tipo);
 
       let msg = '';
-      if (tipo === 'atrasado') msg = `${enviadasAtraso} mensagens de atraso processadas.`;
-      else if (tipo === 'preventivo') msg = `${enviadasAviso} lembretes preventivos processados.`;
-      else msg = `${enviadasAtraso} mensagens de atraso e ${enviadasAviso} lembretes preventivos processados.`;
+      if (tipo === 'atrasado') msg = `${resultado.enviadasAtraso} mensagens de atraso processadas.`;
+      else if (tipo === 'preventivo') msg = `${resultado.enviadasAviso} lembretes preventivos processados.`;
+      else msg = `${resultado.enviadasAtraso} mensagens de atraso e ${resultado.enviadasAviso} lembretes preventivos processados.`;
 
       return res.status(200).json({ message: msg });
     } catch (error) { 
       console.error('[Disparo] Erro:', error);
       return res.status(500).json({ error: 'Erro interno.' }); 
+    }
+  });
+
+  // API para gerenciar o agendamento (suporte a preventivo e atrasado)
+  app.get('/api/cron/status', (req, res) => {
+    res.json({ 
+      preventive: !!activeCronJob, 
+      overdue: !!activeCronJobOverdue 
+    });
+  });
+
+  app.post('/api/cron/schedule', async (req, res) => {
+    try {
+      const { enabled, time, tipo } = req.body;
+      const isOverdue = tipo === 'atrasado';
+      const appData = await getSchoolData();
+      if (!appData.messageTemplates) appData.messageTemplates = {};
+      if (!appData.messageTemplates.automationRules) appData.messageTemplates.automationRules = {};
+      
+      if (isOverdue) {
+        appData.messageTemplates.automationRules.autoScheduleOverdueEnabled = !!enabled;
+        appData.messageTemplates.automationRules.autoScheduleOverdueTime = time || '09:00';
+      } else {
+        appData.messageTemplates.automationRules.autoScheduleEnabled = !!enabled;
+        appData.messageTemplates.automationRules.autoScheduleTime = time || '09:00';
+      }
+
+      appData.lastUpdated = new Date().toISOString();
+      await saveSchoolData(appData);
+
+      if (enabled && time) {
+        const [h, m] = time.split(':');
+        agendarRotina(isOverdue ? 'atrasado' : 'preventivo', h, m);
+      } else {
+        if (isOverdue) {
+          if (activeCronJobOverdue) { activeCronJobOverdue.stop(); activeCronJobOverdue = null; }
+        } else {
+          if (activeCronJob) { activeCronJob.stop(); activeCronJob = null; }
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        preventive: !!activeCronJob, 
+        overdue: !!activeCronJobOverdue 
+      });
+    } catch (error) {
+      console.error('[Cron] Erro ao salvar agendamento:', error);
+      res.status(500).json({ error: 'Erro interno.' });
     }
   });
 
@@ -1039,7 +1224,11 @@ async function startServer() {
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => console.log(`🚀 EduManager Self-Hosted na porta ${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 EduManager Self-Hosted na porta ${PORT}`);
+    // Inicializa agendamento automático após servidor subir
+    inicializarAgendamento();
+  });
 }
 
 startServer();
