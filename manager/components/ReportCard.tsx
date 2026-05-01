@@ -35,10 +35,46 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
   const [configTab, setConfigTab] = useState<'subjects' | 'periods'>('subjects');
   const [studentGrades, setStudentGrades] = useState<Record<string, Record<string, any>>>({}); // subjectId -> periodId -> { examId: value }
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, {acertos: number, erros: number}>>({}); // examId -> { acertos, erros }
+  const [classGrades, setClassGrades] = useState<Grade[]>([]);
 
   const subjects = data.subjects || [];
   const periods = data.periods || [];
   const grades = data.grades || [];
+
+  // Buscar todas as notas da turma para mostrar médias na lista
+  React.useEffect(() => {
+    if (selectedClass) {
+      const fetchClassGrades = async () => {
+        try {
+          const studentIds = data.students.filter(s => s.classId === selectedClass.id).map(s => s.id);
+          if (studentIds.length === 0) return;
+          
+          const allGrades: Grade[] = [];
+          for (const id of studentIds) {
+             const res = await fetch(`/api/notas/${id}?t=${Date.now()}`);
+             if (res.ok) {
+               const json = await res.json();
+               (json.notas || []).forEach((n: any) => {
+                  allGrades.push({
+                    id: n.id,
+                    studentId: n.aluno_id,
+                    subjectId: n.disciplina_id,
+                    period: n.periodo_id,
+                    value: Number(n.valor)
+                  });
+               });
+             }
+          }
+          setClassGrades(allGrades);
+        } catch (e) {
+          console.error('Erro ao buscar notas da turma:', e);
+        }
+      };
+      fetchClassGrades();
+    } else {
+      setClassGrades([]);
+    }
+  }, [selectedClass, data.students]);
 
   // Helper para normalizar URLs de fotos (vacina contra cache antigo)
   const normalizePhotoUrl = (url?: string) => {
@@ -148,7 +184,11 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
       initialGrades[subject.id] = {};
       periods.forEach(period => {
         const periodGrades: any = {};
-        const linkedExams = (data.exams || []).filter(e => String(e.subjectId).trim() === String(subject.id).trim() && String(e.periodId).trim() === String(period.id).trim() && e.status === 'published');
+        const linkedExams = (data.exams || []).filter(e => 
+          String(e.subjectId).trim() === String(subject.id).trim() && 
+          String(e.periodId).trim() === String(period.id).trim() &&
+          (e.status === 'published' || !!studentSubmissions[String(e.id).trim()])
+        );
 
         if (linkedExams.length > 0) {
           linkedExams.forEach(exam => {
@@ -239,7 +279,11 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
   };
 
   const getStudentGeneralAverage = (studentId: string) => {
-    const studentGradesList = grades.filter(g => g.studentId === studentId);
+    // Priorizar notas do Postgres (classGrades) sobre o JSON
+    const studentGradesList = classGrades.length > 0 
+      ? classGrades.filter(g => g.studentId === studentId)
+      : grades.filter(g => g.studentId === studentId);
+
     if (studentGradesList.length === 0) return '0.00';
 
     const subjectAverages: number[] = [];
@@ -530,7 +574,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                 <div className="space-y-6">
                   {subjects.map(subject => {
                     // Encontrar provas vinculadas a esta disciplina
-                    const linkedExams = (data.exams || []).filter(e => String(e.subjectId).trim() === String(subject.id).trim() && e.status === 'published');
+                    const linkedExams = (data.exams || []).filter(e => String(e.subjectId).trim() === String(subject.id).trim());
 
                     return (
                       <div key={subject.id} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-4">
@@ -541,7 +585,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                           </div>
                           <div className="flex items-center gap-2">
                             {(() => {
-                              const linkedExams = (data.exams || []).filter(e => String(e.subjectId).trim() === String(subject.id).trim() && e.status === 'published');
+                              const linkedExams = (data.exams || []).filter(e => 
+                                String(e.subjectId).trim() === String(subject.id).trim() &&
+                                (e.status === 'published' || !!studentSubmissions[String(e.id).trim()])
+                              );
                               const provasCount = linkedExams.filter(e => (e as any).evaluationType !== 'activity').length;
                               const atividadesCount = linkedExams.filter(e => (e as any).evaluationType === 'activity').length;
                               return (
@@ -573,7 +620,11 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                         </div>
                         <div className="flex flex-col gap-6">
                           {periods.map(period => {
-                            const linkedExams = (data.exams || []).filter(e => String(e.subjectId).trim() === String(subject.id).trim() && String(e.periodId).trim() === String(period.id).trim() && e.status === 'published');
+                            const linkedExams = (data.exams || []).filter(e => 
+                              String(e.subjectId).trim() === String(subject.id).trim() && 
+                              String(e.periodId).trim() === String(period.id).trim() &&
+                              (e.status === 'published' || !!studentSubmissions[String(e.id).trim()])
+                            );
                             const periodGrades = studentGrades[subject.id]?.[period.id] || {};
                             const periodSum: number = Object.values(periodGrades).reduce<number>((a, b: any) => a + (b !== '' ? Number(b) : 0), 0);
 

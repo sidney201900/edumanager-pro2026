@@ -176,14 +176,17 @@ export interface ExamQuestion {
 
 export interface Exam {
   id: string;
-  title: string;
-  description?: string;
   classId: string;
-  courseId?: string;
+  subjectId?: string;
+  periodId?: string;
+  title: string;
   durationMinutes: number;
-  questions: ExamQuestion[];
   status: 'draft' | 'published' | 'archived';
-  createdAt: string;
+  questions: ExamQuestion[];
+  allowRetake?: boolean;
+  evaluationType?: 'exam' | 'activity';
+  maxScore?: number;
+  createdAt?: string;
   dueDate?: string;
 }
 

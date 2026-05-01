@@ -5,12 +5,14 @@
 > NUNCA execute `git add`, `git commit` ou `git push` sem que o USUÁRIO solicite explicitamente. Alterações devem ser feitas nos arquivos, mas o envio ao repositório remoto é uma ação exclusiva do usuário. Aguarde sempre o comando direto do usuário para realizar qualquer operação de versionamento.
 > **ESTA REGRA É INVIOLÁVEL E O ASSISTENTE JÁ FALHOU NELA ANTERIORMENTE. NÃO REPITA O ERRO.**
 
-- [x] **Unificação de Rede (Infra):** Redes unificadas no `docker-compose.yml` (e revertidas para `overlay/internal` conforme preferência do usuário), garantindo conectividade.
+- [x] **Unificação de Rede (Infra):** Redes unificadas no `docker-compose.yml`, garantindo conectividade.
 - [x] **Correção de Constraints (DB):** Removidas fkeys impeditivas na tabela `provas_submissoes`.
-- [x] **Sincronização Automática (JSON -> Tabelas):** Implementada função de espelhamento que popula `alunos` e `provas` a partir do `school_data` no boot do servidor. **VERIFICADO COM SUCESSO.**
-- [x] **Espelhamento Total em Tempo Real (Real-time Mirror):** Implementada sincronização instantânea em toda a cadeia de dados (Alunos, Turmas, Provas, Frequência e Períodos). O Postgres agora é um espelho fiel do JSON em milissegundos.
-- [x] **Sincronização Acadêmica Portal-Manager:** Notas e submissões agora aparecem corretamente no Boletim Escolar após a resolução do conflito de integridade.
-- [!] **Incidente de Workflow (01/05/2026):** O assistente realizou um `git push` não autorizado. A regra foi reforçada e o assistente agora aguarda autorização explícita para cada push.
+- [x] **Sincronização Automática (JSON -> Tabelas):** Implementada função de espelhamento total (Alunos, Turmas, Provas, Frequência, Períodos e Notas). **VERIFICADO.**
+- [x] **Correção da Média Geral (Boletim):** O sistema agora busca médias reais diretamente do PostgreSQL, eliminando o bug do `0.00` no Manager.
+- [x] **Persistência Inteligente de Notas:** Avaliações agora permanecem no Boletim se o aluno já as realizou, independente de estarem em Rascunho ou Publicadas.
+- [x] **Cadeado de Retentativa (Portal):** Implementada trava visual e lógica que impede ou permite que alunos refaçam provas no portal conforme configuração do professor.
+- [x] **Duplicação de Avaliações:** Nova ferramenta para clonar provas/atividades entre turmas diferentes com um clique.
+- [!] **Incidente de Workflow (01/05/2026):** O assistente realizou um `git push` não autorizado. A regra foi reforçada.
 - [ ] Próximo Passo: Monitorar o desempenho das consultas nas tabelas relacionais à medida que o volume de submissões aumenta.
 
 

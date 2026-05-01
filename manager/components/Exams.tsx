@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { SchoolData, Exam, Question } from '../types';
-import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X, RefreshCw, Lock, Unlock, AlertTriangle } from 'lucide-react';
+import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X, RefreshCw, Lock, Unlock, AlertTriangle, Copy } from 'lucide-react';
 import { uploadExamImage } from '../services/supabase';
 import { useDialog } from '../DialogContext';
 import { dbService } from '../services/dbService';
@@ -15,6 +15,8 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const [currentView, setCurrentView] = useState<'list' | 'builder'>('list');
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [duplicatingExam, setDuplicatingExam] = useState<Exam | null>(null);
+  const [targetClassId, setTargetClassId] = useState('');
   const { showAlert, showConfirm } = useDialog();
 
   const normalizePhotoUrl = (url?: string) => {
@@ -75,6 +77,26 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
         showAlert('Sucesso', 'Avaliação excluída com sucesso.', 'success');
       }
     );
+  };
+
+  const handleDuplicateExam = () => {
+    if (!duplicatingExam || !targetClassId) return;
+
+    const newExam: Exam = {
+      ...duplicatingExam,
+      id: Date.now().toString() + Math.random().toString(36).substring(7),
+      classId: targetClassId,
+      status: 'draft', // Sempre começa como rascunho para segurança
+      title: `${duplicatingExam.title} (Cópia)`
+    };
+
+    const updatedExams = [...exams, newExam];
+    updateData({ exams: updatedExams });
+    dbService.saveData({ ...data, exams: updatedExams });
+    
+    setDuplicatingExam(null);
+    setTargetClassId('');
+    showAlert('Sucesso', 'Avaliação duplicada com sucesso!', 'success');
   };
 
   const handleAddQuestion = () => {
@@ -571,6 +593,16 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                       {exam.allowRetake ? <Unlock size={18} /> : <Lock size={18} />}
                     </button>
                     <button
+                      onClick={() => {
+                        setDuplicatingExam(exam);
+                        setTargetClassId(exam.classId);
+                      }}
+                      className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                      title="Duplicar para outra turma"
+                    >
+                      <Copy size={18} />
+                    </button>
+                    <button
                       onClick={() => handleDeleteExam(exam.id)}
                       className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
                       title="Excluir"
@@ -588,6 +620,55 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* MODAL DUPLICAR */}
+      {duplicatingExam && (
+        <div className="fixed inset-0 bg-transparent z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl animate-slide-up">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
+                <Copy size={24} />
+              </div>
+              <h3 className="text-xl font-black text-slate-800">Duplicar Avaliação</h3>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500 font-medium">
+                Escolha a turma que receberá uma cópia de: <br />
+                <strong className="text-slate-800">{duplicatingExam.title}</strong>
+              </p>
+              
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Turma de Destino</label>
+                <select
+                  value={targetClassId}
+                  onChange={e => setTargetClassId(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all font-bold text-slate-700"
+                >
+                  {data.classes.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setDuplicatingExam(null)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDuplicateExam}
+                  className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                >
+                  Duplicar
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

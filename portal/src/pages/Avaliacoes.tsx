@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import type { Exam, ExamSubmission } from '../types';
 import {
   ClipboardList, Clock, ChevronLeft, ChevronRight, Send, CheckCircle2,
-  XCircle, Award, AlertTriangle, Timer, ArrowLeft, RefreshCw
+  XCircle, Award, AlertTriangle, Timer, ArrowLeft, RefreshCw, Lock, Unlock
 } from 'lucide-react';
 import { normalizePhotoUrl } from '../helpers';
 
@@ -694,8 +694,12 @@ export default function Avaliacoes() {
           color: 'var(--color-text-secondary)',
         }}>
           <ClipboardList size={56} style={{ opacity: 0.2, marginBottom: '1rem' }} />
-          <p style={{ fontSize: '1rem', fontWeight: 600 }}>Nenhuma avaliação disponível no momento.</p>
-          <p style={{ fontSize: '0.8rem', marginTop: 4 }}>As provas aparecerão aqui quando forem publicadas pelo professor.</p>
+          <p style={{ fontSize: '1rem', fontWeight: 600 }}>
+            Nenhuma {activeTab === 'activities' ? 'atividade' : 'prova'} disponível no momento.
+          </p>
+          <p style={{ fontSize: '0.8rem', marginTop: 4 }}>
+            As {activeTab === 'activities' ? 'atividades' : 'provas'} aparecerão aqui quando forem publicadas pelo professor.
+          </p>
         </div>
       ) : (
         <div style={{
@@ -791,21 +795,43 @@ export default function Avaliacoes() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        showAppConfirm('Deseja realmente refazer? Sua nota anterior será substituída.', () => startExam(exam));
-                      }}
-                      style={{
-                        width: '100%', padding: '0.65rem',
-                        borderRadius: 10, border: '1px solid var(--color-primary-alpha)',
-                        background: 'transparent', color: 'var(--color-primary)',
-                        fontSize: '0.8rem', fontWeight: 700,
-                        cursor: 'pointer', transition: 'all 0.2s',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      }}
-                    >
-                      Refazer {(exam as any).evaluationType === 'activity' ? 'Atividade' : 'Prova'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                      {(exam as any).allowRetake ? (
+                        <button
+                          onClick={() => {
+                            showAppConfirm('Deseja realmente refazer? Sua nota anterior será substituída.', () => startExam(exam));
+                          }}
+                          style={{
+                            flex: 1, padding: '0.65rem',
+                            borderRadius: 10, border: '1px solid var(--color-primary-alpha)',
+                            background: 'white', color: 'var(--color-primary)',
+                            fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          }}
+                        >
+                          <RefreshCw size={14} /> Refazer
+                        </button>
+                      ) : (
+                        <div style={{ 
+                          flex: 1, padding: '0.65rem', borderRadius: 10, 
+                          background: 'var(--color-surface-light)', color: 'var(--color-text-secondary)',
+                          fontSize: '0.7rem', fontWeight: 600, textAlign: 'center',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          opacity: 0.6
+                        }}>
+                          <XCircle size={14} /> Bloqueado
+                        </div>
+                      )}
+                      
+                      <div style={{ 
+                        padding: '0.65rem', borderRadius: 10, 
+                        background: (exam as any).allowRetake ? 'var(--bg-success-alpha)' : 'var(--bg-danger-alpha)',
+                        color: (exam as any).allowRetake ? 'var(--color-success)' : 'var(--color-danger)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }} title={(exam as any).allowRetake ? 'Retentativa liberada' : 'Retentativa bloqueada'}>
+                        {(exam as any).allowRetake ? <Unlock size={16} /> : <Lock size={16} />}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <button
