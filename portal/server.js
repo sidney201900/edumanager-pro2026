@@ -16,6 +16,11 @@ import jwt from 'jsonwebtoken';
 import pg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
+import { uploadAtestado, s3Client } from './services/storage.js';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,12 +42,45 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// ============================================================
+// Proxy de Imagens do MinIO (acesso público via backend)
+// ============================================================
+app.get(/^\/storage\/([^\/]+)\/(.+)$/, async (req, res) => {
+  try {
+    const bucket = req.params[0];
+    const key = req.params[1];
+    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const data = await s3Client.send(command);
+
+    res.set('Content-Type', data.ContentType || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    data.Body.pipe(res);
+  } catch (e) {
+    res.status(404).send('Arquivo não encontrado');
+  }
+});
+
 // ===== Helper: Get school data (PostgreSQL) =====
 async function getSchoolData() {
   const { rows } = await pool.query(
     'SELECT data FROM school_data WHERE id = 1'
   );
   return rows[0]?.data || {};
+}
+
+// ===== Helper: Normalizar URLs do MinIO para proxy relativo =====
+function normalizeStorageUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('/storage/')) return url;
+  const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_URL || '';
+  if (MINIO_PUBLIC_URL && url.startsWith(MINIO_PUBLIC_URL)) {
+    return url.replace(MINIO_PUBLIC_URL, '/storage');
+  }
+  const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+  if (match && (url.includes('minio') || url.includes('storageedu') || url.includes(':9000'))) {
+    return `/storage/${match[1]}`;
+  }
+  return url;
 }
 
 // ===== Helper: Save school data (PostgreSQL) =====
@@ -116,6 +154,9 @@ app.post('/api/portal/login', async (req, res) => {
       ? (schoolData.courses || []).find((c) => c.id === studentClass.courseId) || null
       : null;
 
+    // Normalizar foto do aluno
+    if (student.photo) student.photo = normalizeStorageUrl(student.photo);
+
     res.json({
       token,
       user: tokenPayload,
@@ -135,7 +176,7 @@ app.get('/api/portal/escola', async (req, res) => {
     const schoolData = await getSchoolData();
     res.json({
       name: schoolData.profile?.name || 'Escola',
-      logo: schoolData.logo || null,
+      logo: normalizeStorageUrl(schoolData.logo) || null,
       profile: schoolData.profile || null,
     });
   } catch (err) {
@@ -159,6 +200,9 @@ app.get('/api/portal/me', authMiddleware, async (req, res) => {
     const course = studentClass
       ? (schoolData.courses || []).find((c) => c.id === studentClass.courseId) || null
       : null;
+
+    // Normalizar foto
+    if (student.photo) student.photo = normalizeStorageUrl(student.photo);
 
     res.json({
       student: { ...student, portalPassword: undefined },
@@ -201,14 +245,43 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
   try {
     const schoolData = await getSchoolData();
     const student = (schoolData.students || []).find(s => s.id === req.user.studentId);
-    const grades = (schoolData.grades || []).filter((g) => g.studentId === req.user.studentId);
+    
+    // Buscar notas direto da nova tabela
+    const { rows: dbGrades } = await pool.query(
+      'SELECT id, aluno_id as "studentId", disciplina_id as "subjectId", periodo_id as "period", prova_id as "examId", valor as "value" FROM notas_boletim WHERE aluno_id = $1',
+      [req.user.studentId]
+    );
+    // Converter valor numérico
+    const grades = dbGrades.map(g => ({ ...g, value: Number(g.value) }));
+
     const subjects = schoolData.subjects || [];
     const courseSubjects = subjects.filter(s => !s.classId || s.classId === student?.classId);
+    
+    // Buscar submissões para pegar acertos e erros
+    const { rows: submissions } = await pool.query(
+      'SELECT prova_id, acertos, erros FROM provas_submissoes WHERE aluno_id = $1',
+      [req.user.studentId]
+    );
+
     const enrichedGrades = grades.map((g) => {
-      const subject = subjects.find((s) => s.id === g.subjectId);
-      return { ...g, subjectName: subject?.name || 'Disciplina desconhecida' };
+      const subject = subjects.find((s) => String(s.id).trim() === String(g.subjectId).trim());
+      const exam = g.examId ? (schoolData.exams || []).find(e => String(e.id).trim() === String(g.examId).trim()) : null;
+      const periodObj = (schoolData.periods || []).find(p => String(p.id).trim() === String(g.period).trim());
+      
+      const submission = g.examId ? submissions.find(s => String(s.prova_id) === String(g.examId)) : null;
+
+      return { 
+        ...g, 
+        subjectName: subject?.name || 'Disciplina desconhecida',
+        examTitle: exam?.title,
+        evaluationType: exam?.evaluationType || 'exam',
+        maxScore: exam?.maxScore,
+        periodName: periodObj ? periodObj.name : g.period,
+        correctCount: submission?.acertos,
+        wrongCount: submission?.erros
+      };
     });
-    const periods = [...new Set(grades.map((g) => g.period))];
+    const periods = [...new Set(enrichedGrades.map((g) => g.periodName))];
     if (periods.length === 0) periods.push('1º Bimestre', '2º Bimestre', '3º Bimestre', '4º Bimestre');
     periods.sort();
     res.json({ grades: enrichedGrades, periods, allSubjects: courseSubjects });
@@ -229,11 +302,16 @@ app.get('/api/portal/frequencia', authMiddleware, async (req, res) => {
 });
 
 // POST /api/portal/frequencia/justificar
-app.post('/api/portal/frequencia/justificar', authMiddleware, async (req, res) => {
+app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arquivo'), async (req, res) => {
   try {
-    const { date, justification } = req.body;
+    const { date, motivo } = req.body;
     if (!date) return res.status(400).json({ error: 'A data da aula é obrigatória' });
-    if (!justification || justification.trim() === '') return res.status(400).json({ error: 'A justificativa é obrigatória' });
+    if (!motivo || motivo.trim() === '') return res.status(400).json({ error: 'A justificativa (motivo) é obrigatória' });
+
+    let publicUrl = null;
+    if (req.file) {
+      publicUrl = await uploadAtestado(req.file.buffer, req.file.mimetype);
+    }
 
     const schoolData = await getSchoolData();
     const attendance = schoolData.attendance || [];
@@ -241,33 +319,40 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, async (req, res) =
     const student = (schoolData.students || []).find(s => s.id === req.user.studentId);
 
     const fullDateStr = date;
+    const justificationPayload = JSON.stringify({ motivo: motivo.trim(), arquivo: publicUrl });
+
     let recordIndex = attendance.findIndex(a => a.studentId === req.user.studentId && a.date === fullDateStr);
 
     if (recordIndex !== -1) {
       const existing = attendance[recordIndex];
       if (existing.type === 'presence') return res.status(400).json({ error: 'Não é possível justificar uma presença' });
-      attendance[recordIndex] = { ...existing, justification: justification.trim() };
+      attendance[recordIndex] = { ...existing, justification: justificationPayload };
     } else {
       const newRecord = {
         id: `att-just-${Date.now()}`, studentId: req.user.studentId, classId: student?.classId || '',
-        date: fullDateStr, verified: false, type: 'absence', justification: justification.trim(),
+        date: fullDateStr, verified: false, type: 'absence', justification: justificationPayload,
       };
       attendance.push(newRecord);
       recordIndex = attendance.length - 1;
     }
 
-    let attachment = null;
-    try { const parsed = JSON.parse(justification); attachment = parsed.arquivo_base64 || null; } catch (e) { }
-
     notifications.push({
-      id: `notif-${Date.now()}`, studentId: 'admin',
+      id: `notif-${Date.now()}`,
+      studentId: 'admin',
+      fromStudentId: req.user.studentId, // Identificador para navegação no Manager
       title: 'Nova Justificativa de Falta',
-      message: `${student?.name || 'Aluno'} enviou uma justificativa para a aula de ${date}.`,
-      attachment, read: false, createdAt: new Date().toISOString(),
+      message: JSON.stringify({
+        text: `${student?.name || 'Aluno'} enviou uma justificativa para a aula de ${date}.`,
+        motivo: motivo.trim()
+      }),
+      attachment: publicUrl,
+      read: false,
+      createdAt: new Date().toISOString(),
     });
 
     schoolData.attendance = attendance;
     schoolData.notifications = notifications;
+    schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
 
     res.json({ message: 'Justificativa enviada com sucesso', record: attendance[recordIndex] });
@@ -358,6 +443,7 @@ app.put('/api/portal/notificacoes/ler/:id', authMiddleware, async (req, res) => 
     if (idx === -1) return res.status(404).json({ error: 'Notificação não encontrada' });
     notifications[idx] = { ...notifications[idx], read: true };
     schoolData.notifications = notifications;
+    schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
     res.json({ success: true });
   } catch (err) {
@@ -373,6 +459,7 @@ app.delete('/api/portal/notificacoes/:id', authMiddleware, async (req, res) => {
     schoolData.notifications = (schoolData.notifications || []).filter(
       n => !(n.id === id && n.studentId === req.user.studentId)
     );
+    schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
     res.json({ success: true });
   } catch (err) {
@@ -398,6 +485,7 @@ app.put('/api/portal/alterar-senha', authMiddleware, async (req, res) => {
 
     students[studentIndex] = { ...student, portalPassword: newPassword };
     schoolData.students = students;
+    schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
 
     res.json({ message: 'Senha alterada com sucesso' });
@@ -420,7 +508,12 @@ app.get('/api/portal/avaliacoes', authMiddleware, async (req, res) => {
       .filter(e => e.status === 'published' && e.classId === student.classId)
       .map(e => ({
         ...e,
-        questions: e.questions.map(q => ({ id: q.id, text: q.text, options: q.options }))
+        questions: e.questions.map(q => ({
+          id: q.id,
+          text: q.text,
+          options: q.options,
+          imageUrl: normalizeStorageUrl(q.imageUrl)
+        }))
       }));
 
     const { rows: submissions } = await pool.query(
@@ -429,14 +522,15 @@ app.get('/api/portal/avaliacoes', authMiddleware, async (req, res) => {
     );
 
     // Mapear nomes de colunas do banco para o formato esperado pelo frontend
+    // IMPORTANTE: NUMERIC(5,2) retorna como string do pg, precisa de Number()
     const mappedSubmissions = (submissions || []).map(s => ({
       ...s,
       exam_id: s.prova_id || s.exam_id,
       total_questions: s.total_questoes || s.total_questions,
       correct_count: s.acertos || s.correct_count,
       wrong_count: s.erros || s.wrong_count,
-      percentage: s.percentual || s.percentage,
-      final_score: s.nota_final || s.final_score,
+      percentage: Number(s.percentual || s.percentage || 0),
+      final_score: Number(s.nota_final || s.final_score || 0),
       answers_json: s.respostas || s.answers_json,
     }));
 
@@ -452,16 +546,26 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
     const { examId, answers } = req.body;
     if (!examId || !answers) return res.status(400).json({ error: 'Dados obrigatórios' });
 
-    // Verificar se já submeteu
-    const { rows: existing } = await pool.query(
-      'SELECT id FROM provas_submissoes WHERE aluno_id = $1 AND prova_id = $2 LIMIT 1',
-      [req.user.studentId, examId]
-    );
-    if (existing.length > 0) return res.status(409).json({ error: 'Você já realizou esta prova.' });
-
     const schoolData = await getSchoolData();
     const exam = (schoolData.exams || []).find(e => e.id === examId);
     if (!exam) return res.status(404).json({ error: 'Prova não encontrada.' });
+
+    // Verificar se já submeteu
+    const { rows: existing } = await pool.query(
+      'SELECT * FROM provas_submissoes WHERE aluno_id = $1 AND prova_id = $2 LIMIT 1',
+      [req.user.studentId, examId]
+    );
+
+    if (existing.length > 0) {
+      if (!exam.allowRetake) {
+        return res.status(409).json({ error: 'Você já realizou esta avaliação e ela não permite refação.' });
+      }
+      // Se permite refazer, deleta a anterior
+      await pool.query(
+        'DELETE FROM provas_submissoes WHERE aluno_id = $1 AND prova_id = $2',
+        [req.user.studentId, examId]
+      );
+    }
 
     const totalQuestions = exam.questions.length;
     let correctCount = 0;
@@ -471,7 +575,8 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
 
     const wrongCount = totalQuestions - correctCount;
     const percentage = totalQuestions > 0 ? parseFloat(((correctCount / totalQuestions) * 100).toFixed(2)) : 0;
-    const finalScore = totalQuestions > 0 ? parseFloat(((correctCount / totalQuestions) * 10).toFixed(2)) : 0;
+    const maxScore = exam.maxScore != null ? Number(exam.maxScore) : 10;
+    const finalScore = totalQuestions > 0 ? parseFloat(((correctCount / totalQuestions) * maxScore).toFixed(2)) : 0;
 
     // Salvar no PostgreSQL
     await pool.query(
@@ -480,17 +585,15 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
       [req.user.studentId, examId, totalQuestions, correctCount, wrongCount, percentage, finalScore, JSON.stringify(answers), new Date().toISOString()]
     );
 
-    // Integrar com grades no school_data
+    // Integrar com notas_boletim (Nova Tabela) em vez de school_data
     if (exam.subjectId && exam.periodId) {
-      const grades = schoolData.grades || [];
-      const existingGradeIndex = grades.findIndex(g => g.studentId === req.user.studentId && g.subjectId === exam.subjectId && g.period === exam.periodId);
-      if (existingGradeIndex >= 0) {
-        grades[existingGradeIndex].value = finalScore;
-      } else {
-        grades.push({ id: `grade-${Date.now()}-${Math.random().toString(36).substring(7)}`, studentId: req.user.studentId, subjectId: exam.subjectId, period: exam.periodId, value: finalScore });
-      }
-      schoolData.grades = grades;
-      await saveSchoolData(schoolData);
+      await pool.query(
+        `INSERT INTO notas_boletim (aluno_id, disciplina_id, periodo_id, prova_id, valor, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (aluno_id, disciplina_id, periodo_id, prova_id) 
+         DO UPDATE SET valor = EXCLUDED.valor, updated_at = NOW()`,
+        [req.user.studentId, exam.subjectId, exam.periodId, examId, finalScore]
+      );
     }
 
     res.json({ success: true, result: { total_questions: totalQuestions, correct_count: correctCount, wrong_count: wrongCount, percentage, final_score: finalScore } });

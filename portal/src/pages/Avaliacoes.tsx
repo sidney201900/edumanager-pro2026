@@ -131,6 +131,9 @@ export default function Avaliacoes() {
     if (timerRef.current) clearInterval(timerRef.current);
 
     try {
+      // Artificial delay of 5 seconds to let the student read the message
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
       const res = await fetch('/api/portal/avaliacoes/submeter', {
         method: 'POST',
         headers: {
@@ -141,9 +144,6 @@ export default function Avaliacoes() {
       });
 
       const data = await res.json();
-      
-      // Artificial delay of 5 seconds to let the student read the message
-      await new Promise(resolve => setTimeout(resolve, 5000));
 
       if (data.success) {
         // Show Success Modal

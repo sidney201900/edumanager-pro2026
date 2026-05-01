@@ -18,17 +18,20 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import sharp from 'sharp';
 import jwt from 'jsonwebtoken';
+import cron from 'node-cron';
 
 // === Novos módulos Self-Hosted (substituem Supabase) ===
 import {
   getSchoolData, saveSchoolData, pool,
   insertCobrancas, updateCobranca, deleteCobranca,
   getCobrancaByPaymentId, getCobrancasByOrQuery,
-  getCobrancasByAlunoId, getCobrancasAtrasadas,
+  getCobrancasByAlunoId, getCobrancasAtrasadas, getCobrancasPendentes,
   getCobrancasByInstallmentId, updateCobrancaLinkCarne,
-  updateCobrancaByField
+  updateCobrancaByField,
+  initNotasTable, getNotasByAluno, upsertNota
 } from './services/database.js';
-import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage } from './services/storage.js';
+import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats, s3Client, getBucketObjects, deleteMinioObject } from './services/storage.js';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,8 +50,31 @@ app.use(cors());
 const cancelCache = new Set();
 const sentCache = new Set();
 const lockCache = new Set();
+let activeCronJob = null; // Referência global para o agendamento preventivo
+let activeCronJobOverdue = null; // Referência global para o agendamento de inadimplência
 
-const upload = multer({ storage: multer.memoryStorage() });
+// ============================================================
+// Proxy de Imagens do MinIO (acesso público via backend)
+// ============================================================
+app.get(/^\/storage\/([^\/]+)\/(.+)$/, async (req, res) => {
+  try {
+    const bucket = req.params[0];
+    const key = req.params[1]; // Captura tudo que vem após o bucket (incluindo barras)
+    
+    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const data = await s3Client.send(command);
+    
+    res.set('Content-Type', data.ContentType || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    data.Body.pipe(res);
+  } catch (e) {
+    console.error(`[Storage Proxy] Erro ao buscar: ${req.params.bucket}/${req.params[0]}`, e.message);
+    res.status(404).send('Arquivo não encontrado');
+  }
+});
+
+const multerStorage = multer.memoryStorage();
+const upload = multer({ storage: multerStorage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ============================================================
 // ROTA NOVA: Login Administrativo (JWT)
@@ -91,6 +117,44 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/school-data', async (req, res) => {
   try {
     const data = await getSchoolData();
+    
+    // Normalizar URLs do MinIO para proxy relativo
+    // Converte URLs como https://storageedu.xxx/bucket/file para /storage/bucket/file
+    const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_URL || '';
+    const normalizeUrl = (url) => {
+      if (!url || typeof url !== 'string') return url;
+      // Se já é uma URL relativa de proxy, manter
+      if (url.startsWith('/storage/')) return url;
+      // Se é a URL pública do MinIO, converter para proxy
+      if (MINIO_PUBLIC_URL && url.startsWith(MINIO_PUBLIC_URL)) {
+        return url.replace(MINIO_PUBLIC_URL, '/storage');
+      }
+      // Fallback: URL com http://localhost:9000 ou http://minio:9000
+      const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
+      if (match && (url.includes('minio') || url.includes('storageedu') || url.includes(':9000'))) {
+        return `/storage/${match[1]}`;
+      }
+      return url;
+    };
+    
+    // Normalizar fotos de alunos
+    if (data.students) {
+      data.students.forEach(s => { if (s.photo) s.photo = normalizeUrl(s.photo); });
+    }
+    // Normalizar logo
+    if (data.logo) data.logo = normalizeUrl(data.logo);
+    if (data.profile?.logo) data.profile.logo = normalizeUrl(data.profile.logo);
+    // Normalizar fotos nos registros de presença
+    if (data.attendance) {
+      data.attendance.forEach(a => { if (a.photo) a.photo = normalizeUrl(a.photo); });
+    }
+    // Normalizar imagens de exames
+    if (data.exams) {
+      data.exams.forEach(e => {
+        if (e.questions) e.questions.forEach(q => { if (q.image) q.image = normalizeUrl(q.image); });
+      });
+    }
+    
     res.json({ data });
   } catch (error) {
     console.error('Erro ao buscar school_data:', error);
@@ -112,6 +176,25 @@ app.put('/api/school-data', async (req, res) => {
       return res.status(409).json({ success: false, reason: 'newer_version' });
     }
 
+    // Inicialização de colunas necessárias para automação
+    pool.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='pre_warnings_count') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN pre_warnings_count INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_pre_warning_at') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN last_pre_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='overdue_warnings_count') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN overdue_warnings_count INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_overdue_warning_at') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN last_overdue_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+      END $$;
+    `).catch(err => console.error('[PostgreSQL] Erro ao inicializar colunas de automação:', err));
+
     schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
     res.json({ success: true });
@@ -121,39 +204,159 @@ app.put('/api/school-data', async (req, res) => {
   }
 });
 
-// ============================================================
-// ROTA MÁGICA: Driblar Firewall e Migrar via HTTP
-// ============================================================
-app.post('/api/migracao-remota', async (req, res) => {
+app.get('/api/system-stats', async (req, res) => {
+  let postgresStats = { dbSize: 'N/A', tableCount: '0' };
   try {
-    const { senha, sql, jsonData } = req.body;
-    if (senha !== 'magia2026') return res.status(401).send('Não autorizado');
+    const dbResult = await pool.query(`
+      SELECT pg_size_pretty(pg_database_size(current_database())) as db_size,
+             (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public') as table_count
+    `);
+    postgresStats = {
+      dbSize: dbResult.rows[0].db_size,
+      tableCount: dbResult.rows[0].table_count
+    };
+  } catch(e) {
+    console.error('System Stats (Postgres) Error:', e);
+  }
+  
+  let minioStats = { error: true, message: 'Not initialized' };
+  try {
+    minioStats = await getMinioStats();
+  } catch(e) {
+    console.error('System Stats (MinIO) Error:', e);
+    minioStats = { error: true, message: e.message };
+  }
+  
+  res.json({
+    postgres: postgresStats,
+    minio: minioStats
+  });
+});
 
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      // 1. Criar todas as tabelas!
-      if (sql) await client.query(sql);
-
-      // 2. Injetar a mega tabela ponte
-      if (jsonData) {
-        await client.query(
-          `INSERT INTO school_data (id, data, updated_at) VALUES (1, $1, NOW())
-           ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-          [JSON.stringify(jsonData)]
-        );
-      }
-      await client.query('COMMIT');
-      res.json({ success: true, message: 'Banco de dados criado e populado pela internet!' });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+// ============================================================
+// Database Explorer
+// ============================================================
+app.get('/api/database/tables', async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        relname as table_name,
+        pg_size_pretty(pg_total_relation_size(relid)) as total_size,
+        pg_total_relation_size(relid) as raw_size,
+        n_live_tup as row_count
+      FROM pg_stat_user_tables
+      ORDER BY raw_size DESC;
+    `;
+    const result = await pool.query(query);
+    res.json({ tables: result.rows });
   } catch (error) {
-    console.error('Erro na migração HTTP:', error);
+    console.error('Erro ao listar tabelas:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/database/tables/:tableName/data', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    
+    // Basic validation to prevent SQL injection on table name
+    if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+      return res.status(400).json({ error: 'Nome de tabela inválido' });
+    }
+
+    const query = `SELECT * FROM "${tableName}" LIMIT 100;`;
+    const result = await pool.query(query);
+    res.json({ rows: result.rows, fields: result.fields.map(f => f.name) });
+  } catch (error) {
+    console.error(`Erro ao buscar dados da tabela ${req.params.tableName}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// MinIO Explorer
+// ============================================================
+app.get('/api/storage/buckets/:bucketName/objects', async (req, res) => {
+  try {
+    const { bucketName } = req.params;
+    const objects = await getBucketObjects(bucketName);
+    res.json({ objects });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/storage/buckets/:bucketName/objects', async (req, res) => {
+  try {
+    const { bucketName } = req.params;
+    const { key } = req.body;
+    if (!key) return res.status(400).json({ error: 'Key is required' });
+    
+    await deleteMinioObject(bucketName, key);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// Rota para buscar submissões (acertos/erros) do aluno
+// ============================================================
+app.get('/api/student-submissions/:studentId', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { rows } = await pool.query(
+      'SELECT prova_id as "prova_id", acertos, erros FROM provas_submissoes WHERE TRIM(aluno_id) = TRIM($1)',
+      [String(studentId).trim()]
+    );
+    res.json({ submissions: rows });
+  } catch (err) {
+    console.error('Erro ao buscar submissões do aluno:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// ============================================================
+// ROTAS DE NOTAS (NOVA TABELA)
+// ============================================================
+app.get('/api/notas/:alunoId', async (req, res) => {
+  try {
+    const { rows: dbNotas } = await pool.query(
+      'SELECT id, aluno_id as "aluno_id", disciplina_id as "disciplina_id", periodo_id as "periodo_id", prova_id as "prova_id", valor as "valor" FROM notas_boletim WHERE TRIM(aluno_id) = TRIM($1)',
+      [String(req.params.alunoId).trim()]
+    );
+    // Garantir cast numérico para evitar erro de .toFixed no frontend
+    const notas = dbNotas.map(n => ({ ...n, valor: Number(n.valor) }));
+    res.json({ notas });
+  } catch (err) {
+    console.error('Erro ao buscar notas do aluno:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.post('/api/notas', async (req, res) => {
+  try {
+    const { notas } = req.body;
+    if (!Array.isArray(notas)) return res.status(400).json({ error: 'Formato inválido' });
+    
+    for (const nota of notas) {
+      if (nota.valor !== null && nota.valor !== '' && !isNaN(Number(nota.valor))) {
+        await upsertNota({
+          aluno_id: String(nota.aluno_id),
+          disciplina_id: String(nota.disciplina_id),
+          periodo_id: String(nota.periodo_id),
+          prova_id: nota.prova_id ? String(nota.prova_id) : null,
+          valor: Number(nota.valor)
+        });
+      }
+    }
+    
+    // Opcionalmente implementar delete para notas que o professor limpou (vazio)
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao salvar notas manuais:', err);
+    res.status(500).json({ error: 'Erro interno' });
   }
 });
 
@@ -193,6 +396,42 @@ app.post('/api/upload/student-photo', upload.single('photo'), async (req, res) =
     return res.status(200).json({ url });
   } catch (error) {
     console.error('Erro ao processar foto:', error);
+    return res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
+// ============================================================
+// Upload de Logo da Escola (MinIO)
+// ============================================================
+app.post('/api/upload/logo', upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    }
+
+    const { uploadLogo } = await import('./services/storage.js');
+    const url = await uploadLogo(req.file.buffer, req.file.mimetype);
+    return res.status(200).json({ url });
+  } catch (error) {
+    console.error('Erro ao processar logo:', error);
+    return res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
+// ============================================================
+// Upload de Imagem de Avaliação (MinIO)
+// ============================================================
+app.post('/api/upload/exam-image', upload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    }
+
+    const { uploadExamImage } = await import('./services/storage.js');
+    const url = await uploadExamImage(req.file.buffer, req.file.mimetype);
+    return res.status(200).json({ url });
+  } catch (error) {
+    console.error('Erro ao processar imagem de avaliação:', error);
     return res.status(500).json({ error: 'Erro interno.' });
   }
 });
@@ -297,11 +536,7 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
       }
     }
 
-    const fbGerado = 'Olá {nome}, sua cobrança referente a {descricao} no valor de R$ {valor} foi gerada. Vencimento: {vencimento}.';
-    const fbPago = 'Olá {nome}, confirmamos o pagamento de R$ {valor} referente a {descricao}. Muito obrigado!';
-    const fbAtrasado = 'Olá {nome}, o boleto referente a {descricao} de R$ {valor} venceu em {vencimento}. Segue o PDF da 2ª via atualizada abaixo:';
-    const fbCancelado = 'Olá {nome}, a cobrança referente a {descricao} foi cancelada.';
-    const fbAtualizado = 'Olá {nome}, o boleto de {descricao} foi atualizado. Segue a nova versão:';
+    const fbAVencer = 'Olá {nome}, lembramos que sua cobrança referente a {descricao} no valor de R$ {valor} vencerá em {vencimento}. Segue o PDF abaixo:';
 
     let templateText = '';
     if (eventType === 'PAYMENT_CREATED') templateText = templates?.boletoGerado || fbGerado;
@@ -309,6 +544,8 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
     else if (eventType === 'PAYMENT_OVERDUE') templateText = templates?.boletoVencido || fbAtrasado;
     else if (eventType === 'PAYMENT_DELETED') templateText = templates?.cobrancaCancelada || fbCancelado;
     else if (eventType === 'PAYMENT_UPDATED') templateText = templates?.cobrancaAtualizada || fbAtualizado;
+    else if (eventType === 'PAYMENT_UPCOMING') templateText = templates?.boletoAVencer || fbAVencer;
+
     if (!templateText) return;
 
     let msgFinal = templateText
@@ -418,8 +655,9 @@ app.post('/api/webhook_asaas', async (req, res) => {
         const statusMap = { 'PENDING': 'PENDENTE', 'OVERDUE': 'ATRASADO', 'RECEIVED': 'PAGO', 'CONFIRMED': 'PAGO', 'RECEIVED_IN_CASH': 'PAGO', 'REFUNDED': 'CANCELADO', 'DELETED': 'CANCELADO' };
         updateData = { valor: payload.payment.value, vencimento: payload.payment.dueDate, status: statusMap[payload.payment.status] || undefined };
         Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
-        if (payload.event === 'PAYMENT_OVERDUE') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_OVERDUE');
-        else if (payload.event === 'PAYMENT_UPDATED') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_UPDATED');
+        // Ocultado PAYMENT_OVERDUE aqui para ser enviado apenas pela rotina/cron (conforme regras)
+        // if (payload.event === 'PAYMENT_OVERDUE') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_OVERDUE');
+        if (payload.event === 'PAYMENT_UPDATED') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_UPDATED');
         break;
 
       case 'PAYMENT_DELETED':
@@ -448,6 +686,36 @@ app.post('/api/webhook_asaas', async (req, res) => {
   } catch (error) {
     console.error('Webhook erro:', error);
     return res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Admin Raw Cobrancas para a Aba Financeiro
+app.get('/api/admin/cobrancas', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM alunos_cobrancas ORDER BY vencimento DESC');
+    res.json(result.rows);
+  } catch(e) {
+    res.status(500).json({error: e.message});
+  }
+});
+
+app.delete('/api/admin/cobrancas', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).end();
+    await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = ANY($1)', [ids]);
+    res.json({ success: true });
+  } catch(e) {
+     res.status(500).json({error: e.message});
+  }
+});
+
+app.delete('/api/admin/cobrancas/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch(e) {
+    res.status(500).json({error: e.message});
   }
 });
 
@@ -694,27 +962,275 @@ app.get('/api/alunos/:id/carne', async (req, res) => {
 // ============================================================
 // INICIALIZAÇÃO
 // ============================================================
-async function startServer() {
-  const distPath = path.join(__dirname, 'dist');
-  if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    app.use((req, res, next) => req.path.startsWith('/api') ? next() : res.sendFile(path.join(distPath, 'index.html')));
-  } else {
-    const vite = await import('vite').then(m => m.createServer({ server: { middlewareMode: true }, appType: 'spa' }));
-    app.use(vite.middlewares);
+// ============================================================
+// LÓGICA REUTILIZÁVEL DE DISPARO DE COBRANÇAS
+// ============================================================
+async function executarRotinaCobrancas(tipo = 'ambos') {
+  const appData = await getSchoolData();
+  const rules = appData?.messageTemplates?.automationRules || {};
+  const sendDaysBefore = parseInt(rules.sendDaysBefore) || 3;
+  const maxPreWarnings = parseInt(rules.maxPreWarnings) || 1;
+  const sendDaysAfter = parseInt(rules.sendDaysAfter) || 1;
+  const repeatEveryDays = parseInt(rules.repeatEveryDays) || 3;
+
+  let enviadasAtraso = 0;
+  let enviadasAviso = 0;
+
+  // 1. Processar Atrasados
+  if (tipo === 'atrasado' || tipo === 'ambos') {
+    const atrasados = await getCobrancasAtrasadas();
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+
+    for (const cob of atrasados) {
+      if (!cob.asaas_payment_id || !cob.vencimento) continue;
+      
+      const vencimento = new Date(cob.vencimento);
+      vencimento.setHours(0,0,0,0);
+      const diffDiasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDiasAtraso >= sendDaysAfter) {
+        const lastWarn = cob.last_overdue_warning_at ? new Date(cob.last_overdue_warning_at) : null;
+        if (lastWarn) lastWarn.setHours(0,0,0,0);
+        
+        const diasDesdeUltimoAviso = lastWarn 
+            ? Math.floor((hoje.getTime() - lastWarn.getTime()) / (1000 * 60 * 60 * 24)) 
+            : null;
+
+        const jaEnviadoHoje = lastWarn && lastWarn.getTime() === hoje.getTime();
+
+        if (!jaEnviadoHoje && (diasDesdeUltimoAviso === null || diasDesdeUltimoAviso >= repeatEveryDays)) {
+          await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE');
+          
+          const currentCount = parseInt(cob.overdue_warnings_count) || 0;
+          await pool.query(
+            'UPDATE alunos_cobrancas SET overdue_warnings_count = $1, last_overdue_warning_at = NOW() WHERE asaas_payment_id = $2',
+            [currentCount + 1, cob.asaas_payment_id]
+          );
+          
+          enviadasAtraso++; 
+        }
+      }
+    }
   }
 
-  // Disparo Manual de Inadimplência
+  // 2. Processar A Vencer (Lembretes Preventivos)
+  if (tipo === 'preventivo' || tipo === 'ambos') {
+    const pendentes = await getCobrancasPendentes();
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+
+    for (const cob of pendentes) {
+      if (!cob.asaas_payment_id || !cob.vencimento) continue;
+      
+      const vencimento = new Date(cob.vencimento);
+      vencimento.setHours(0,0,0,0);
+      
+      const diffDias = Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDias > 0 && diffDias <= sendDaysBefore) {
+        const currentCount = parseInt(cob.pre_warnings_count) || 0;
+        
+        if (currentCount < maxPreWarnings) {
+          const lastWarn = cob.last_pre_warning_at ? new Date(cob.last_pre_warning_at) : null;
+          const jaEnviadoHoje = lastWarn && lastWarn.toDateString() === hoje.toDateString();
+
+          if (!jaEnviadoHoje) {
+            await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING');
+            
+            await pool.query(
+              'UPDATE alunos_cobrancas SET pre_warnings_count = $1, last_pre_warning_at = NOW() WHERE asaas_payment_id = $2',
+              [currentCount + 1, cob.asaas_payment_id]
+            );
+            enviadasAviso++;
+          }
+        }
+      }
+    }
+  }
+
+  return { enviadasAtraso, enviadasAviso };
+}
+
+// ============================================================
+// AGENDADOR AUTOMÁTICO (node-cron) — Suporte a múltiplos tipos
+// ============================================================
+function agendarRotina(tipo, hora, minuto) {
+  const isPreventivo = tipo === 'preventivo';
+  const label = isPreventivo ? 'Preventivo' : 'Inadimplência';
+
+  // Cancela job anterior do mesmo tipo
+  if (isPreventivo && activeCronJob) {
+    activeCronJob.stop();
+    activeCronJob = null;
+    console.log(`[Cron:${label}] ⏹ Rotina anterior cancelada.`);
+  } else if (!isPreventivo && activeCronJobOverdue) {
+    activeCronJobOverdue.stop();
+    activeCronJobOverdue = null;
+    console.log(`[Cron:${label}] ⏹ Rotina anterior cancelada.`);
+  }
+
+  const h = parseInt(hora);
+  const m = parseInt(minuto);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    console.error(`[Cron:${label}] Horário inválido:`, hora, minuto);
+    return;
+  }
+
+  const cronTipo = isPreventivo ? 'preventivo' : 'atrasado';
+  const cronExpression = `${m} ${h} * * *`;
+  const job = cron.schedule(cronExpression, async () => {
+    console.log(`[Cron:${label}] ⏰ Rotina automática iniciada às ${new Date().toLocaleTimeString('pt-BR')}`);
+    try {
+      const resultado = await executarRotinaCobrancas(cronTipo);
+      const count = isPreventivo ? resultado.enviadasAviso : resultado.enviadasAtraso;
+      console.log(`[Cron:${label}] ✅ Concluído: ${count} mensagens processadas.`);
+    } catch (error) {
+      console.error(`[Cron:${label}] ❌ Erro na rotina automática:`, error.message);
+    }
+  }, { timezone: 'America/Sao_Paulo' });
+
+  if (isPreventivo) activeCronJob = job;
+  else activeCronJobOverdue = job;
+
+  console.log(`[Cron:${label}] ✅ Rotina agendada para ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} (America/Sao_Paulo)`);
+}
+
+async function inicializarAgendamento() {
+  try {
+    // Inicialização DB para colunas de automação (garantir no boot)
+    await pool.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='pre_warnings_count') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN pre_warnings_count INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_pre_warning_at') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN last_pre_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='overdue_warnings_count') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN overdue_warnings_count INTEGER DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_overdue_warning_at') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN last_overdue_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+      END $$;
+    `).catch(err => console.error('[PostgreSQL] Erro boot automação:', err));
+
+    // Inicialização da Tabela de Notas e Migração Automática
+    await initNotasTable();
+    const appData = await getSchoolData();
+    
+    // Migração: Se existirem notas no JSON, movemos para a tabela e removemos do JSON
+    if (appData.grades && appData.grades.length > 0) {
+      console.log(`[Migração] Migrando ${appData.grades.length} notas do JSON para o PostgreSQL...`);
+      for (const grade of appData.grades) {
+        try {
+          await upsertNota({
+            aluno_id: String(grade.studentId),
+            disciplina_id: String(grade.subjectId),
+            periodo_id: String(grade.period),
+            prova_id: grade.examId ? String(grade.examId) : null,
+            valor: Number(grade.value)
+          });
+        } catch(err) {
+          console.error('[Migração] Erro ao migrar nota:', err);
+        }
+      }
+      appData.grades = []; // Limpa o JSON após migrar
+      appData.lastUpdated = new Date().toISOString();
+      await saveSchoolData(appData);
+      console.log('[Migração] Migração de notas concluída com sucesso!');
+    }
+    const rules = appData?.messageTemplates?.automationRules || {};
+    
+    // Preventivo
+    if (rules.autoScheduleEnabled && rules.autoScheduleTime) {
+      const [h, m] = rules.autoScheduleTime.split(':');
+      agendarRotina('preventivo', h, m);
+    } else {
+      console.log('[Cron:Preventivo] ℹ Agendamento desativado.');
+    }
+
+    // Inadimplência
+    if (rules.autoScheduleOverdueEnabled && rules.autoScheduleOverdueTime) {
+      const [h, m] = rules.autoScheduleOverdueTime.split(':');
+      agendarRotina('atrasado', h, m);
+    } else {
+      console.log('[Cron:Inadimplência] ℹ Agendamento desativado.');
+    }
+  } catch (e) {
+    console.error('[Cron] Erro ao inicializar agendamento:', e.message);
+  }
+}
+
+async function startServer() {
+
+  // Disparo Manual de Inadimplência e Lembretes
   app.post('/api/disparar_cobrancas', async (req, res) => {
     try {
-      const atrasados = await getCobrancasAtrasadas();
-      if (atrasados.length === 0) return res.status(200).json({ message: 'Nenhuma atrasada.' });
-      let enviadas = 0;
-      for (const cob of atrasados) {
-        if (cob.asaas_payment_id) { await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE'); enviadas++; }
+      const tipo = req.query.tipo || 'ambos';
+      const resultado = await executarRotinaCobrancas(tipo);
+
+      let msg = '';
+      if (tipo === 'atrasado') msg = `${resultado.enviadasAtraso} mensagens de atraso processadas.`;
+      else if (tipo === 'preventivo') msg = `${resultado.enviadasAviso} lembretes preventivos processados.`;
+      else msg = `${resultado.enviadasAtraso} mensagens de atraso e ${resultado.enviadasAviso} lembretes preventivos processados.`;
+
+      return res.status(200).json({ message: msg });
+    } catch (error) { 
+      console.error('[Disparo] Erro:', error);
+      return res.status(500).json({ error: 'Erro interno.' }); 
+    }
+  });
+
+  // API para gerenciar o agendamento (suporte a preventivo e atrasado)
+  app.get('/api/cron/status', (req, res) => {
+    res.json({ 
+      preventive: !!activeCronJob, 
+      overdue: !!activeCronJobOverdue 
+    });
+  });
+
+  app.post('/api/cron/schedule', async (req, res) => {
+    try {
+      const { enabled, time, tipo } = req.body;
+      const isOverdue = tipo === 'atrasado';
+      const appData = await getSchoolData();
+      if (!appData.messageTemplates) appData.messageTemplates = {};
+      if (!appData.messageTemplates.automationRules) appData.messageTemplates.automationRules = {};
+      
+      if (isOverdue) {
+        appData.messageTemplates.automationRules.autoScheduleOverdueEnabled = !!enabled;
+        appData.messageTemplates.automationRules.autoScheduleOverdueTime = time || '09:00';
+      } else {
+        appData.messageTemplates.automationRules.autoScheduleEnabled = !!enabled;
+        appData.messageTemplates.automationRules.autoScheduleTime = time || '09:00';
       }
-      return res.status(200).json({ message: `${enviadas} mensagens processadas.` });
-    } catch (error) { return res.status(500).json({ error: 'Erro interno.' }); }
+
+      appData.lastUpdated = new Date().toISOString();
+      await saveSchoolData(appData);
+
+      if (enabled && time) {
+        const [h, m] = time.split(':');
+        agendarRotina(isOverdue ? 'atrasado' : 'preventivo', h, m);
+      } else {
+        if (isOverdue) {
+          if (activeCronJobOverdue) { activeCronJobOverdue.stop(); activeCronJobOverdue = null; }
+        } else {
+          if (activeCronJob) { activeCronJob.stop(); activeCronJob = null; }
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        preventive: !!activeCronJob, 
+        overdue: !!activeCronJobOverdue 
+      });
+    } catch (error) {
+      console.error('[Cron] Erro ao salvar agendamento:', error);
+      res.status(500).json({ error: 'Erro interno.' });
+    }
   });
 
   // Imprimir Carnê
@@ -755,7 +1271,33 @@ async function startServer() {
     } catch (error) { return res.status(500).json({ error: 'Erro interno.' }); }
   });
 
-  app.listen(PORT, '0.0.0.0', () => console.log(`🚀 EduManager Self-Hosted na porta ${PORT}`));
+  // ===================================================
+  // SERVE FRONTEND (Final Catch-all)
+  // ===================================================
+  const distPath = path.join(__dirname, 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/storage')) return next();
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    try {
+      const vite = await import('vite').then(m => m.createServer({ 
+        server: { middlewareMode: true }, 
+        appType: 'spa' 
+      }));
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn('Vite dev server not available and dist folder missing.');
+    }
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 EduManager Self-Hosted na porta ${PORT}`);
+    // Inicializa agendamento automático após servidor subir
+    inicializarAgendamento();
+  });
 }
 
 startServer();
