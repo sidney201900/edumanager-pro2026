@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import type { Exam, ExamSubmission } from '../types';
 import {
   ClipboardList, Clock, ChevronLeft, ChevronRight, Send, CheckCircle2,
-  XCircle, Award, AlertTriangle, Timer, ArrowLeft, Loader2
+  XCircle, Award, AlertTriangle, Timer, ArrowLeft, RefreshCw
 } from 'lucide-react';
 import { normalizePhotoUrl } from '../helpers';
 
@@ -465,7 +465,7 @@ export default function Avaliacoes() {
                   : modalType === 'confirm'
                   ? <AlertTriangle size={28} color="var(--color-warning)" />
                   : modalType === 'loading'
-                  ? <Loader2 size={28} color="var(--color-primary)" className="animate-spin" />
+                  ? <RefreshCw size={28} color="var(--color-primary)" className="animate-spin" />
                   : <CheckCircle2 size={28} color="var(--color-primary)" />
                 }
               </div>

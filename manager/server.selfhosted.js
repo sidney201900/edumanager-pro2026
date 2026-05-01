@@ -306,8 +306,8 @@ app.get('/api/student-submissions/:studentId', async (req, res) => {
   try {
     const { studentId } = req.params;
     const { rows } = await pool.query(
-      'SELECT prova_id as "prova_id", acertos, erros FROM provas_submissoes WHERE aluno_id = $1',
-      [String(studentId)]
+      'SELECT prova_id as "prova_id", acertos, erros FROM provas_submissoes WHERE TRIM(aluno_id) = TRIM($1)',
+      [String(studentId).trim()]
     );
     res.json({ submissions: rows });
   } catch (err) {
@@ -322,8 +322,8 @@ app.get('/api/student-submissions/:studentId', async (req, res) => {
 app.get('/api/notas/:alunoId', async (req, res) => {
   try {
     const { rows: dbNotas } = await pool.query(
-      'SELECT id, aluno_id as "aluno_id", disciplina_id as "disciplina_id", periodo_id as "periodo_id", prova_id as "prova_id", valor as "valor" FROM notas_boletim WHERE aluno_id = $1',
-      [req.params.alunoId]
+      'SELECT id, aluno_id as "aluno_id", disciplina_id as "disciplina_id", periodo_id as "periodo_id", prova_id as "prova_id", valor as "valor" FROM notas_boletim WHERE TRIM(aluno_id) = TRIM($1)',
+      [String(req.params.alunoId).trim()]
     );
     // Garantir cast numérico para evitar erro de .toFixed no frontend
     const notas = dbNotas.map(n => ({ ...n, valor: Number(n.valor) }));
