@@ -283,7 +283,7 @@ export async function syncJsonToRelationalTables() {
     const data = await getSchoolData();
     if (!data) return;
 
-    console.log('[Sincronização] 🔄 Iniciando espelhamento total JSON -> Tabelas Relacionais...');
+    console.log('[Sincronização] 🔄 Iniciando espelhamento TOTAL (Modo Blindado)...');
     await client.query('BEGIN');
 
     // 1. Sincronizar Cursos
@@ -303,7 +303,33 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 2. Sincronizar Turmas
+    // 2. Sincronizar Disciplinas (Subjects)
+    if (data.subjects && Array.isArray(data.subjects)) {
+      for (const sub of data.subjects) {
+        if (!sub.id || !sub.name) continue;
+        await client.query(
+          `INSERT INTO disciplinas (id, nome)
+           VALUES ($1, $2)
+           ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome`,
+          [sub.id, sub.name]
+        );
+      }
+    }
+
+    // 3. Sincronizar Períodos (Bimestres)
+    if (data.periods && Array.isArray(data.periods)) {
+      for (const p of data.periods) {
+        if (!p.id || !p.name) continue;
+        await client.query(
+          `INSERT INTO periodos (id, nome)
+           VALUES ($1, $2)
+           ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome`,
+          [p.id, p.name]
+        );
+      }
+    }
+
+    // 4. Sincronizar Turmas
     if (data.classes && Array.isArray(data.classes)) {
       for (const t of data.classes) {
         if (!t.id || !t.name) continue;
@@ -320,7 +346,7 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 3. Sincronizar Alunos
+    // 5. Sincronizar Alunos (Mapeamento Completo de Campos)
     if (data.students && Array.isArray(data.students)) {
       for (const s of data.students) {
         if (!s.id || !s.name) continue;
@@ -353,61 +379,41 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 4. Sincronizar Frequências
+    // 6. Sincronizar Provas (Corrigindo vínculo com disciplinas)
+    if (data.exams && Array.isArray(data.exams)) {
+      for (const e of data.exams) {
+        if (!e.id || !e.title) continue;
+        await client.query(
+          `INSERT INTO provas (id, turma_id, disciplina_id, periodo_id, titulo, duracao_minutos, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO UPDATE SET 
+            turma_id = EXCLUDED.turma_id, disciplina_id = EXCLUDED.disciplina_id, periodo_id = EXCLUDED.periodo_id,
+            titulo = EXCLUDED.titulo, duracao_minutos = EXCLUDED.duracao_minutos, status = EXCLUDED.status`,
+          [e.id, e.classId || null, e.subjectId || null, e.periodId || null, e.title, e.durationMinutes || 60, e.status || 'draft']
+        ).catch(err => console.warn(`[Sync:Provas] Erro na prova ${e.id}:`, err.message));
+      }
+    }
+
+    // 7. Sincronizar Frequências (Baseado na estrutura real do JSON)
     if (data.attendance && Array.isArray(data.attendance)) {
       for (const f of data.attendance) {
         if (!f.id || !f.studentId || !f.classId) continue;
         await client.query(
-          `INSERT INTO frequencias (id, aluno_id, turma_id, data, foto, verificado, tipo, justificativa, justificativa_aceita)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO frequencias (id, aluno_id, turma_id, data, foto, verificado, tipo)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (id) DO UPDATE SET 
             aluno_id = EXCLUDED.aluno_id, turma_id = EXCLUDED.turma_id, data = EXCLUDED.data,
-            foto = EXCLUDED.foto, verificado = EXCLUDED.verificado, tipo = EXCLUDED.tipo,
-            justificativa = EXCLUDED.justificativa, justificativa_aceita = EXCLUDED.justificativa_aceita`,
-          [f.id, f.studentId, f.classId, f.date, f.photo || '', f.verified || false, f.type || 'presence', f.justification || '', f.justificationAccepted || false]
+            foto = EXCLUDED.foto, verificado = EXCLUDED.verificado, tipo = EXCLUDED.tipo`,
+          [f.id, f.studentId, f.classId, f.date, f.photo || '', f.verified || false, f.type || 'presence']
         );
       }
     }
 
-    // 5. Sincronizar Disciplinas (Subjects)
-    if (data.subjects && Array.isArray(data.subjects)) {
-      for (const sub of data.subjects) {
-        if (!sub.id || !sub.name) continue;
-        await client.query(`INSERT INTO cursos (id, nome) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`, [sub.id, sub.name]);
-      }
-    }
-
-    // 6. Sincronizar Períodos (Bimestres)
-    if (data.periods && Array.isArray(data.periods)) {
-      for (const p of data.periods) {
-        if (!p.id || !p.name) continue;
-        // Se houver tabela de períodos, inserimos. Se não, garantimos ao menos o ID.
-        await client.query(`INSERT INTO school_data (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
-      }
-    }
-
-    // 7. Sincronizar Provas/Avaliações
-    if (data.exams && Array.isArray(data.exams)) {
-      for (const e of data.exams) {
-        if (!e.id || !e.title) continue;
-        try {
-           await client.query(
-            `INSERT INTO provas (id, titulo, disciplina_id)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (id) DO UPDATE SET titulo = EXCLUDED.titulo, disciplina_id = EXCLUDED.disciplina_id`,
-            [e.id, e.title, e.subjectId || null]
-          );
-        } catch(err) {
-          // Fallback se a tabela provas não estiver pronta
-        }
-      }
-    }
-
     await client.query('COMMIT');
-    console.log('[Sincronização] 🚀 Sincronização COMPLETA (Alunos, Turmas, Provas, Frequência) concluída!');
+    console.log('[Sincronização] 🚀 Espelhamento TOTAL concluído com sucesso!');
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('[Sincronização] ❌ Erro crítico ao sincronizar:', err.message);
+    console.error('[Sincronização] ❌ Erro Crítico:', err.message);
   } finally {
     client.release();
   }
