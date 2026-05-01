@@ -28,7 +28,8 @@ import {
   getCobrancasByAlunoId, getCobrancasAtrasadas, getCobrancasPendentes,
   getCobrancasByInstallmentId, updateCobrancaLinkCarne,
   updateCobrancaByField,
-  initNotasTable, getNotasByAluno, upsertNota
+  initNotasTable, getNotasByAluno, upsertNota,
+  syncJsonToRelationalTables
 } from './services/database.js';
 import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats, s3Client, getBucketObjects, deleteMinioObject } from './services/storage.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -1119,6 +1120,10 @@ async function inicializarAgendamento() {
 
     // Inicialização da Tabela de Notas e Migração Automática
     await initNotasTable();
+    
+    // Sincronização de Integridade (JSON -> Tabelas Relacionais)
+    await syncJsonToRelationalTables();
+
     const appData = await getSchoolData();
     
     // Migração: Se existirem notas no JSON, movemos para a tabela e removemos do JSON

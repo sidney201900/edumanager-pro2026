@@ -24,6 +24,7 @@
 > [!CAUTION]
 > **Git Push Proibido Sem Demanda Explícita:**
 > NUNCA execute `git add`, `git commit` ou `git push` sem que o USUÁRIO solicite explicitamente. Alterações devem ser feitas nos arquivos, mas o envio ao repositório remoto é uma ação exclusiva do usuário. Aguarde sempre o comando direto do usuário para realizar qualquer operação de versionamento.
+> **ESTA REGRA É INVIOLÁVEL E O ASSISTENTE JÁ FALHOU NELA EM 01/05/2026. NÃO REPITA O ERRO.**
 
 ## 📜 Padrões de Desenvolvimento
 1. **Design System:** Estética Premium, Dark Mode por padrão (ou glassmorphism), micro-animações e ausência de placeholders.
