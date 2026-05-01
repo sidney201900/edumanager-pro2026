@@ -378,8 +378,8 @@ CREATE TABLE IF NOT EXISTS questoes_provas (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS provas_submissoes (
     id TEXT PRIMARY KEY DEFAULT uuid_generate_v4()::TEXT,
-    aluno_id TEXT NOT NULL REFERENCES alunos(id) ON DELETE CASCADE,
-    prova_id TEXT NOT NULL REFERENCES provas(id) ON DELETE CASCADE,
+    aluno_id TEXT NOT NULL,
+    prova_id TEXT NOT NULL,
     total_questoes INTEGER DEFAULT 0,
     acertos INTEGER DEFAULT 0,
     erros INTEGER DEFAULT 0,

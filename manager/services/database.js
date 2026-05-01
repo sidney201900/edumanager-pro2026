@@ -208,6 +208,16 @@ export async function insertSubmissao(submission) {
 // HELPERS: notas_boletim
 // ============================================================
 export async function initNotasTable() {
+  // Remover constraints restritivas da tabela de submissões se existirem (transição JSON -> Postgres)
+  try {
+    await pool.query(`
+      ALTER TABLE provas_submissoes DROP CONSTRAINT IF EXISTS provas_submissoes_aluno_id_fkey;
+      ALTER TABLE provas_submissoes DROP CONSTRAINT IF EXISTS provas_submissoes_prova_id_fkey;
+    `);
+  } catch (err) {
+    console.log('[PostgreSQL] ℹ️ Submissoes fkey já removidas ou tabela não existe.');
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notas_boletim (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -598,8 +598,12 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
 
     res.json({ success: true, result: { total_questions: totalQuestions, correct_count: correctCount, wrong_count: wrongCount, percentage, final_score: finalScore } });
   } catch (err) {
-    console.error('Submissao error:', err);
-    res.status(500).json({ error: 'Erro interno.' });
+    console.error('❌ [Portal:Submissão] Erro crítico ao salvar:', err.message, err.stack);
+    res.status(500).json({ 
+      error: 'Erro interno ao processar nota', 
+      details: err.message,
+      code: 'DB_SAVE_ERROR'
+    });
   }
 });
 
