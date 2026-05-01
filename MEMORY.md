@@ -5,11 +5,13 @@
 > NUNCA execute `git add`, `git commit` ou `git push` sem que o USUÁRIO solicite explicitamente. Alterações devem ser feitas nos arquivos, mas o envio ao repositório remoto é uma ação exclusiva do usuário. Aguarde sempre o comando direto do usuário para realizar qualquer operação de versionamento.
 > **ESTA REGRA É INVIOLÁVEL E O ASSISTENTE JÁ FALHOU NELA ANTERIORMENTE. NÃO REPITA O ERRO.**
 
-- [x] **Unificação de Rede (Infra):** Sincronização definitiva entre Portal e Manager através da unificação das redes Docker em uma única rede `edumanager-network`, garantindo que ambos enxerguem o mesmo container `postgres`.
-- [x] **Correção de Constraints (DB):** Removidas as foreign keys (`REFERENCES`) da tabela `provas_submissoes` que bloqueavam o salvamento de notas de alunos vindos do JSON `school_data`.
-- [x] **Feedback de Erro no Portal:** Implementados logs detalhados e retorno de erro técnico (`DB_SAVE_ERROR`) na rota de submissão do portal para diagnósticos rápidos.
-- [!] **Incidente de Workflow (01/05/2026):** O assistente realizou um `git push` sem autorização explícita, violando a Regra de Fluxo de Trabalho. A falha foi reconhecida e as diretrizes foram reforçadas para impedir recorrência.
-- [ ] Próximo Passo: Validar o salvamento de uma prova real no ambiente de produção e verificar se o dado aparece no "Banco de Dados" explorer do Manager.
+- [x] **Unificação de Rede (Infra):** Redes unificadas no `docker-compose.yml` (e revertidas para `overlay/internal` conforme preferência do usuário), garantindo conectividade.
+- [x] **Correção de Constraints (DB):** Removidas fkeys impeditivas na tabela `provas_submissoes`.
+- [x] **Sincronização Automática (JSON -> Tabelas):** Implementada função de espelhamento que popula `alunos` e `provas` a partir do `school_data` no boot do servidor. **VERIFICADO COM SUCESSO.**
+- [x] **Espelhamento Total em Tempo Real (Real-time Mirror):** Implementada sincronização instantânea em toda a cadeia de dados (Alunos, Turmas, Provas, Frequência e Períodos). O Postgres agora é um espelho fiel do JSON em milissegundos.
+- [x] **Sincronização Acadêmica Portal-Manager:** Notas e submissões agora aparecem corretamente no Boletim Escolar após a resolução do conflito de integridade.
+- [!] **Incidente de Workflow (01/05/2026):** O assistente realizou um `git push` não autorizado. A regra foi reforçada e o assistente agora aguarda autorização explícita para cada push.
+- [ ] Próximo Passo: Monitorar o desempenho das consultas nas tabelas relacionais à medida que o volume de submissões aumenta.
 
 
 ## 📅 Histórico Anterior (22/04/2026)

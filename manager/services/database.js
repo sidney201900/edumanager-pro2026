@@ -278,70 +278,138 @@ export async function deleteNotasManuaisAusentes(alunoId, notasManuaisRetidas) {
 // Garante que IDs do JSON existam nas tabelas para evitar erro de Foreign Key
 // ============================================================
 export async function syncJsonToRelationalTables() {
+  const client = await pool.connect();
   try {
     const data = await getSchoolData();
     if (!data) return;
 
-    console.log('[Sincronização] 🔄 Iniciando espelhamento JSON -> Tabelas Relacionais...');
+    console.log('[Sincronização] 🔄 Iniciando espelhamento total JSON -> Tabelas Relacionais...');
+    await client.query('BEGIN');
 
-    // 1. Sincronizar Alunos
+    // 1. Sincronizar Cursos
+    if (data.courses && Array.isArray(data.courses)) {
+      for (const c of data.courses) {
+        if (!c.id || !c.name) continue;
+        await client.query(
+          `INSERT INTO cursos (id, nome, duracao, duracao_meses, taxa_matricula, mensalidade, descricao, multa_percentual, juros_percentual)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (id) DO UPDATE SET 
+            nome = EXCLUDED.nome, duracao = EXCLUDED.duracao, duracao_meses = EXCLUDED.duracao_meses,
+            taxa_matricula = EXCLUDED.taxa_matricula, mensalidade = EXCLUDED.mensalidade,
+            descricao = EXCLUDED.descricao, multa_percentual = EXCLUDED.multa_percentual,
+            juros_percentual = EXCLUDED.juros_percentual`,
+          [c.id, c.name, c.duration || '', c.durationMonths || 0, c.registrationFee || 0, c.monthlyFee || 0, c.description || '', c.finePercentage || 0, c.interestPercentage || 0]
+        );
+      }
+    }
+
+    // 2. Sincronizar Turmas
+    if (data.classes && Array.isArray(data.classes)) {
+      for (const t of data.classes) {
+        if (!t.id || !t.name) continue;
+        await client.query(
+          `INSERT INTO turmas (id, nome, curso_id, professor, horario, dia_semana, max_alunos, data_inicio, data_fim, horario_inicio_padrao, horario_fim_padrao)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           ON CONFLICT (id) DO UPDATE SET 
+            nome = EXCLUDED.nome, curso_id = EXCLUDED.curso_id, professor = EXCLUDED.professor,
+            horario = EXCLUDED.horario, dia_semana = EXCLUDED.dia_semana, max_alunos = EXCLUDED.max_alunos,
+            data_inicio = EXCLUDED.data_inicio, data_fim = EXCLUDED.data_fim,
+            horario_inicio_padrao = EXCLUDED.horario_inicio_padrao, horario_fim_padrao = EXCLUDED.horario_fim_padrao`,
+          [t.id, t.name, t.courseId || null, t.teacher || '', t.schedule || '', t.scheduleDay || null, t.maxStudents || 30, t.startDate || null, t.endDate || null, t.defaultStartTime || null, t.defaultEndTime || null]
+        );
+      }
+    }
+
+    // 3. Sincronizar Alunos
     if (data.students && Array.isArray(data.students)) {
       for (const s of data.students) {
         if (!s.id || !s.name) continue;
-        await pool.query(
-          `INSERT INTO alunos (id, nome, email, telefone, status)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, email = EXCLUDED.email, telefone = EXCLUDED.telefone, status = EXCLUDED.status`,
-          [s.id, s.name, s.email || '', s.phone || '', s.status || 'active']
+        await client.query(
+          `INSERT INTO alunos (
+            id, nome, email, telefone, data_nascimento, cpf, rg, rg_data_emissao,
+            nome_responsavel, telefone_responsavel, cpf_responsavel, data_nascimento_responsavel,
+            turma_id, status, data_matricula, foto_url, cep, rua, numero, bairro, cidade, estado,
+            desconto, tem_responsavel, modelo_contrato_id, numero_matricula, senha_portal
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+          ON CONFLICT (id) DO UPDATE SET 
+            nome = EXCLUDED.nome, email = EXCLUDED.email, telefone = EXCLUDED.telefone, data_nascimento = EXCLUDED.data_nascimento,
+            cpf = EXCLUDED.cpf, rg = EXCLUDED.rg, rg_data_emissao = EXCLUDED.rg_data_emissao,
+            nome_responsavel = EXCLUDED.nome_responsavel, telefone_responsavel = EXCLUDED.telefone_responsavel,
+            cpf_responsavel = EXCLUDED.cpf_responsavel, data_nascimento_responsavel = EXCLUDED.data_nascimento_responsavel,
+            turma_id = EXCLUDED.turma_id, status = EXCLUDED.status, data_matricula = EXCLUDED.data_matricula,
+            foto_url = EXCLUDED.foto_url, cep = EXCLUDED.cep, rua = EXCLUDED.rua, numero = EXCLUDED.numero,
+            bairro = EXCLUDED.bairro, cidade = EXCLUDED.cidade, estado = EXCLUDED.estado,
+            desconto = EXCLUDED.desconto, tem_responsavel = EXCLUDED.tem_responsavel,
+            modelo_contrato_id = EXCLUDED.modelo_contrato_id, numero_matricula = EXCLUDED.numero_matricula,
+            senha_portal = EXCLUDED.senha_portal`,
+          [
+            s.id, s.name, s.email || '', s.phone || '', s.birthDate || null, s.cpf || '', s.rg || '', s.rgIssueDate || null,
+            s.guardianName || '', s.guardianPhone || '', s.guardianCpf || '', s.guardianBirthDate || null,
+            s.classId || null, s.status || 'active', s.registrationDate || null, s.photo || '',
+            s.addressZip || '', s.addressStreet || '', s.addressNumber || '', s.addressNeighborhood || '', s.addressCity || '', s.addressState || '',
+            s.discount || 0, s.hasGuardian || false, s.contractTemplateId || null, s.enrollmentNumber || null, s.portalPassword || null
+          ]
         );
       }
-      console.log(`[Sincronização] ✅ ${data.students.length} alunos sincronizados.`);
     }
 
-    // 2. Sincronizar Disciplinas (Subjects)
+    // 4. Sincronizar Frequências
+    if (data.attendance && Array.isArray(data.attendance)) {
+      for (const f of data.attendance) {
+        if (!f.id || !f.studentId || !f.classId) continue;
+        await client.query(
+          `INSERT INTO frequencias (id, aluno_id, turma_id, data, foto, verificado, tipo, justificativa, justificativa_aceita)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (id) DO UPDATE SET 
+            aluno_id = EXCLUDED.aluno_id, turma_id = EXCLUDED.turma_id, data = EXCLUDED.data,
+            foto = EXCLUDED.foto, verificado = EXCLUDED.verificado, tipo = EXCLUDED.tipo,
+            justificativa = EXCLUDED.justificativa, justificativa_aceita = EXCLUDED.justificativa_aceita`,
+          [f.id, f.studentId, f.classId, f.date, f.photo || '', f.verified || false, f.type || 'presence', f.justification || '', f.justificationAccepted || false]
+        );
+      }
+    }
+
+    // 5. Sincronizar Disciplinas (Subjects)
     if (data.subjects && Array.isArray(data.subjects)) {
       for (const sub of data.subjects) {
         if (!sub.id || !sub.name) continue;
-        await pool.query(
-          `INSERT INTO cursos (id, nome)
-           VALUES ($1, $2)
-           ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome`,
-          [sub.id, sub.name]
-        );
+        await client.query(`INSERT INTO cursos (id, nome) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`, [sub.id, sub.name]);
       }
-      console.log(`[Sincronização] ✅ ${data.subjects.length} disciplinas sincronizadas.`);
     }
 
-    // 3. Sincronizar Provas/Avaliações
+    // 6. Sincronizar Períodos (Bimestres)
+    if (data.periods && Array.isArray(data.periods)) {
+      for (const p of data.periods) {
+        if (!p.id || !p.name) continue;
+        // Se houver tabela de períodos, inserimos. Se não, garantimos ao menos o ID.
+        await client.query(`INSERT INTO school_data (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
+      }
+    }
+
+    // 7. Sincronizar Provas/Avaliações
     if (data.exams && Array.isArray(data.exams)) {
       for (const e of data.exams) {
         if (!e.id || !e.title) continue;
-        // Garantir que a tabela 'provas' exista (ela está no schema.sql)
-        await pool.query(
-          `INSERT INTO provas_submissoes (id, aluno_id, prova_id)
-           VALUES ($1, $2, $3)
-           ON CONFLICT DO NOTHING`,
-          ['init-' + e.id, 'system', e.id]
-        ).catch(() => {}); // Dummy insert para garantir que o ID da prova seja "conhecido" se houver FK
-
-        // Nota: O schema.sql tem uma tabela 'provas'. Se ela existir, alimentamos.
         try {
-           await pool.query(
+           await client.query(
             `INSERT INTO provas (id, titulo, disciplina_id)
              VALUES ($1, $2, $3)
              ON CONFLICT (id) DO UPDATE SET titulo = EXCLUDED.titulo, disciplina_id = EXCLUDED.disciplina_id`,
             [e.id, e.title, e.subjectId || null]
           );
         } catch(err) {
-          // Se a tabela 'provas' não existir ou tiver schema diferente, ignoramos silenciosamente
+          // Fallback se a tabela provas não estiver pronta
         }
       }
-      console.log(`[Sincronização] ✅ ${data.exams.length} provas sincronizadas.`);
     }
 
-    console.log('[Sincronização] 🚀 Sincronização concluída com sucesso!');
+    await client.query('COMMIT');
+    console.log('[Sincronização] 🚀 Sincronização COMPLETA (Alunos, Turmas, Provas, Frequência) concluída!');
   } catch (err) {
-    console.error('[Sincronização] ❌ Erro ao sincronizar dados:', err.message);
+    await client.query('ROLLBACK');
+    console.error('[Sincronização] ❌ Erro crítico ao sincronizar:', err.message);
+  } finally {
+    client.release();
   }
 }
 

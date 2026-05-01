@@ -198,6 +198,10 @@ app.put('/api/school-data', async (req, res) => {
 
     schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
+    
+    // Sincronização em tempo real (JSON -> Relacional)
+    syncJsonToRelationalTables().catch(err => console.error('[Real-time Sync] Erro:', err.message));
+    
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao salvar school_data:', error);
