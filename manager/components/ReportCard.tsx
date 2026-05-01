@@ -132,7 +132,11 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
         const { submissions } = await res.json();
         const subsMap: Record<string, {acertos: number, erros: number}> = {};
         (submissions || []).forEach((s: any) => {
-          subsMap[s.prova_id] = { acertos: s.acertos, erros: s.erros };
+          // Normalização agressiva para garantir o vínculo
+          const pId = String(s.prova_id || '').trim();
+          if (pId) {
+            subsMap[pId] = { acertos: s.acertos, erros: s.erros };
+          }
         });
         setStudentSubmissions(subsMap);
       }
@@ -148,11 +152,19 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
         if (linkedExams.length > 0) {
           linkedExams.forEach(exam => {
-            const existingGrade = dbNotas.find(g => String(g.disciplina_id).trim() === String(subject.id).trim() && String(g.periodo_id).trim() === String(period.id).trim() && String(g.prova_id).trim() === String(exam.id).trim());
+            const existingGrade = dbNotas.find(g => 
+              String(g.disciplina_id).trim() === String(subject.id).trim() && 
+              (String(g.periodo_id).trim() === String(period.id).trim() || String(g.periodo_id).trim() === String(period.name).trim()) && 
+              String(g.prova_id).trim() === String(exam.id).trim()
+            );
             periodGrades[exam.id] = existingGrade ? Number(existingGrade.valor) : '';
           });
         } else {
-          const existingGrade = dbNotas.find(g => String(g.disciplina_id).trim() === String(subject.id).trim() && String(g.periodo_id).trim() === String(period.id).trim() && !g.prova_id);
+          const existingGrade = dbNotas.find(g => 
+            String(g.disciplina_id).trim() === String(subject.id).trim() && 
+            (String(g.periodo_id).trim() === String(period.id).trim() || String(g.periodo_id).trim() === String(period.name).trim()) && 
+            !g.prova_id
+          );
           periodGrades['direct'] = existingGrade ? Number(existingGrade.valor) : '';
         }
         initialGrades[subject.id][period.id] = periodGrades;
@@ -579,29 +591,31 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                                       const maxScore = (exam as any).maxScore ?? 10;
                                       return (
                                         <div key={exam.id} className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 ${isActivity ? 'bg-sky-50/50 border-sky-100' : 'bg-violet-50/50 border-violet-100'}`}>
-                                          <div className="flex-1">
-                                            <div className="flex flex-col">
-                                              <div className="text-sm font-bold text-slate-800 leading-tight mb-1 flex items-center gap-2">
-                                                <span className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-black shrink-0 ${isActivity ? 'bg-sky-200 text-sky-800' : 'bg-violet-200 text-violet-800'}`}>
-                                                  {isActivity ? 'Atividade' : 'Prova'}
-                                                </span>
-                                                {exam.title}
-                                              </div>
-                                              <div className="flex flex-col gap-1">
-                                                {exam.description && (
-                                                  <p className="text-xs text-slate-500 leading-snug pr-2">{exam.description}</p>
-                                                )}
-                                                {studentSubmissions[String(exam.id).trim()] && (
+                                          <div className="flex flex-col">
+                                            <div className="text-sm font-bold text-slate-800 leading-tight mb-1 flex items-center gap-2">
+                                              <span className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-black shrink-0 ${isActivity ? 'bg-sky-200 text-sky-800' : 'bg-violet-200 text-violet-800'}`}>
+                                                {isActivity ? 'Atividade' : 'Prova'}
+                                              </span>
+                                              {exam.title}
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                              {exam.description && (
+                                                <p className="text-xs text-slate-500 leading-snug pr-2">{exam.description}</p>
+                                              )}
+                                              {(() => {
+                                                const stats = studentSubmissions[String(exam.id).trim()];
+                                                if (!stats) return null;
+                                                return (
                                                   <div className="flex gap-2 mt-2">
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                                      {studentSubmissions[String(exam.id).trim()].acertos} Acertos
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                                      <CheckCircle2 size={10} /> {stats.acertos} Acertos
                                                     </span>
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
-                                                      {studentSubmissions[String(exam.id).trim()].erros} Erros
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1">
+                                                      <X size={10} /> {stats.erros} Erros
                                                     </span>
                                                   </div>
-                                                )}
-                                              </div>
+                                                );
+                                              })()}
                                             </div>
                                           </div>
                                           

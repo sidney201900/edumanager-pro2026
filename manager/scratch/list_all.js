@@ -1,17 +1,25 @@
-import pg from 'pg';
-const DATABASE_URL = 'postgresql://edumanager:EduManager2026!Seguro@127.0.0.1:5432/edumanager';
-const pool = new pg.Pool({ connectionString: DATABASE_URL });
 
-async function listAll() {
+import pkg from 'pg';
+const { Pool } = pkg;
+
+const pool = new Pool({
+  connectionString: 'postgresql://postgres:postgres@localhost:5432/edumanager'
+});
+
+async function check() {
   try {
-    const { rows: notas } = await pool.query('SELECT * FROM notas_boletim LIMIT 20');
-    console.log('--- NOTAS NA TABELA ---');
-    console.log(JSON.stringify(notas, null, 2));
-
-    const { rows: subs } = await pool.query('SELECT * FROM provas_submissoes LIMIT 10');
-    console.log('--- SUBMISSÕES NA TABELA ---');
+    console.log('--- SUBMISSÕES NO BANCO ---');
+    const { rows: subs } = await pool.query('SELECT aluno_id, prova_id, acertos, erros FROM provas_submissoes');
     console.log(JSON.stringify(subs, null, 2));
-  } catch (err) { console.log('ERROR:' + err.message); }
-  finally { await pool.end(); }
+
+    console.log('\n--- NOTAS NO BOLETIM ---');
+    const { rows: notas } = await pool.query('SELECT aluno_id, disciplina_id, periodo_id, prova_id, valor FROM notas_boletim');
+    console.log(JSON.stringify(notas, null, 2));
+  } catch (err) {
+    console.error(err);
+  } finally {
+    await pool.end();
+  }
 }
-listAll();
+
+check();
