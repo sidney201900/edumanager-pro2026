@@ -114,10 +114,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     setSelectedStudent(student);
     const initialGrades: Record<string, Record<string, any>> = {};
     
-    // Buscar notas do Postgres
+    // Buscar notas do Postgres (com cache busting)
     let dbNotas: any[] = [];
     try {
-      const resNotas = await fetch(`/api/notas/${student.id}`);
+      const resNotas = await fetch(`/api/notas/${student.id}?t=${new Date().getTime()}`);
       if (resNotas.ok) {
         const json = await resNotas.json();
         dbNotas = json.notas || [];
@@ -127,7 +127,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     }
     
     try {
-      const res = await fetch(`/api/student-submissions/${student.id}`);
+      const res = await fetch(`/api/student-submissions/${student.id}?t=${new Date().getTime()}`);
       if (res.ok) {
         const { submissions } = await res.json();
         const subsMap: Record<string, {acertos: number, erros: number}> = {};
@@ -591,10 +591,14 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                                                 {exam.description && (
                                                   <p className="text-xs text-slate-500 leading-snug pr-2">{exam.description}</p>
                                                 )}
-                                                {studentSubmissions[exam.id] && (
-                                                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider mt-1">
-                                                    <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">{studentSubmissions[exam.id].acertos} Acertos</span>
-                                                    <span className="text-red-500 bg-red-50 px-2 py-0.5 rounded-md">{studentSubmissions[exam.id].erros} Erros</span>
+                                                {studentSubmissions[String(exam.id).trim()] && (
+                                                  <div className="flex gap-2 mt-2">
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                                      {studentSubmissions[String(exam.id).trim()].acertos} Acertos
+                                                    </span>
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
+                                                      {studentSubmissions[String(exam.id).trim()].erros} Erros
+                                                    </span>
                                                   </div>
                                                 )}
                                               </div>

@@ -141,6 +141,9 @@ export default function Avaliacoes() {
       });
 
       const data = await res.json();
+      
+      // Artificial delay of 5 seconds to let the student read the message
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       if (data.success) {
         // Show Success Modal
@@ -148,9 +151,6 @@ export default function Avaliacoes() {
         setModalMsg(`Sua ${typeLabel} foi enviada com sucesso! Clique em OK para ver seu resultado.`);
         setShowModal(true);
         
-        // Wait for user to click OK before showing result? 
-        // No, user wants result. But let's follow the "sent successfully" request.
-        // We'll set a callback to OK button to show result
         setConfirmCallback(() => {
             setResult(data.result);
             setView('result');
@@ -158,7 +158,8 @@ export default function Avaliacoes() {
         });
       } else {
         const errorCode = `ERR-${activeExam.id.substring(0, 4)}-${new Date().getTime().toString().slice(-4)}`;
-        showAppAlert(`Não foi possível enviar sua nota. Tente novamente ou contate o suporte. (Código: ${errorCode})`, 'error');
+        // Use the error message from server if available
+        showAppAlert(data.error || `Não foi possível enviar sua nota. Tente novamente ou contate o suporte. (Código: ${errorCode})`, 'error');
         if (!autoSubmit) setView('listing');
       }
     } catch (err) {
