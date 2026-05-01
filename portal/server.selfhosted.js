@@ -264,9 +264,9 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
     );
 
     const enrichedGrades = grades.map((g) => {
-      const subject = subjects.find((s) => s.id === g.subjectId);
-      const exam = g.examId ? (schoolData.exams || []).find(e => e.id === g.examId) : null;
-      const periodObj = (schoolData.periods || []).find(p => p.id === g.period);
+      const subject = subjects.find((s) => String(s.id) === String(g.subjectId));
+      const exam = g.examId ? (schoolData.exams || []).find(e => String(e.id) === String(g.examId)) : null;
+      const periodObj = (schoolData.periods || []).find(p => String(p.id) === String(g.period));
       
       const submission = g.examId ? submissions.find(s => String(s.prova_id) === String(g.examId)) : null;
 

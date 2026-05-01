@@ -52,7 +52,7 @@ export default function Notas() {
     ? allSubjects 
     : [...new Set(grades.map(g => g.subjectId))].map(id => ({ 
         id, 
-        name: grades.find(g => g.subjectId === id)?.subjectName || id 
+        name: grades.find(g => String(g.subjectId) === String(id))?.subjectName || id 
       }));
 
   // General average logic
@@ -132,7 +132,7 @@ export default function Notas() {
           {displaySubjects.map((subject, idx) => {
             const subjectId = typeof subject === 'string' ? subject : subject.id;
             const subjectName = typeof subject === 'string' ? subject : subject.name;
-            const subjectGrades = grades.filter(g => g.subjectId === subjectId);
+            const subjectGrades = grades.filter(g => String(g.subjectId) === String(subjectId));
             
             return (
               <div key={subjectId} className="glass-card animate-fade-in" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
@@ -142,7 +142,7 @@ export default function Notas() {
                 
                 <div style={{ padding: '1.5rem' }}>
                   {periods.map(period => {
-                    const periodGrades = subjectGrades.filter(g => (g.periodName || g.period) === period);
+                    const periodGrades = subjectGrades.filter(g => String(g.periodName || g.period) === String(period));
                     if (periodGrades.length === 0) return null;
 
                     const periodTotal = periodGrades.reduce((sum, g) => sum + g.value, 0);

@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import type { Exam, ExamSubmission } from '../types';
 import {
   ClipboardList, Clock, ChevronLeft, ChevronRight, Send, CheckCircle2,
-  XCircle, Award, AlertTriangle, Timer, ArrowLeft
+  XCircle, Award, AlertTriangle, Timer, ArrowLeft, Loader2
 } from 'lucide-react';
 import { normalizePhotoUrl } from '../helpers';
 
@@ -40,7 +40,7 @@ export default function Avaliacoes() {
 
   // In-app modal state (replaces native alert/confirm)
   const [modalMsg, setModalMsg] = useState('');
-  const [modalType, setModalType] = useState<'info' | 'error' | 'confirm'>('info');
+  const [modalType, setModalType] = useState<'info' | 'error' | 'confirm' | 'loading'>('info');
   const [showModal, setShowModal] = useState(false);
   const [confirmCallback, setConfirmCallback] = useState<(() => void) | null>(null);
 
@@ -120,6 +120,13 @@ export default function Avaliacoes() {
   const handleSubmit = async (autoSubmit = false) => {
     if (submitting || !activeExam) return;
     setSubmitting(true);
+    
+    const typeLabel = (activeExam as any).evaluationType === 'activity' ? 'atividade' : 'prova';
+    
+    // Show Loading Modal
+    setModalType('loading');
+    setModalMsg(`Enviando sua ${typeLabel}... Por favor, aguarde e não feche esta janela.`);
+    setShowModal(true);
 
     if (timerRef.current) clearInterval(timerRef.current);
 
@@ -136,16 +143,28 @@ export default function Avaliacoes() {
       const data = await res.json();
 
       if (data.success) {
-        setResult(data.result);
-        setView('result');
-        fetchExams();
+        // Show Success Modal
+        setModalType('info');
+        setModalMsg(`Sua ${typeLabel} foi enviada com sucesso! Clique em OK para ver seu resultado.`);
+        setShowModal(true);
+        
+        // Wait for user to click OK before showing result? 
+        // No, user wants result. But let's follow the "sent successfully" request.
+        // We'll set a callback to OK button to show result
+        setConfirmCallback(() => {
+            setResult(data.result);
+            setView('result');
+            fetchExams();
+        });
       } else {
-        showAppAlert(data.error || 'Erro ao enviar prova.', 'error');
+        const errorCode = `ERR-${activeExam.id.substring(0, 4)}-${new Date().getTime().toString().slice(-4)}`;
+        showAppAlert(`Não foi possível enviar sua nota. Tente novamente ou contate o suporte. (Código: ${errorCode})`, 'error');
         if (!autoSubmit) setView('listing');
       }
     } catch (err) {
       console.error(err);
-      showAppAlert('Erro de conexão ao enviar prova.', 'error');
+      const errorCode = `CONN-ERR-${new Date().getTime().toString().slice(-4)}`;
+      showAppAlert(`Erro de conexão ao enviar prova. Verifique sua internet. (Código: ${errorCode})`, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -445,14 +464,17 @@ export default function Avaliacoes() {
                   ? <XCircle size={28} color="var(--color-danger)" />
                   : modalType === 'confirm'
                   ? <AlertTriangle size={28} color="var(--color-warning)" />
+                  : modalType === 'loading'
+                  ? <Loader2 size={28} color="var(--color-primary)" className="animate-spin" />
                   : <CheckCircle2 size={28} color="var(--color-primary)" />
                 }
               </div>
-              <p style={{ fontSize: '0.9rem', fontWeight: 500, marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              <p style={{ fontSize: '0.9rem', fontWeight: 500, marginBottom: modalType === 'loading' ? 0 : '1.5rem', lineHeight: 1.5 }}>
                 {modalMsg}
               </p>
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                {modalType === 'confirm' ? (
+              {modalType !== 'loading' && (
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                  {modalType === 'confirm' ? (
                   <>
                     <button
                       onClick={() => setShowModal(false)}
@@ -492,8 +514,9 @@ export default function Avaliacoes() {
                   >
                     OK
                   </button>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

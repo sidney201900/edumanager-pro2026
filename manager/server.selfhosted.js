@@ -306,8 +306,8 @@ app.get('/api/student-submissions/:studentId', async (req, res) => {
   try {
     const { studentId } = req.params;
     const { rows } = await pool.query(
-      'SELECT prova_id, acertos, erros FROM provas_submissoes WHERE aluno_id = $1',
-      [studentId]
+      'SELECT prova_id as "prova_id", acertos, erros FROM provas_submissoes WHERE aluno_id = $1',
+      [String(studentId)]
     );
     res.json({ submissions: rows });
   } catch (err) {
@@ -321,7 +321,12 @@ app.get('/api/student-submissions/:studentId', async (req, res) => {
 // ============================================================
 app.get('/api/notas/:alunoId', async (req, res) => {
   try {
-    const notas = await getNotasByAluno(req.params.alunoId);
+    const { rows: dbNotas } = await pool.query(
+      'SELECT id, aluno_id as "aluno_id", disciplina_id as "disciplina_id", periodo_id as "periodo_id", prova_id as "prova_id", valor as "valor" FROM notas_boletim WHERE aluno_id = $1',
+      [req.params.alunoId]
+    );
+    // Garantir cast numérico para evitar erro de .toFixed no frontend
+    const notas = dbNotas.map(n => ({ ...n, valor: Number(n.valor) }));
     res.json({ notas });
   } catch (err) {
     console.error('Erro ao buscar notas do aluno:', err);

@@ -144,7 +144,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
       initialGrades[subject.id] = {};
       periods.forEach(period => {
         const periodGrades: any = {};
-        const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.periodId === period.id && e.status === 'published');
+        const linkedExams = (data.exams || []).filter(e => String(e.subjectId) === String(subject.id) && String(e.periodId) === String(period.id) && e.status === 'published');
 
         if (linkedExams.length > 0) {
           linkedExams.forEach(exam => {
@@ -518,7 +518,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                 <div className="space-y-6">
                   {subjects.map(subject => {
                     // Encontrar provas vinculadas a esta disciplina
-                    const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.status === 'published');
+                    const linkedExams = (data.exams || []).filter(e => String(e.subjectId) === String(subject.id) && e.status === 'published');
 
                     return (
                       <div key={subject.id} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-4">
@@ -529,7 +529,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                           </div>
                           <div className="flex items-center gap-2">
                             {(() => {
-                              const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.status === 'published');
+                              const linkedExams = (data.exams || []).filter(e => String(e.subjectId) === String(subject.id) && e.status === 'published');
                               const provasCount = linkedExams.filter(e => (e as any).evaluationType !== 'activity').length;
                               const atividadesCount = linkedExams.filter(e => (e as any).evaluationType === 'activity').length;
                               return (
@@ -561,7 +561,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                         </div>
                         <div className="flex flex-col gap-6">
                           {periods.map(period => {
-                            const linkedExams = (data.exams || []).filter(e => e.subjectId === subject.id && e.periodId === period.id && e.status === 'published');
+                            const linkedExams = (data.exams || []).filter(e => String(e.subjectId) === String(subject.id) && String(e.periodId) === String(period.id) && e.status === 'published');
                             const periodGrades = studentGrades[subject.id]?.[period.id] || {};
                             const periodSum: number = Object.values(periodGrades).reduce<number>((a, b: any) => a + (b !== '' ? Number(b) : 0), 0);
 
