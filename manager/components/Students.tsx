@@ -40,6 +40,11 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
+  // Academic History State
+  const [historyGrades, setHistoryGrades] = useState<any[]>([]);
+  const [historySubmissions, setHistorySubmissions] = useState<Record<string, {acertos: number, erros: number}>>({});
+  const [isLoadingAcademic, setIsLoadingAcademic] = useState(false);
+  
   // Form State
   const [formData, setFormData] = useState<Partial<Student>>({
     name: '',
@@ -98,6 +103,43 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
       if (clearDeepLink) clearDeepLink();
     }
   }, [deepLinkStudentId, deepLinkClassId, data.students]);
+
+  // Fetch Academic History when modal opens
+  useEffect(() => {
+    if (viewingStudentHistory) {
+      const fetchAcademic = async () => {
+        setIsLoadingAcademic(true);
+        try {
+          const t = new Date().getTime();
+          const [resGrades, resSubs] = await Promise.all([
+            fetch(`/api/notas/${viewingStudentHistory.id}?t=${t}`),
+            fetch(`/api/student-submissions/${viewingStudentHistory.id}?t=${t}`)
+          ]);
+
+          if (resGrades.ok) {
+            const json = await resGrades.json();
+            setHistoryGrades(json.notas || []);
+          }
+          if (resSubs.ok) {
+            const { submissions } = await resSubs.json();
+            const subsMap: Record<string, {acertos: number, erros: number}> = {};
+            (submissions || []).forEach((s: any) => {
+              subsMap[String(s.prova_id).trim()] = { acertos: s.acertos, erros: s.erros };
+            });
+            setHistorySubmissions(subsMap);
+          }
+        } catch (e) {
+          console.error("Erro ao buscar histórico acadêmico:", e);
+        } finally {
+          setIsLoadingAcademic(false);
+        }
+      };
+      fetchAcademic();
+    } else {
+      setHistoryGrades([]);
+      setHistorySubmissions({});
+    }
+  }, [viewingStudentHistory]);
 
   // Helper para normalizar URLs de fotos (vacina contra cache antigo)
   const normalizePhotoUrl = (url?: string) => {
@@ -1935,6 +1977,80 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
                     </tbody>
                   </table>
                 </div>
+              </section>
+  
+              {/* Academic Performance Section */}
+              <section>
+                <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-violet-500 rounded-full"></span> Desempenho Acadêmico
+                </h4>
+                
+                {isLoadingAcademic ? (
+                  <div className="bg-white border border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center gap-3">
+                    <Loader2 size={32} className="animate-spin text-indigo-500" />
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Carregando Notas...</p>
+                  </div>
+                ) : historyGrades.length > 0 ? (
+                  <div className="space-y-4">
+                    {data.subjects?.map(subject => {
+                      const subjectGrades = historyGrades.filter(g => String(g.disciplina_id).trim() === String(subject.id).trim());
+                      if (subjectGrades.length === 0) return null;
+
+                      return (
+                        <div key={subject.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                          <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+                            <h5 className="text-sm font-black text-slate-800">{subject.name}</h5>
+                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">Média: {(subjectGrades.reduce((a, b) => a + Number(b.valor), 0) / subjectGrades.length).toFixed(1)}</span>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            {subjectGrades.map((grade: any) => {
+                              const exam = data.exams?.find(e => String(e.id).trim() === String(grade.prova_id).trim());
+                              const period = data.periods?.find(p => String(p.id).trim() === String(grade.periodo_id).trim());
+                              const stats = historySubmissions[String(grade.prova_id).trim()];
+                              const isActivity = exam?.evaluationType === 'activity';
+
+                              return (
+                                <div key={grade.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 bg-slate-50/50 rounded-lg border border-slate-100">
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${isActivity ? 'bg-sky-100 text-sky-700' : 'bg-violet-100 text-violet-700'}`}>
+                                        {isActivity ? 'Atividade' : 'Prova'}
+                                      </span>
+                                      <span className="text-xs font-bold text-slate-700">{exam?.title || 'Avaliação'}</span>
+                                      <span className="text-[10px] text-slate-400">• {period?.name || 'Período'}</span>
+                                    </div>
+                                    {stats && (
+                                      <div className="flex gap-2">
+                                        <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-1">
+                                          <CheckCircle size={10} /> {stats.acertos} Acertos
+                                        </span>
+                                        <span className="text-[9px] font-bold text-rose-500 flex items-center gap-1">
+                                          <X size={10} /> {stats.erros} Erros
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                    <div className="text-right">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Nota</p>
+                                      <p className={`text-lg font-black ${Number(grade.valor) >= 7 ? 'text-emerald-600' : Number(grade.valor) >= 5 ? 'text-amber-500' : 'text-rose-600'}`}>
+                                        {Number(grade.valor).toFixed(1)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200 border-dashed rounded-xl p-8 text-center">
+                    <p className="text-sm text-slate-400 font-medium">Nenhum desempenho acadêmico registrado ainda.</p>
+                  </div>
+                )}
               </section>
 
               {/* Payments Section */}
