@@ -134,11 +134,7 @@ export default function Frequencia() {
     );
   }
 
-  // Stats calculation (based on total course schedule vs presences)
-  const totalCourseLessons = lessons.length;
-  const presences = attendance.filter(a => a.type === 'presence').length;
-  const absences = attendance.filter(a => a.type === 'absence').length;
-  const percentage = totalCourseLessons > 0 ? Math.round((presences / totalCourseLessons) * 100) : 0;
+
 
   // Merge and Categorize
   const processedItems = lessons.map(lesson => {
@@ -173,6 +169,15 @@ export default function Frequencia() {
       isCompleted
     };
   });
+
+  // Stats calculation (aligned with list logic)
+  const totalCourseLessons = lessons.length;
+  const presences = attendance.filter(a => a.type === 'presence' || a.verified === true).length;
+  const absences = attendance.filter(a => a.type === 'absence' && !a.verified && !a.justification).length;
+  const justified = attendance.filter(a => !!a.justification).length;
+  const completedLessons = processedItems.filter(item => item.isCompleted && item.lesson.status !== 'cancelled').length;
+  const pendingLessons = processedItems.filter(item => !item.isCompleted && item.lesson.status !== 'cancelled').length;
+  const percentage = totalCourseLessons > 0 ? Math.round((presences / totalCourseLessons) * 100) : 0;
 
   const activeItems = processedItems.filter(item => !item.isCompleted && item.lesson.status !== 'cancelled').sort((a, b) => {
     const dateA = parseLessonDateTime(a.lesson.date, a.lesson.startTime, 0);
@@ -319,10 +324,27 @@ export default function Frequencia() {
         </div>
 
         <div className="glass-card" style={{ padding: '1.25rem', textAlign: 'center' }}>
-          <p style={{ fontSize: '2rem', fontWeight: 700 }}>{totalCourseLessons}</p>
+          <p style={{ fontSize: '2rem', fontWeight: 700, color: '#f59e0b' }}>{justified}</p>
           <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontWeight: 500, marginTop: 4 }}>
-            TOTAL DE AULAS DO CURSO
+            JUSTIFICATIVAS
           </p>
+        </div>
+
+        <div className="glass-card" style={{ padding: '1.25rem', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <p style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-text)' }}>{totalCourseLessons}</p>
+          <p style={{ fontSize: '0.65rem', color: 'var(--color-text-secondary)', fontWeight: 600, marginBottom: '0.75rem', letterSpacing: '0.05em' }}>
+            TOTAL DE AULAS
+          </p>
+          <div style={{ display: 'flex', borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem', gap: '0.5rem' }}>
+             <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-success)' }}>{completedLessons}</p>
+                <p style={{ fontSize: '0.6rem', color: 'var(--color-text-secondary)', fontWeight: 500 }}>CONCLUÍDAS</p>
+             </div>
+             <div style={{ flex: 1, borderLeft: '1px solid var(--glass-border)' }}>
+                <p style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-primary)' }}>{pendingLessons}</p>
+                <p style={{ fontSize: '0.6rem', color: 'var(--color-text-secondary)', fontWeight: 500 }}>A CONCLUIR</p>
+             </div>
+          </div>
         </div>
       </div>
 

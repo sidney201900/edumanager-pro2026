@@ -290,13 +290,16 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/portal/frequencia
+// GET /api/portal/frequencia (Relacional)
 app.get('/api/portal/frequencia', authMiddleware, async (req, res) => {
   try {
-    const schoolData = await getSchoolData();
-    const attendance = (schoolData.attendance || []).filter((a) => a.studentId === req.user.studentId);
-    res.json({ attendance });
+    const { rows: dbAttendance } = await pool.query(
+      'SELECT id, aluno_id as "studentId", turma_id as "classId", data as "date", foto as "photo", verificado as "verified", tipo as "type", justificativa as "justification", justificativa_aceita as "justificationAccepted" FROM frequencias WHERE aluno_id = $1',
+      [req.user.studentId]
+    );
+    res.json({ attendance: dbAttendance });
   } catch (err) {
+    console.error('Frequencia error:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
@@ -354,6 +357,18 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
     schoolData.notifications = notifications;
     schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
+
+    // Sincronização Imediata com Tabela Relacional
+    try {
+      await pool.query(
+        `INSERT INTO frequencias (id, aluno_id, turma_id, data, verificado, tipo, justificativa)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO UPDATE SET justificativa = EXCLUDED.justificativa, justificativa_aceita = FALSE`,
+        [attendance[recordIndex].id, req.user.studentId, student?.classId || '', fullDateStr, false, 'absence', justificationPayload]
+      );
+    } catch (dbErr) {
+      console.error('[Portal:Justificação] Erro ao sincronizar tabela relacional:', dbErr.message);
+    }
 
     res.json({ message: 'Justificativa enviada com sucesso', record: attendance[recordIndex] });
   } catch (err) {

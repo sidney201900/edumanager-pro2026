@@ -286,6 +286,10 @@ export async function syncJsonToRelationalTables() {
     console.log('[Sincronização] 🔄 Iniciando espelhamento TOTAL (Modo Blindado)...');
     await client.query('BEGIN');
 
+    // Garantir colunas na tabela frequencias
+    await client.query(`ALTER TABLE frequencias ADD COLUMN IF NOT EXISTS justificativa TEXT`);
+    await client.query(`ALTER TABLE frequencias ADD COLUMN IF NOT EXISTS justificativa_aceita BOOLEAN DEFAULT FALSE`);
+
     // 1. Sincronizar Cursos
     if (data.courses && Array.isArray(data.courses)) {
       for (const c of data.courses) {
@@ -399,12 +403,13 @@ export async function syncJsonToRelationalTables() {
       for (const f of data.attendance) {
         if (!f.id || !f.studentId || !f.classId) continue;
         await client.query(
-          `INSERT INTO frequencias (id, aluno_id, turma_id, data, foto, verificado, tipo)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `INSERT INTO frequencias (id, aluno_id, turma_id, data, foto, verificado, tipo, justificativa, justificativa_aceita)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT (id) DO UPDATE SET 
             aluno_id = EXCLUDED.aluno_id, turma_id = EXCLUDED.turma_id, data = EXCLUDED.data,
-            foto = EXCLUDED.foto, verificado = EXCLUDED.verificado, tipo = EXCLUDED.tipo`,
-          [f.id, f.studentId, f.classId, f.date, f.photo || '', f.verified || false, f.type || 'presence']
+            foto = EXCLUDED.foto, verificado = EXCLUDED.verificado, tipo = EXCLUDED.tipo,
+            justificativa = EXCLUDED.justificativa, justificativa_aceita = EXCLUDED.justificativa_aceita`,
+          [f.id, f.studentId, f.classId, f.date, f.photo || '', f.verified || false, f.type || 'presence', f.justification || null, f.justificationAccepted || false]
         );
       }
     }

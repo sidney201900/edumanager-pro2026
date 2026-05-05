@@ -5,15 +5,15 @@
 > NUNCA execute `git add`, `git commit` ou `git push` sem que o USUÁRIO solicite explicitamente. Alterações devem ser feitas nos arquivos, mas o envio ao repositório remoto é uma ação exclusiva do usuário. Aguarde sempre o comando direto do usuário para realizar qualquer operação de versionamento.
 > **ESTA REGRA É INVIOLÁVEL E O ASSISTENTE JÁ FALHOU NELA ANTERIORMENTE. NÃO REPITA O ERRO.**
 
-- [x] **Unificação de Rede (Infra):** Redes unificadas no `docker-compose.yml`, garantindo conectividade.
-- [x] **Correção de Constraints (DB):** Removidas fkeys impeditivas na tabela `provas_submissoes`.
-- [x] **Sincronização Automática (JSON -> Tabelas):** Implementada função de espelhamento total (Alunos, Turmas, Provas, Frequência, Períodos e Notas). **VERIFICADO.**
-- [x] **Correção da Média Geral (Boletim):** O sistema agora busca médias reais diretamente do PostgreSQL, eliminando o bug do `0.00` no Manager.
-- [x] **Persistência Inteligente de Notas:** Avaliações agora permanecem no Boletim se o aluno já as realizou, independente de estarem em Rascunho ou Publicadas.
-- [x] **Cadeado de Retentativa (Portal):** Implementada trava visual e lógica que impede ou permite que alunos refaçam provas no portal conforme configuração do professor.
-- [x] **Duplicação de Avaliações:** Nova ferramenta para clonar provas/atividades entre turmas diferentes com um clique.
-- [!] **Incidente de Workflow (01/05/2026):** O assistente realizou um `git push` não autorizado. A regra foi reforçada.
-- [ ] Próximo Passo: Monitorar o desempenho das consultas nas tabelas relacionais à medida que o volume de submissões aumenta.
+- [x] **Correção Estrutural (Boletim):** Resolvida divergência de tabelas entre `notas` e `notas_boletim` no Manager, restaurando a exibição de médias.
+- [x] **Frequência Analítica (Portal):** Cards de estatísticas (Presença/Falta) agora usam a mesma lógica da lista (considerando `verified` e justificativas).
+- [x] **Nova Métrica de Justificativas:** Adicionado card exclusivo no Portal para acompanhamento de justificativas enviadas.
+- [x] **Detalhamento de Progresso de Aulas:** Card de "Total de Aulas" agora exibe aulas concluídas e aulas a concluir.
+- [x] **Migração Relacional de Frequência:** Portal migrado para ler frequências diretamente da tabela SQL `frequencias`. **VERIFICADO.**
+- [x] **Sincronização Bidirecional (Frequência):** Garantido que justificativas enviadas pelo Portal atualizem instantaneamente a tabela relacional via `ON CONFLICT`.
+- [x] **Auto-Migração de Esquema:** Implementada lógica de auto-correção de colunas (`ALTER TABLE`) na rotina de sincronização do banco de dados (`database.js`).
+- [ ] Próximo Passo: Expandir a migração relacional para o módulo de "Minhas Aulas" no Portal para manter a consistência arquitetural.
+
 
 
 ## 📅 Histórico Anterior (22/04/2026)

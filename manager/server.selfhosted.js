@@ -327,7 +327,7 @@ app.get('/api/student-submissions/:studentId', async (req, res) => {
 app.get('/api/notas/:alunoId', async (req, res) => {
   try {
     const { rows: dbNotas } = await pool.query(
-      'SELECT id, aluno_id as "aluno_id", disciplina_id as "disciplina_id", periodo_id as "periodo_id", prova_id as "prova_id", valor as "valor" FROM notas WHERE TRIM(aluno_id) = TRIM($1)',
+      'SELECT id, aluno_id as "aluno_id", disciplina_id as "disciplina_id", periodo_id as "periodo_id", prova_id as "prova_id", valor as "valor" FROM notas_boletim WHERE TRIM(aluno_id) = TRIM($1)',
       [String(req.params.alunoId).trim()]
     );
     // Garantir cast numérico para evitar erro de .toFixed no frontend
