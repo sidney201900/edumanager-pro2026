@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SchoolData } from '../types';
 import { useDialog } from '../DialogContext';
-import { MessageSquare, Save, Info, Settings, Send, Clock, AlertTriangle, FileText, CheckCircle, Cake, X, Power } from 'lucide-react';
+import { MessageSquare, Save, Info, Settings, Send, Clock, AlertTriangle, FileText, CheckCircle, Cake, X, Power, BookOpen } from 'lucide-react';
 
 interface MessagesProps {
   data: SchoolData;
@@ -16,6 +16,7 @@ const defaultTemplates = {
   cobrancaAtualizada: "Olá {nome}, o boleto de {descricao} foi atualizado. Segue a nova versão:",
   boletoAVencer: "Olá {nome}, lembramos que sua cobrança referente a {descricao} no valor de R$ {valor} vencerá em {vencimento}. Segue o PDF abaixo:",
   felizAniversario: "Olá {nome}, a equipe da {escola} passa para te desejar um Feliz Aniversário! Muita saúde, paz e conquistas neste novo ciclo! 🎂🎈",
+  novaAvaliacao: "Olá {nome}, uma nova {tipo_avaliacao} ({titulo_avaliacao}) de {materia} foi publicada no portal do aluno. Acesse e realize o mais breve possível!",
   automationRules: {
     sendOnDueDate: true,
     sendDaysAfter: '1',
@@ -70,7 +71,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
   
   // Modal de Edição de Modelo
   const [editingTemplate, setEditingTemplate] = useState<{
-    key: keyof typeof defaultTemplates | 'felizAniversario', 
+    key: keyof typeof defaultTemplates | 'felizAniversario' | 'novaAvaliacao', 
     label: string, 
     desc: string, 
     color: string, 
@@ -141,7 +142,8 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
       cobrancaCancelada: normalizeLineBreaks(templates.cobrancaCancelada),
       cobrancaAtualizada: normalizeLineBreaks(templates.cobrancaAtualizada),
       boletoAVencer: normalizeLineBreaks(templates.boletoAVencer),
-      felizAniversario: normalizeLineBreaks(templates.felizAniversario)
+      felizAniversario: normalizeLineBreaks(templates.felizAniversario),
+      novaAvaliacao: normalizeLineBreaks(templates.novaAvaliacao || "Olá {nome}, uma nova {tipo_avaliacao} ({titulo_avaliacao}) de {materia} foi publicada no portal do aluno. Acesse e realize o mais breve possível!")
     };
     updateData({ messageTemplates: normalizedTemplates });
     showAlert('Sucesso', 'Configurações de mensagens salvas com sucesso!', 'success');
@@ -260,7 +262,8 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
     { key: 'cobrancaCancelada', label: 'Cobrança Cancelada', desc: 'Enviado quando o boleto for cancelado no sistema.', color: 'slate', icon: AlertTriangle, vars: ['{nome}', '{matricula}', '{descricao}', '{escola}'] },
     { key: 'cobrancaAtualizada', label: 'Cobrança Atualizada', desc: 'Enviado quando houver edição/atualização da cobrança.', color: 'amber', icon: Settings, vars: ['{nome}', '{matricula}', '{descricao}', '{valor}', '{vencimento}', '{link_boleto}', '{escola}'] },
     { key: 'boletoAVencer', label: 'Boleto a Vencer', desc: 'Aviso preventivo enviado dias antes do vencimento.', color: 'indigo', icon: Clock, vars: ['{nome}', '{matricula}', '{descricao}', '{valor}', '{vencimento}', '{link_boleto}', '{escola}'] },
-    { key: 'felizAniversario', label: 'Feliz Aniversário', desc: 'Mensagem carinhosa para os aniversariantes do dia.', color: 'pink', icon: Cake, vars: ['{nome}', '{escola}'] }
+    { key: 'felizAniversario', label: 'Feliz Aniversário', desc: 'Mensagem carinhosa para os aniversariantes do dia.', color: 'pink', icon: Cake, vars: ['{nome}', '{escola}'] },
+    { key: 'novaAvaliacao', label: 'Nova Avaliação', desc: 'Enviado ao aluno quando uma prova ou atividade é publicada.', color: 'indigo', icon: BookOpen, vars: ['{nome}', '{matricula}', '{tipo_avaliacao}', '{titulo_avaliacao}', '{materia}', '{escola}'] }
   ];
 
   const insertVariable = (variable: string) => {

@@ -170,11 +170,29 @@ export default function Frequencia() {
     };
   });
 
-  // Stats calculation (aligned with list logic)
-  const totalCourseLessons = lessons.length;
-  const presences = attendance.filter(a => a.type === 'presence').length;
-  const absences = attendance.filter(a => a.type === 'absence' && !a.justification).length;
-  const justified = attendance.filter(a => a.type === 'absence' && !!a.justification).length;
+  // Stats calculation (UNIFIED with list logic)
+  let presences = 0;
+  let absences = 0;
+  let justified = 0;
+
+  processedItems.forEach(item => {
+    const { lesson, attendances: atts, isCompleted } = item;
+    if (lesson.status === 'cancelled') return; // Apenas canceladas ficam fora
+
+    const isPresent = atts.some(a => a.type === 'presence' || a.verified === true);
+    const activeJustification = atts.find(a => !!a.justification);
+    const hasJustification = !!activeJustification;
+
+    if (isPresent) {
+      presences++;
+    } else if (hasJustification) {
+      justified++;
+    } else if (isCompleted || parseLessonDateTime(lesson.date || '', '23:59:59') < now.getTime()) {
+      absences++;
+    }
+  });
+
+  const totalCourseLessons = lessons.filter(l => l.status !== 'cancelled').length;
   const completedLessons = processedItems.filter(item => item.isCompleted && item.lesson.status !== 'cancelled').length;
   const pendingLessons = processedItems.filter(item => !item.isCompleted && item.lesson.status !== 'cancelled').length;
   const percentage = totalCourseLessons > 0 ? Math.round((presences / totalCourseLessons) * 100) : 0;
@@ -405,6 +423,7 @@ export default function Frequencia() {
               <thead>
                 <tr>
                   <th>Data</th>
+                  <th>Turma</th>
                   <th>Horário</th>
                   <th>Status de Aula</th>
                   <th>Presença</th>
@@ -436,6 +455,11 @@ export default function Frequencia() {
                       backgroundColor: isJustificationAccepted ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
                     }}>
                       <td>{formatDateFull(lesson.date)}</td>
+                      <td>
+                        <span style={{ fontSize: '0.8125rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                          {(lesson as any).className || '—'}
+                        </span>
+                      </td>
                       <td>
                         {typeof lesson.startTime === 'string' ? (
                           <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
@@ -519,7 +543,7 @@ export default function Frequencia() {
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-info)', fontWeight: 500 }}>
                             <Clock size={16} /> Justificativa Pendente
                           </span>
-                        ) : (isCompleted || parseLessonDateTime(lesson.date || '', '23:59:59') < now.getTime()) ? (
+                        ) : (isCompleted || parseLessonDateTime(lesson.date || '', '23:59:59') < now.getTime()) && !isCancelled ? (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-danger)' }}>
                             <XCircle size={16} /> Falta
                           </span>

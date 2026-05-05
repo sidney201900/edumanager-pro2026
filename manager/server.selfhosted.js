@@ -808,6 +808,122 @@ app.post('/api/gerar_cobranca', async (req, res) => {
 });
 
 // ============================================================
+// Notificar Alunos sobre Avaliação
+// ============================================================
+app.post('/api/exames/notificar', async (req, res) => {
+  const { examId } = req.body;
+  if (!examId) return res.status(400).json({ error: 'ID do exame obrigatório.' });
+
+  try {
+    const appData = await getSchoolData();
+    const exam = (appData.exams || []).find(e => e.id === examId);
+    if (!exam) return res.status(404).json({ error: 'Exame não encontrado.' });
+
+    const classObj = (appData.classes || []).find(c => c.id === exam.classId);
+    if (!classObj) return res.status(404).json({ error: 'Turma não encontrada.' });
+
+    const subjectObj = (appData.subjects || []).find(s => s.id === exam.subjectId);
+    const materia = subjectObj ? subjectObj.name : 'sua disciplina';
+
+    const alunos = (appData.students || []).filter(s => s.classId === classObj.id && s.status === 'active');
+    if (alunos.length === 0) return res.status(400).json({ error: 'Nenhum aluno ativo nesta turma.' });
+
+    const evoConfig = appData.evolutionConfig;
+    const msgTemplate = (appData.messageTemplates?.novaAvaliacao) || "Olá {nome}, uma nova {tipo_avaliacao} ({titulo_avaliacao}) de {materia} foi publicada no portal do aluno. Acesse e realize o mais breve possível!";
+
+    const tipoAvaliacao = exam.evaluationType === 'activity' ? 'atividade' : 'prova';
+
+    // 1. Inserir notificações no PostgreSQL (Sino do Portal)
+    for (const aluno of alunos) {
+      await pool.query(
+        `INSERT INTO notificacoes (aluno_id, titulo, mensagem, lida) VALUES ($1, $2, $3, false)`,
+        [aluno.id, "Nova Avaliação Disponível!", `A ${tipoAvaliacao} "${exam.title}" já está disponível no seu portal.`]
+      );
+    }
+
+    // 2. Disparo de WhatsApp em Background
+    if (evoConfig?.apiUrl && evoConfig?.apiKey && evoConfig?.instanceName) {
+      // Background async function
+      (async () => {
+        for (let i = 0; i < alunos.length; i++) {
+          const aluno = alunos[i];
+          const telefone = aluno.phone || aluno.guardianPhone;
+          if (!telefone) continue;
+
+          let cleanPhone = telefone.replace(/\D/g, '');
+          if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
+
+          const msg = msgTemplate
+            .replace(/{nome}/g, aluno.name.split(' ')[0])
+            .replace(/{matricula}/g, aluno.enrollmentNumber || '—')
+            .replace(/{tipo_avaliacao}/g, tipoAvaliacao)
+            .replace(/{titulo_avaliacao}/g, exam.title)
+            .replace(/{materia}/g, materia)
+            .replace(/{escola}/g, appData.profile?.name || 'nossa escola');
+
+          try {
+            const url = `${evoConfig.apiUrl.replace(/\/$/, '')}/message/sendText/${evoConfig.instanceName}`;
+            await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoConfig.apiKey }, body: JSON.stringify({ number: cleanPhone, text: msg }) });
+          } catch (error) { 
+            console.error(`[Notificar Avaliação] Erro ${aluno.name}:`, error.message); 
+          }
+          if (i < alunos.length - 1) await new Promise(r => setTimeout(r, Math.floor(Math.random() * 30000) + 15000));
+        }
+      })();
+    }
+
+    return res.status(200).json({ success: true, message: 'Notificações criadas e disparos iniciados.' });
+  } catch (error) {
+    console.error('Erro ao notificar exames:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// Notificações do Sistema (Painel Admin)
+// ============================================================
+app.get('/api/notificacoes/admin', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, aluno_id as "studentId", titulo as title, mensagem as message, lida as read, anexo as attachment, created_at as "createdAt" FROM notificacoes WHERE aluno_id = $1 ORDER BY created_at DESC',
+      ['admin']
+    );
+    res.json({ notifications: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/notificacoes/ler/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE notificacoes SET lida = true WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/notificacoes/limpar-lidas', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM notificacoes WHERE aluno_id = $1 AND lida = true', ['admin']);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/notificacoes/remover-anexo/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE notificacoes SET anexo = NULL WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
 // Disparo em Massa
 // ============================================================
 app.post('/api/enviar-massa', (req, res) => {

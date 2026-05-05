@@ -14,23 +14,42 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
   const [isOpen, setIsOpen] = useState(false);
   const [viewingAttachment, setViewingAttachment] = useState<string | null>(null);
   const [notifWithAttachment, setNotifWithAttachment] = useState<Notification | null>(null);
+  const [adminNotifs, setAdminNotifs] = useState<Notification[]>([]);
   const prevCountRef = useRef<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const handleDeleteAttachment = () => {
+  const handleDeleteAttachment = async () => {
     if (!notifWithAttachment) return;
-    
-    const updatedNotifs = (data.notifications || []).map(n => 
-      n.id === notifWithAttachment.id ? { ...n, attachment: undefined } : n
-    );
-    
-    updateData({ notifications: updatedNotifs });
-    dbService.saveData({ ...data, notifications: updatedNotifs });
-    setViewingAttachment(null);
-    setNotifWithAttachment(null);
+    try {
+      const resp = await fetch(`/api/notificacoes/remover-anexo/${notifWithAttachment.id}`, { method: 'PUT' });
+      if (resp.ok) {
+        setAdminNotifs(prev => prev.map(n => n.id === notifWithAttachment.id ? { ...n, attachment: undefined } : n));
+        setViewingAttachment(null);
+        setNotifWithAttachment(null);
+      }
+    } catch (e) {
+      console.error('Erro ao excluir anexo:', e);
+    }
   };
 
-  const adminNotifs = (data.notifications || []).filter(n => n.studentId === 'admin').sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const fetchNotifications = async () => {
+    try {
+      const resp = await fetch('/api/notificacoes/admin');
+      if (resp.ok) {
+        const d = await resp.json();
+        setAdminNotifs(d.notifications);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar notificações admin:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000); // Polling 30s
+    return () => clearInterval(interval);
+  }, []);
+
   const unreadCount = adminNotifs.filter(n => !n.read).length;
 
   // Som de notificação quando chega uma nova
@@ -73,18 +92,26 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
     }
   };
 
-  const handleMarkAsRead = (id: string) => {
-    const updatedAll = (data.notifications || []).map(n => 
-      n.id === id ? { ...n, read: true } : n
-    );
-    updateData({ notifications: updatedAll });
-    dbService.saveData({ ...data, notifications: updatedAll });
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      const resp = await fetch(`/api/notificacoes/ler/${id}`, { method: 'PUT' });
+      if (resp.ok) {
+        setAdminNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      }
+    } catch (e) {
+      console.error('Erro ao marcar como lida:', e);
+    }
   };
 
-  const handleClearRead = () => {
-    const others = (data.notifications || []).filter(n => n.studentId !== 'admin' || (n.studentId === 'admin' && !n.read));
-    updateData({ notifications: others });
-    dbService.saveData({ ...data, notifications: others });
+  const handleClearRead = async () => {
+    try {
+      const resp = await fetch('/api/notificacoes/limpar-lidas', { method: 'DELETE' });
+      if (resp.ok) {
+        setAdminNotifs(prev => prev.filter(n => !n.read));
+      }
+    } catch (e) {
+      console.error('Erro ao limpar lidas:', e);
+    }
   };
 
   // Aceitar justificativa diretamente pela notificação
@@ -104,12 +131,10 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
       const updatedAttendance = (data.attendance || []).map(a => 
         a.id === matchedAbsence.id ? { ...a, justificationAccepted: true } : a
       );
-      const updatedNotifs = (data.notifications || []).map(n => 
-        n.id === notif.id ? { ...n, read: true } : n
-      );
       
-      updateData({ attendance: updatedAttendance, notifications: updatedNotifs });
-      dbService.saveData({ ...data, attendance: updatedAttendance, notifications: updatedNotifs });
+      updateData({ attendance: updatedAttendance });
+      dbService.saveData({ ...data, attendance: updatedAttendance });
+      handleMarkAsRead(notif.id);
     } else {
       // Se não encontrou pendentes, apenas marca como lida
       handleMarkAsRead(notif.id);

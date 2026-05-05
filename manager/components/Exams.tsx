@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { SchoolData, Exam, Question } from '../types';
-import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X, RefreshCw, Lock, Unlock, AlertTriangle, Copy } from 'lucide-react';
+import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X, RefreshCw, Lock, Unlock, AlertTriangle, Copy, Bell } from 'lucide-react';
 import { uploadExamImage } from '../services/supabase';
 import { useDialog } from '../DialogContext';
 import { dbService } from '../services/dbService';
@@ -45,7 +45,8 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
       status: 'draft',
       questions: [],
       evaluationType: 'exam',
-      maxScore: 10
+      maxScore: 10,
+      allowRetake: false
     } as any);
     setCurrentView('builder');
   };
@@ -181,6 +182,33 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
         event.target.value = ''; // Reset file input
       }
     }
+  };
+
+  const handleNotifyStudents = async (exam: Exam) => {
+    const classObj = (data.classes || []).find(c => c.id === exam.classId);
+    if (!classObj) return;
+    
+    showConfirm(
+      'Notificar Turma',
+      `Deseja enviar WhatsApp e notificação no portal para os alunos da turma ${classObj.name} informando sobre esta avaliação?`,
+      async () => {
+        try {
+          const resp = await fetch('/api/exames/notificar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ examId: exam.id })
+          });
+          const resData = await resp.json();
+          if (resp.ok) {
+            showAlert('Sucesso', 'Notificações enviadas com sucesso!', 'success');
+          } else {
+            showAlert('Erro', resData.error || 'Erro ao notificar turma.', 'error');
+          }
+        } catch (e) {
+          showAlert('Erro', 'Erro de conexão.', 'error');
+        }
+      }
+    );
   };
 
   const handleSave = (status: 'draft' | 'published') => {
@@ -601,6 +629,13 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                       title="Duplicar para outra turma"
                     >
                       <Copy size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleNotifyStudents(exam)}
+                      className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                      title="Notificar Turma"
+                    >
+                      <Bell size={18} />
                     </button>
                     <button
                       onClick={() => handleDeleteExam(exam.id)}

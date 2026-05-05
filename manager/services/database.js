@@ -366,7 +366,10 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 2. Sincronizar Disciplinas (Subjects)
+    // Garantir colunas de refação em provas
+    await client.query('ALTER TABLE provas ADD COLUMN IF NOT EXISTS permitir_refacao BOOLEAN DEFAULT FALSE');
+
+    // 1. Sincronizar Disciplinas (Subjects)
     if (data.subjects && Array.isArray(data.subjects)) {
       for (const sub of data.subjects) {
         if (!sub.id || !sub.name) continue;
@@ -447,12 +450,13 @@ export async function syncJsonToRelationalTables() {
       for (const e of data.exams) {
         if (!e.id || !e.title) continue;
         await client.query(
-          `INSERT INTO provas (id, turma_id, disciplina_id, periodo_id, titulo, duracao_minutos, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `INSERT INTO provas (id, turma_id, disciplina_id, periodo_id, titulo, duracao_minutos, status, permitir_refacao)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            ON CONFLICT (id) DO UPDATE SET 
             turma_id = EXCLUDED.turma_id, disciplina_id = EXCLUDED.disciplina_id, periodo_id = EXCLUDED.periodo_id,
-            titulo = EXCLUDED.titulo, duracao_minutos = EXCLUDED.duracao_minutos, status = EXCLUDED.status`,
-          [e.id, e.classId || null, e.subjectId || null, e.periodId || null, e.title, e.durationMinutes || 60, e.status || 'draft']
+            titulo = EXCLUDED.titulo, duracao_minutos = EXCLUDED.duracao_minutos, status = EXCLUDED.status,
+            permitir_refacao = EXCLUDED.permitir_refacao`,
+          [e.id, e.classId || null, e.subjectId || null, e.periodId || null, e.title, e.durationMinutes || 60, e.status || 'draft', e.allowRetake || false]
         ).catch(err => console.warn(`[Sync:Provas] Erro na prova ${e.id}:`, err.message));
       }
     }

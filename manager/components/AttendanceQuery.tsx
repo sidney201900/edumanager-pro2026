@@ -484,11 +484,16 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
             <div className="flex-1 overflow-y-auto">
               {(() => {
                 const now = new Date();
+                const studentClassIds = new Set([
+                  selectedClass.id,
+                  ...(data.attendance || []).filter(a => a.studentId === selectedStudent.id).map(a => a.classId)
+                ].filter(Boolean));
+
                 const actualRecords = (data.attendance || [])
-                  .filter(a => a.studentId === selectedStudent.id && a.classId === selectedClass.id);
+                  .filter(a => a.studentId === selectedStudent.id);
                 
                 const classLessonsRaw = (data.lessons || [])
-                  .filter(l => l.classId === selectedClass.id && l.status !== 'cancelled');
+                  .filter(l => studentClassIds.has(l.classId) && l.status !== 'cancelled');
 
                 const deduplicatedLessons = classLessonsRaw.filter((lesson, index, self) =>
                   index === self.findIndex((t) => (
@@ -515,7 +520,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                     record = {
                       id: `v-${lesson.id}`,
                       studentId: selectedStudent.id,
-                      classId: selectedClass.id,
+                      classId: lesson.classId || selectedClass.id,
                       date: `${lesson.date}T${lesson.startTime || '00:00'}:00`,
                       type: isFinished ? 'absence' : 'awaiting',
                       isVirtual: true,
@@ -577,6 +582,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                         <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold tracking-wider sticky top-0">
                           <tr>
                             <th className="px-6 py-4 text-sm">Data</th>
+                            <th className="px-6 py-4 text-sm">Turma</th>
                             <th className="px-6 py-4 text-sm">Início (Aula)</th>
                             <th className="px-6 py-4 text-sm">Término (Aula)</th>
                             <th className="px-6 py-4 text-sm">Registro</th>
@@ -611,6 +617,9 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                               <tr key={record.id} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="px-6 py-4 text-base font-bold text-slate-800">
                                   {recordDate.toLocaleDateString('pt-BR')}
+                                </td>
+                                <td className="px-6 py-4 text-sm font-bold text-slate-600">
+                                  {data.classes.find(c => c.id === lesson?.classId)?.name || '—'}
                                 </td>
                                 <td className="px-6 py-4 text-sm font-bold text-indigo-600">
                                   <div className="flex items-center gap-1.5">

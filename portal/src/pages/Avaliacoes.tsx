@@ -178,6 +178,86 @@ export default function Avaliacoes() {
   const getSubmission = (examId: string) =>
     submissions.find(s => s.exam_id === examId);
 
+  const renderAppModal = () => {
+    if (!showModal) return null;
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '1rem',
+      }}>
+        <div className="glass-card animate-scale-in" style={{
+          maxWidth: 400, width: '100%', padding: '2rem', textAlign: 'center',
+          background: 'var(--color-surface)',
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%', margin: '0 auto 1rem',
+            background: modalType === 'error' ? 'var(--bg-danger-alpha)' : modalType === 'confirm' ? 'var(--bg-warning-alpha)' : 'var(--bg-primary-alpha)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {modalType === 'error'
+              ? <XCircle size={28} color="var(--color-danger)" />
+              : modalType === 'confirm'
+              ? <AlertTriangle size={28} color="var(--color-warning)" />
+              : modalType === 'loading'
+              ? <RefreshCw size={28} color="var(--color-primary)" className="animate-spin" />
+              : <CheckCircle2 size={28} color="var(--color-primary)" />
+            }
+          </div>
+          <p style={{ fontSize: '0.9rem', fontWeight: 500, marginBottom: modalType === 'loading' ? 0 : '1.5rem', lineHeight: 1.5 }}>
+            {modalMsg}
+          </p>
+          {modalType !== 'loading' && (
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              {modalType === 'confirm' ? (
+              <>
+                <button
+                  onClick={() => setShowModal(false)}
+                  style={{
+                    flex: 1, padding: '0.65rem', borderRadius: 10,
+                    border: '1px solid var(--glass-border)',
+                    background: 'var(--color-surface-light)',
+                    color: 'var(--color-text)', fontWeight: 600,
+                    cursor: 'pointer', fontSize: '0.85rem',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => { setShowModal(false); confirmCallback?.(); }}
+                  style={{
+                    flex: 1, padding: '0.65rem', borderRadius: 10,
+                    border: 'none',
+                    background: 'var(--color-success)',
+                    color: 'white', fontWeight: 700,
+                    cursor: 'pointer', fontSize: '0.85rem',
+                  }}
+                >
+                  Sim, Confirmar
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowModal(false)}
+                style={{
+                  width: '100%', padding: '0.65rem', borderRadius: 10,
+                  border: 'none',
+                  background: 'var(--color-primary)',
+                  color: 'white', fontWeight: 700,
+                  cursor: 'pointer', fontSize: '0.85rem',
+                }}
+              >
+                OK
+              </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ==========================================
   // RENDER: Listing
   // ==========================================
@@ -190,6 +270,7 @@ export default function Avaliacoes() {
             <div key={i} className="skeleton" style={{ height: 200, borderRadius: 16 }} />
           ))}
         </div>
+        {renderAppModal()}
       </div>
     );
   }
@@ -444,83 +525,7 @@ export default function Avaliacoes() {
           )}
         </div>
 
-        {/* In-App Modal */}
-        {showModal && (
-          <div style={{
-            position: 'fixed', inset: 0, zIndex: 99999,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '1rem',
-          }}>
-            <div className="glass-card animate-scale-in" style={{
-              maxWidth: 400, width: '100%', padding: '2rem', textAlign: 'center',
-              background: 'var(--color-surface)',
-            }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: '50%', margin: '0 auto 1rem',
-                background: modalType === 'error' ? 'var(--bg-danger-alpha)' : modalType === 'confirm' ? 'var(--bg-warning-alpha)' : 'var(--bg-primary-alpha)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {modalType === 'error'
-                  ? <XCircle size={28} color="var(--color-danger)" />
-                  : modalType === 'confirm'
-                  ? <AlertTriangle size={28} color="var(--color-warning)" />
-                  : modalType === 'loading'
-                  ? <RefreshCw size={28} color="var(--color-primary)" className="animate-spin" />
-                  : <CheckCircle2 size={28} color="var(--color-primary)" />
-                }
-              </div>
-              <p style={{ fontSize: '0.9rem', fontWeight: 500, marginBottom: modalType === 'loading' ? 0 : '1.5rem', lineHeight: 1.5 }}>
-                {modalMsg}
-              </p>
-              {modalType !== 'loading' && (
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                  {modalType === 'confirm' ? (
-                  <>
-                    <button
-                      onClick={() => setShowModal(false)}
-                      style={{
-                        flex: 1, padding: '0.65rem', borderRadius: 10,
-                        border: '1px solid var(--glass-border)',
-                        background: 'var(--color-surface-light)',
-                        color: 'var(--color-text)', fontWeight: 600,
-                        cursor: 'pointer', fontSize: '0.85rem',
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={() => { setShowModal(false); confirmCallback?.(); }}
-                      style={{
-                        flex: 1, padding: '0.65rem', borderRadius: 10,
-                        border: 'none',
-                        background: 'var(--color-success)',
-                        color: 'white', fontWeight: 700,
-                        cursor: 'pointer', fontSize: '0.85rem',
-                      }}
-                    >
-                      Sim, Finalizar
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => setShowModal(false)}
-                    style={{
-                      width: '100%', padding: '0.65rem', borderRadius: 10,
-                      border: 'none',
-                      background: 'var(--color-primary)',
-                      color: 'white', fontWeight: 700,
-                      cursor: 'pointer', fontSize: '0.85rem',
-                    }}
-                  >
-                    OK
-                  </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {renderAppModal()}
       </div>
     );
   }
@@ -626,6 +631,7 @@ export default function Avaliacoes() {
             <ArrowLeft size={18} /> Voltar às Atividades e Provas
           </button>
         </div>
+        {renderAppModal()}
       </div>
     );
   }
@@ -854,6 +860,7 @@ export default function Avaliacoes() {
           })}
         </div>
       )}
+      {renderAppModal()}
     </div>
   );
 }

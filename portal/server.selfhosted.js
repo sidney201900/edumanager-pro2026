@@ -339,22 +339,28 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
       recordIndex = attendance.length - 1;
     }
 
-    notifications.push({
-      id: `notif-${Date.now()}`,
-      studentId: 'admin',
-      fromStudentId: req.user.studentId, // Identificador para navegação no Manager
-      title: 'Nova Justificativa de Falta',
-      message: JSON.stringify({
-        text: `${student?.name || 'Aluno'} enviou uma justificativa para a aula de ${date}.`,
-        motivo: motivo.trim()
-      }),
-      attachment: publicUrl,
-      read: false,
-      createdAt: new Date().toISOString(),
-    });
+    // Inserir notificação para o ADMIN na tabela SQL
+    try {
+      await pool.query(
+        `INSERT INTO notificacoes (aluno_id, titulo, mensagem, anexo, lida, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [
+          'admin', 
+          'Nova Justificativa de Falta', 
+          JSON.stringify({
+            text: `${student?.name || 'Aluno'} enviou uma justificativa para a aula de ${date}.`,
+            motivo: motivo.trim(),
+            fromStudentId: req.user.studentId
+          }),
+          publicUrl,
+          false
+        ]
+      );
+    } catch (notifErr) {
+      console.error('[Portal:Justificação] Erro ao salvar notificação SQL:', notifErr.message);
+    }
 
     schoolData.attendance = attendance;
-    schoolData.notifications = notifications;
     schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
 
@@ -417,6 +423,16 @@ app.get('/api/portal/aulas', authMiddleware, async (req, res) => {
     const student = (schoolData.students || []).find(s => s.id === req.user.studentId);
     if (!student) return res.json({ lessons: [] });
 
+    const { rows: turmasData } = await pool.query(
+      'SELECT DISTINCT turma_id FROM frequencias WHERE aluno_id = $1',
+      [req.user.studentId]
+    );
+    
+    const studentClassIds = new Set([
+      student.classId,
+      ...turmasData.map(r => r.turma_id)
+    ].filter(Boolean));
+
     const parseDateHelper = (dStr) => {
       if (!dStr) return 0;
       const parts = dStr.substring(0, 10).split(/[-/]/);
@@ -426,7 +442,11 @@ app.get('/api/portal/aulas', authMiddleware, async (req, res) => {
     };
 
     const lessons = (schoolData.lessons || [])
-      .filter(l => l.classId === student.classId)
+      .filter(l => studentClassIds.has(l.classId))
+      .map(l => {
+         const classObj = (schoolData.classes || []).find(c => c.id === l.classId);
+         return { ...l, className: classObj ? classObj.name : 'Turma' };
+      })
       .sort((a, b) => parseDateHelper(a.date) - parseDateHelper(b.date));
 
     res.json({ lessons });
@@ -438,12 +458,16 @@ app.get('/api/portal/aulas', authMiddleware, async (req, res) => {
 // GET /api/portal/notificacoes
 app.get('/api/portal/notificacoes', authMiddleware, async (req, res) => {
   try {
-    const schoolData = await getSchoolData();
-    const notifications = (schoolData.notifications || [])
-      .filter(n => n.studentId === req.user.studentId)
-      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-    res.json({ notifications });
+    const { rows } = await pool.query(
+      `SELECT id, titulo as title, mensagem as message, lida as read, anexo as attachment, created_at as "createdAt"
+       FROM notificacoes 
+       WHERE aluno_id = $1 
+       ORDER BY created_at DESC`,
+      [req.user.studentId]
+    );
+    res.json({ notifications: rows });
   } catch (err) {
+    console.error('Erro ao buscar notificações:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
@@ -452,16 +476,13 @@ app.get('/api/portal/notificacoes', authMiddleware, async (req, res) => {
 app.put('/api/portal/notificacoes/ler/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const schoolData = await getSchoolData();
-    const notifications = schoolData.notifications || [];
-    const idx = notifications.findIndex(n => n.id === id && n.studentId === req.user.studentId);
-    if (idx === -1) return res.status(404).json({ error: 'Notificação não encontrada' });
-    notifications[idx] = { ...notifications[idx], read: true };
-    schoolData.notifications = notifications;
-    schoolData.lastUpdated = new Date().toISOString();
-    await saveSchoolData(schoolData);
+    await pool.query(
+      'UPDATE notificacoes SET lida = true WHERE id = $1 AND aluno_id = $2',
+      [id, req.user.studentId]
+    );
     res.json({ success: true });
   } catch (err) {
+    console.error('Erro ao marcar notificação como lida:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
@@ -470,14 +491,13 @@ app.put('/api/portal/notificacoes/ler/:id', authMiddleware, async (req, res) => 
 app.delete('/api/portal/notificacoes/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const schoolData = await getSchoolData();
-    schoolData.notifications = (schoolData.notifications || []).filter(
-      n => !(n.id === id && n.studentId === req.user.studentId)
+    await pool.query(
+      'DELETE FROM notificacoes WHERE id = $1 AND aluno_id = $2',
+      [id, req.user.studentId]
     );
-    schoolData.lastUpdated = new Date().toISOString();
-    await saveSchoolData(schoolData);
     res.json({ success: true });
   } catch (err) {
+    console.error('Erro ao deletar notificação:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });

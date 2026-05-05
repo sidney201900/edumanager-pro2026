@@ -13,6 +13,10 @@
 - [x] **Sincronização Bidirecional (Frequência):** Garantido que justificativas enviadas pelo Portal atualizem instantaneamente a tabela relacional via `ON CONFLICT`.
 - [x] **Auto-Migração de Esquema:** Implementada lógica de auto-correção de colunas (`ALTER TABLE`) na rotina de sincronização do banco de dados (`database.js`).
 - [x] **Fechamento Automático de Pauta:** Implementada rotina `processAutoAbsences` que gera registros físicos de falta para aulas passadas sem registro, garantindo consistência entre Portal e Manager.
+- [x] **Sistema de Notificações Unificado (SQL):** Migração completa do sistema de notificações (sino) para a tabela relacional `notificacoes`, eliminando a dependência do JSON legado.
+- [x] **Alertas de Avaliações:** Implementado disparo automático de notificações SQL e WhatsApp (via Evolution API) para turmas inteiras ao publicar exames/atividades.
+- [x] **Justificativas Relacionais:** Notificações de justificativas de falta enviadas pelo Portal agora são salvas diretamente no PostgreSQL (aluno_id = 'admin').
+- [x] **Intelligent Polling Admin:** O Admin Bell agora utiliza polling de 30s para sincronização em tempo real com o banco SQL, garantindo que novos alertas apareçam instantaneamente.
 - [ ] Próximo Passo: Expandir a migração relacional para o módulo de "Minhas Aulas" no Portal para manter a consistência arquitetural.
 
 
@@ -38,6 +42,9 @@
 - [x] **Storage Explorer (MinIO):** Criada interface de gerenciamento de arquivos que permite navegar por buckets (pastas), visualizar (lightbox), baixar e excluir arquivos físicos individualmente.
 - [x] **Database Data Viewer:** Implementada a visualização de registros (linhas) diretamente no Database Explorer, com suporte a redimensionamento automático de colunas e truncamento de dados longos.
 - [x] **Controle de Refação (Retake Policy):** Adicionado botão de cadeado nos cards de Avaliações para permitir ou bloquear que alunos refaçam provas no portal (Regra 15).
+*   **Conclusão da Refação de Provas:** Implementada a sincronização do campo `allowRetake` (cadeado) com o PostgreSQL e corrigida a inicialização de novas provas.
+*   **Unificação de Estatísticas de Frequência:** Sincronizada a lógica dos cards de estatística com a lista visual no Portal, garantindo que aulas reagendadas contem como faltas/presenças e que os números batam 100%.
+*   **Garantia de Integridade:** As notas de refação agora sobrepõem corretamente os registros anteriores no banco de dados.
 - [x] **UI de Avaliações:** Padronização dos botões de edição ("Editar Prova" vs "Editar Atividade") e adição de botão de exclusão rápida direto no card.
 - [x] **Correção de Vínculo de Notas:** Garantido que o `examId` seja sempre salvo nas notas geradas pelo Portal para preenchimento automático do Boletim Escolar no Manager.
 - [x] **Fix Memory Leak:** Removido `pool.on('error')` que estava dentro da rota `PUT /api/school-data`, acumulando listeners a cada salvamento.
