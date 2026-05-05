@@ -12,6 +12,7 @@
 - [x] **Migração Relacional de Frequência:** Portal migrado para ler frequências diretamente da tabela SQL `frequencias`. **VERIFICADO.**
 - [x] **Sincronização Bidirecional (Frequência):** Garantido que justificativas enviadas pelo Portal atualizem instantaneamente a tabela relacional via `ON CONFLICT`.
 - [x] **Auto-Migração de Esquema:** Implementada lógica de auto-correção de colunas (`ALTER TABLE`) na rotina de sincronização do banco de dados (`database.js`).
+- [x] **Fechamento Automático de Pauta:** Implementada rotina `processAutoAbsences` que gera registros físicos de falta para aulas passadas sem registro, garantindo consistência entre Portal e Manager.
 - [ ] Próximo Passo: Expandir a migração relacional para o módulo de "Minhas Aulas" no Portal para manter a consistência arquitetural.
 
 

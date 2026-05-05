@@ -172,9 +172,9 @@ export default function Frequencia() {
 
   // Stats calculation (aligned with list logic)
   const totalCourseLessons = lessons.length;
-  const presences = attendance.filter(a => a.type === 'presence' || a.verified === true).length;
-  const absences = attendance.filter(a => a.type === 'absence' && !a.verified && !a.justification).length;
-  const justified = attendance.filter(a => !!a.justification).length;
+  const presences = attendance.filter(a => a.type === 'presence').length;
+  const absences = attendance.filter(a => a.type === 'absence' && !a.justification).length;
+  const justified = attendance.filter(a => a.type === 'absence' && !!a.justification).length;
   const completedLessons = processedItems.filter(item => item.isCompleted && item.lesson.status !== 'cancelled').length;
   const pendingLessons = processedItems.filter(item => !item.isCompleted && item.lesson.status !== 'cancelled').length;
   const percentage = totalCourseLessons > 0 ? Math.round((presences / totalCourseLessons) * 100) : 0;
