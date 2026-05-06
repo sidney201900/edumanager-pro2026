@@ -31,6 +31,7 @@
 - [x] **Regra de Registro Único:** Portal agora exibe apenas a primeira batida válida por aula, eliminando duplicidade visual de biometria.
 - [x] **Sincronia de Justificativas:** Ajustada a contagem matemática do Portal para contabilizar faltas justificadas apenas após o aceite do Admin.
 - [x] **Fix Dashboard Crash:** Corrigido erro de "tela preta" no Dashboard causado por acesso inseguro a propriedades nulas durante falhas de API.
+- [x] **Blindagem de Conversão ISO:** Resolvida falha crítica de `RangeError: Invalid time value` em todo o Portal. Agora o sistema ignora datas corrompidas ou inválidas em vez de quebrar a interface inteira.
 - [ ] Próximo Passo: Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
 
 

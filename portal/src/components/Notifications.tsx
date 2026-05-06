@@ -45,7 +45,8 @@ export default function Notifications() {
             message: `Identificamos ${atrasadas.length} ${atrasadas.length === 1 ? 'parcela atrasada' : 'parcelas atrasadas'}. Regularize agora para evitar suspensões.`,
             read: false,
             createdAt: new Date().toISOString(),
-            type: 'alert'
+            type: 'alert',
+            studentId: ''
           };
           allNotifs = [overdueNotif, ...allNotifs];
         }

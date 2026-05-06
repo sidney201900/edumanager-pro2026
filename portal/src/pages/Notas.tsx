@@ -213,7 +213,7 @@ export default function Notas() {
                           {periodGrades.map((grade) => {
                             const isActivity = grade.evaluationType === 'activity';
                             const maxScore = grade.maxScore ?? 10;
-                            const isDirect = !grade.examId;
+                            const isDirect = !(grade as any).examId;
 
                             return (
                               <div key={grade.id} style={{ 

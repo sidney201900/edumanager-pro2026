@@ -757,9 +757,9 @@ export default function Avaliacoes() {
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 4, paddingRight: isDone ? 90 : 0 }}>
                     {exam.title}
                   </h3>
-                  {exam.description && (
+                  {(exam as any).description && (
                     <p style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-                      {exam.description}
+                      {(exam as any).description}
                     </p>
                   )}
                 </div>

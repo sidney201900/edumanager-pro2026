@@ -83,8 +83,9 @@ export default function Dashboard() {
       if (lesson.status === 'cancelled') return;
       validLessonsCount++;
 
-      const lessonFullISO = new Date(parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00')).toISOString();
-      const lessonStartMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00');
+      const lessonMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00');
+      const lessonFullISO = !isNaN(lessonMs) ? new Date(lessonMs).toISOString() : '';
+      const lessonStartMs = lessonMs;
       const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '00:00:00', lesson.endTime ? 0 : 60);
 
       const atts = data.attendance.filter(a => {
@@ -422,7 +423,7 @@ export default function Dashboard() {
             {frequencyPercent}%
           </h3>
           <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginTop: '0.375rem' }}>
-            {presences} presença{presences !== 1 ? 's' : ''} de {totalCourseLessons} aula{totalCourseLessons !== 1 ? 's' : ''} do curso
+            {presencesCount} presença{presencesCount !== 1 ? 's' : ''} de {validLessonsCount} aula{validLessonsCount !== 1 ? 's' : ''} do curso
           </p>
           <div style={{
             marginTop: '0.75rem', height: 6, borderRadius: 3,
