@@ -32,6 +32,8 @@
 - [x] **Sincronia de Justificativas:** Ajustada a contagem matemática do Portal para contabilizar faltas justificadas apenas após o aceite do Admin.
 - [x] **Fix Dashboard Crash:** Corrigido erro de "tela preta" no Dashboard causado por acesso inseguro a propriedades nulas durante falhas de API.
 - [x] **Blindagem de Conversão ISO:** Resolvida falha crítica de `RangeError: Invalid time value` em todo o Portal. Agora o sistema ignora datas corrompidas ou inválidas em vez de quebrar a interface inteira.
+- [x] **Resolução de ReferenceError:** Identificada e corrigida a causa raiz da tela preta persistente (variáveis não declaradas após refatoração da pauta).
+- [x] **Auditoria TypeScript:** Realizada varredura total com `tsc` no Portal, corrigindo todos os erros de tipagem remanescentes em Notas e Avaliações para garantir estabilidade absoluta.
 - [ ] Próximo Passo: Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
 
 

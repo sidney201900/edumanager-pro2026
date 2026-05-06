@@ -53,4 +53,5 @@
 24. **Grading Arithmetic Logic**: All grade averages (Period, Subject, and General) MUST be calculated as arithmetic means (Average of Means). Summing grades for a final period result is prohibited to ensure consistency between Portal and Manager.
 25. **SQL Date Handling**: When fetching timestamps from PostgreSQL to be matched with JSON dates/ISO strings in the frontend, ALWAYS use `TO_CHAR(column, 'YYYY-MM-DD"T"HH24:MI:SS')` in the SQL query to prevent Node.js timezone shifts from corrupting string-based matching logic.
 26. **SQL-First Architecture Pattern**: New features or module refactors SHOULD prioritize 100% SQL persistence (using `notas_boletim` as a template). The legacy JSON `school_data` should be treated as secondary or deprecated for these modules, ensuring real-time consistency between Manager and Portal.
+27. **Safe Rendering Principle (Portal)**: All property accesses on dynamic objects (like `data` or `student`) MUST use optional chaining (`?.`). Avoid using undeclared variables copied from other modules; always perform a `tsc` check in the portal before committing to prevent "White Screen of Death" crashes.
 
