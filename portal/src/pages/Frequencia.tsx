@@ -611,9 +611,7 @@ export default function Frequencia() {
                         ) : canJustify ? (
                           <button
                             onClick={() => {
-                              const lMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00');
-                              if (isNaN(lMs)) return;
-                              const timestamp = new Date(lMs).toISOString();
+                              const timestamp = `${lesson.date}T${lesson.startTime || '00:00'}:00`;
                               openJustifyModal(timestamp);
                             }}
                             style={{
@@ -719,9 +717,7 @@ export default function Frequencia() {
                         return (isNaN(msB) ? 0 : msB) - (isNaN(msA) ? 0 : msA);
                       })
                       .map(l => {
-                        const lMs = parseLessonDateTime(l.date, l.startTime || '00:00:00');
-                        if (isNaN(lMs)) return null;
-                        const ts = new Date(lMs).toISOString();
+                        const ts = `${l.date}T${l.startTime || '00:00'}:00`;
                         return (
                           <option key={l.id} value={ts}>
                             {formatDateFull(l.date)}{l.startTime ? ` — ${l.startTime.substring(0, 5)}` : ''}{l.endTime ? ` às ${l.endTime.substring(0, 5)}` : ''}
