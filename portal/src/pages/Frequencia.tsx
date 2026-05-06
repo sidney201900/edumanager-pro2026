@@ -150,24 +150,31 @@ export default function Frequencia() {
     const lessonStartMs = lessonMs;
     const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '00:00:00', lesson.endTime ? 0 : 60);
 
-    // No Manager, ele procura o primeiro registro válido
-    const att = attendance.find(a => {
+    // Pega todos os registros válidos na janela de tempo
+    const allAtts = attendance.filter(a => {
       if (!a.date || typeof a.date !== 'string') return false;
-      
-      // 1. Exact Match (Including Manager DB fallback format)
       if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00` || a.date === lessonFullISO) return true;
-
       const attMs = new Date(a.date).getTime();
       const presenceStartWindow = lessonStartMs - 30 * 60000;
-
-      // 2. Window Match (Matches Manager Logic: 30 mins before until end of lesson)
       return attMs >= presenceStartWindow && attMs <= lessonEndMs;
     });
     
+    // Prioridade de seleção para o status da aula:
+    // 1. Presença
+    // 2. Justificativa
+    // 3. Qualquer outro (Falta/Aguardando)
+    let bestRecord = allAtts.find(a => a.type === 'presence' || (!a.type && !a.isVirtual) || a.verified === true);
+    if (!bestRecord) {
+      bestRecord = allAtts.find(a => !!a.justification);
+    }
+    if (!bestRecord && allAtts.length > 0) {
+      bestRecord = allAtts[0];
+    }
+
     const { isInProgress, isCompleted } = getLessonTimeStatus(lesson, now);
     return { 
       lesson, 
-      attendances: att ? [att] : [], // Simulando o comportamento do manager (apenas 1 registro)
+      attendances: bestRecord ? [bestRecord] : [], // Mantém 1 registro para alinhar com Manager
       isInProgress,
       isCompleted
     };
@@ -179,18 +186,20 @@ export default function Frequencia() {
   let justified = 0;
 
   processedItems.forEach(item => {
-    const { lesson, attendances: atts, isCompleted } = item;
-    if (lesson.status === 'cancelled') return; // Apenas canceladas ficam fora
+    const { lesson, attendances: atts } = item;
+    if (lesson.status === 'cancelled') return;
 
-    const isPresent = atts.some(a => a.type === 'presence' || a.verified === true);
-    const activeJustification = atts.find(a => !!a.justification);
-    const hasJustification = !!activeJustification;
+    const record = atts[0];
+    const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
 
-    if (isPresent) {
-      presences++;
-    } else if (activeJustification?.justificationAccepted) {
-      justified++;
-    } else if (isCompleted || parseLessonDateTime(lesson.date || '', '23:59:59') < now.getTime()) {
+    if (record) {
+      if (record.type === 'absence') {
+        if (record.justificationAccepted) justified++;
+        else absences++;
+      } else if (record.type === 'presence' || (!record.type && !record.isVirtual) || record.verified) {
+        presences++;
+      }
+    } else if (now > lessonEnd) {
       absences++;
     }
   });
@@ -540,11 +549,11 @@ export default function Frequencia() {
                             <CheckCircle2 size={16} /> Presente
                           </span>
                         ) : isJustificationAccepted ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b', fontWeight: 600 }}>
-                            <AlertTriangle size={16} /> Falta Justificada
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-success)', fontWeight: 600 }}>
+                            <CheckCircle2 size={16} /> Falta Justificada
                           </span>
                         ) : hasJustification ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-info)', fontWeight: 500 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b', fontWeight: 500 }}>
                             <Clock size={16} /> Justificativa Pendente
                           </span>
                         ) : (isCompleted || parseLessonDateTime(lesson.date || '', '23:59:59') < now.getTime()) && !isCancelled ? (
@@ -595,7 +604,7 @@ export default function Frequencia() {
                       </td>
                       <td>
                         {justText ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', color: isJustificationAccepted ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', color: isJustificationAccepted ? 'var(--color-success)' : '#f59e0b', fontWeight: isJustificationAccepted ? 600 : 500 }}>
                             <FileText size={14} color="currentColor" />
                             {isJustificationAccepted ? 'Justificativa Aceita' : 'Em Análise'}
                           </span>
