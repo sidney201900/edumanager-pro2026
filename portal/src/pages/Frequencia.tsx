@@ -136,13 +136,21 @@ export default function Frequencia() {
 
 
 
+  // Deduplicar aulas exatamente como no Manager
+  const deduplicatedLessons = lessons.filter((lesson, index, self) =>
+    index === self.findIndex((t) => (
+      t.date === lesson.date && t.startTime === lesson.startTime
+    ))
+  );
+
   // Merge and Categorize
-  const processedItems = lessons.map(lesson => {
+  const processedItems = deduplicatedLessons.map(lesson => {
     const lessonFullISO = new Date(parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00')).toISOString();
     const lessonStartMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00');
     const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '00:00:00', lesson.endTime ? 0 : 60);
 
-    const atts = attendance.filter(a => {
+    // No Manager, ele procura o primeiro registro válido
+    const att = attendance.find(a => {
       if (!a.date || typeof a.date !== 'string') return false;
       
       // 1. Exact Match (Including Manager DB fallback format)
@@ -158,7 +166,7 @@ export default function Frequencia() {
     const { isInProgress, isCompleted } = getLessonTimeStatus(lesson, now);
     return { 
       lesson, 
-      attendances: atts,
+      attendances: att ? [att] : [], // Simulando o comportamento do manager (apenas 1 registro)
       isInProgress,
       isCompleted
     };
@@ -179,14 +187,14 @@ export default function Frequencia() {
 
     if (isPresent) {
       presences++;
-    } else if (hasJustification) {
+    } else if (activeJustification?.justificationAccepted) {
       justified++;
     } else if (isCompleted || parseLessonDateTime(lesson.date || '', '23:59:59') < now.getTime()) {
       absences++;
     }
   });
 
-  const totalCourseLessons = lessons.filter(l => l.status !== 'cancelled').length;
+  const totalCourseLessons = deduplicatedLessons.filter(l => l.status !== 'cancelled').length;
   const completedLessons = processedItems.filter(item => item.isCompleted && item.lesson.status !== 'cancelled').length;
   const pendingLessons = processedItems.filter(item => !item.isCompleted && item.lesson.status !== 'cancelled').length;
   const percentage = totalCourseLessons > 0 ? Math.round((presences / totalCourseLessons) * 100) : 0;
@@ -206,7 +214,7 @@ export default function Frequencia() {
   const displayItems = activeTab === 'scheduled' ? activeItems : historyItems;
 
   // Collect lessons available for justification modal dropdown
-  const justifiableLessons = lessons.filter(l => {
+  const justifiableLessons = deduplicatedLessons.filter(l => {
     if (l.status === 'cancelled') return false;
     
     // Check window (uses new 24h before/after logic)

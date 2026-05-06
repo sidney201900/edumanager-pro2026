@@ -52,4 +52,5 @@
 23. **Soft Delete Policy (Lixeira)**: Evaluations (exams/activities) MUST NOT be hard-deleted to preserve grade history. Use the `isDeleted` flag to hide them from students and active management views, keeping them accessible in the "Lixeira" for restoration and ensuring reference integrity in the Report Card.
 24. **Grading Arithmetic Logic**: All grade averages (Period, Subject, and General) MUST be calculated as arithmetic means (Average of Means). Summing grades for a final period result is prohibited to ensure consistency between Portal and Manager.
 25. **SQL Date Handling**: When fetching timestamps from PostgreSQL to be matched with JSON dates/ISO strings in the frontend, ALWAYS use `TO_CHAR(column, 'YYYY-MM-DD"T"HH24:MI:SS')` in the SQL query to prevent Node.js timezone shifts from corrupting string-based matching logic.
+26. **SQL-First Architecture Pattern**: New features or module refactors SHOULD prioritize 100% SQL persistence (using `notas_boletim` as a template). The legacy JSON `school_data` should be treated as secondary or deprecated for these modules, ensuring real-time consistency between Manager and Portal.
 

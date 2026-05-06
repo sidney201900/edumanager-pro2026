@@ -26,7 +26,12 @@
 - [x] **Blindagem de Fuso Horário (Postgres):** Rota de frequência do portal atualizada para usar `TO_CHAR` no SQL, eliminando deslocamentos de horas causados pela conversão UTC automática do driver.
 - [x] **Unificação de Janela de Presença:** Portal e Manager agora utilizam a mesma janela de 30 minutos de tolerância para correlacionar presenças e faltas às aulas.
 - [x] **Sincronia de Estatísticas (Portal):** O cálculo de porcentagem no Dashboard do Portal agora usa o mesmo motor lógico da página de Frequência, garantindo números idênticos.
-- [ ] Próximo Passo: Expandir a migração relacional para o módulo de "Minhas Aulas" no Portal para manter a consistência arquitetural.
+- [x] **Consolidação do Modelo Relacional (Notas):** Confirmado que o módulo de Notas/Boletim é o primeiro 100% SQL, servindo de template para futuras migrações. O JSON `school_data.grades` foi oficialmente substituído pela tabela `notas_boletim`.
+- [x] **Unificação de Pauta (Deduplicação):** Implementado filtro de deduplicação de aulas no Portal (`Frequencia.tsx` e `Dashboard.tsx`) para ignorar aulas conflitantes, igualando os totais aos do Admin.
+- [x] **Regra de Registro Único:** Portal agora exibe apenas a primeira batida válida por aula, eliminando duplicidade visual de biometria.
+- [x] **Sincronia de Justificativas:** Ajustada a contagem matemática do Portal para contabilizar faltas justificadas apenas após o aceite do Admin.
+- [x] **Fix Dashboard Crash:** Corrigido erro de "tela preta" no Dashboard causado por acesso inseguro a propriedades nulas durante falhas de API.
+- [ ] Próximo Passo: Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
 
 
 ## 📅 Histórico Anterior (06/05/2026)

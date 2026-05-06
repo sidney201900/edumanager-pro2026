@@ -64,8 +64,8 @@ export default function Dashboard() {
     );
   }
 
-  const pendingPayments = data?.payments.filter(p => p.status === 'pending' || p.status === 'overdue') || [];
-  const overduePayments = data?.payments.filter(p => p.status === 'overdue') || [];
+  const pendingPayments = data?.payments?.filter(p => p.status === 'pending' || p.status === 'overdue') || [];
+  const overduePayments = data?.payments?.filter(p => p.status === 'overdue') || [];
   const totalPending = pendingPayments.reduce((s, p) => s + (p.amount - (p.discount || 0)), 0);
 
   // Synchronized Frequency Calculation (Matches Frequencia.tsx & Manager)
@@ -73,8 +73,13 @@ export default function Dashboard() {
   let validLessonsCount = 0;
 
   if (data?.lessons && data?.attendance) {
-    const nowLocal = new Date();
-    data.lessons.forEach(lesson => {
+    const deduplicatedLessons = data.lessons.filter((lesson, index, self) =>
+      index === self.findIndex((t) => (
+        t.date === lesson.date && t.startTime === lesson.startTime
+      ))
+    );
+
+    deduplicatedLessons.forEach(lesson => {
       if (lesson.status === 'cancelled') return;
       validLessonsCount++;
 
@@ -95,7 +100,7 @@ export default function Dashboard() {
       if (isPresent) presencesCount++;
     });
   }
-  const totalAttendance = data?.attendance.length || 0;
+  const totalAttendance = data?.attendance?.length || 0;
   const frequencyPercent = validLessonsCount > 0 ? Math.round((presencesCount / validLessonsCount) * 100) : 0;
 
   const nextDue = pendingPayments
