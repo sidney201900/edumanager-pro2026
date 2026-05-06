@@ -17,11 +17,19 @@
 - [x] **Alertas de Avaliações:** Implementado disparo automático de notificações SQL e WhatsApp (via Evolution API) para turmas inteiras ao publicar exames/atividades.
 - [x] **Justificativas Relacionais:** Notificações de justificativas de falta enviadas pelo Portal agora são salvas diretamente no PostgreSQL (aluno_id = 'admin').
 - [x] **Intelligent Polling Admin:** O Admin Bell agora utiliza polling de 30s para sincronização em tempo real com o banco SQL, garantindo que novos alertas apareçam instantaneamente.
+- [x] **Lixeira de Avaliações (Soft Delete):** Implementada aba de "Lixeira" no Manager que oculta provas sem deletar dados, preservando as notas no Boletim e no Portal.
+- [x] **Unificação da Média Aritmética:** Refatorados `ReportCard.tsx` (Manager) e `Notas.tsx` (Portal) para calcular médias aritméticas reais (Média das Médias) em todos os níveis.
+- [x] **Sincronização de Notas Órfãs:** Garantido que notas de provas deletadas/arquivadas permaneçam visíveis com seus respectivos títulos no Manager e Portal.
+- [x] **Correção de Polling e Conflitos:** Ajustado timestamp `lastUpdated` para evitar sobrescritas de dados durante a sincronização em segundo plano.
+- [x] **Git Push Realizado:** Todas as alterações de arquitetura de notas e exclusão lógica foram versionadas e enviadas ao repositório remoto.
+- [x] **Correção do Sync Status:** Resolvido loop infinito no `index.tsx` que travava o status em "syncing" ao sincronizar o `lastUpdated` com o servidor.
+- [x] **Blindagem de Fuso Horário (Postgres):** Rota de frequência do portal atualizada para usar `TO_CHAR` no SQL, eliminando deslocamentos de horas causados pela conversão UTC automática do driver.
+- [x] **Unificação de Janela de Presença:** Portal e Manager agora utilizam a mesma janela de 30 minutos de tolerância para correlacionar presenças e faltas às aulas.
+- [x] **Sincronia de Estatísticas (Portal):** O cálculo de porcentagem no Dashboard do Portal agora usa o mesmo motor lógico da página de Frequência, garantindo números idênticos.
 - [ ] Próximo Passo: Expandir a migração relacional para o módulo de "Minhas Aulas" no Portal para manter a consistência arquitetural.
 
 
-
-## 📅 Histórico Anterior (22/04/2026)
+## 📅 Histórico Anterior (06/05/2026)
 
 - [x] Correção do "Bug da Tela Preta" na câmera ao alternar para câmera traseira no celular.
 - [x] Unificação do servidor de produção: Dockerfile agora utiliza `server.selfhosted.js` (Manager e Portal).

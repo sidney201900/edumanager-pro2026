@@ -68,10 +68,35 @@ export default function Dashboard() {
   const overduePayments = data?.payments.filter(p => p.status === 'overdue') || [];
   const totalPending = pendingPayments.reduce((s, p) => s + (p.amount - (p.discount || 0)), 0);
 
+  // Synchronized Frequency Calculation (Matches Frequencia.tsx & Manager)
+  let presencesCount = 0;
+  let validLessonsCount = 0;
+
+  if (data?.lessons && data?.attendance) {
+    const nowLocal = new Date();
+    data.lessons.forEach(lesson => {
+      if (lesson.status === 'cancelled') return;
+      validLessonsCount++;
+
+      const lessonFullISO = new Date(parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00')).toISOString();
+      const lessonStartMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00');
+      const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '00:00:00', lesson.endTime ? 0 : 60);
+
+      const atts = data.attendance.filter(a => {
+        if (!a.date || typeof a.date !== 'string') return false;
+        if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00` || a.date === lessonFullISO) return true;
+        
+        const attMs = new Date(a.date).getTime();
+        const presenceStartWindow = lessonStartMs - 30 * 60000;
+        return attMs >= presenceStartWindow && attMs <= lessonEndMs;
+      });
+
+      const isPresent = atts.some(a => a.type === 'presence' || a.verified === true);
+      if (isPresent) presencesCount++;
+    });
+  }
   const totalAttendance = data?.attendance.length || 0;
-  const totalCourseLessons = data?.lessons.length || 0;
-  const presences = data?.attendance.filter(a => a.type === 'presence').length || 0;
-  const frequencyPercent = totalCourseLessons > 0 ? Math.round((presences / totalCourseLessons) * 100) : 0;
+  const frequencyPercent = validLessonsCount > 0 ? Math.round((presencesCount / validLessonsCount) * 100) : 0;
 
   const nextDue = pendingPayments
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];

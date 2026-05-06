@@ -294,7 +294,7 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
 app.get('/api/portal/frequencia', authMiddleware, async (req, res) => {
   try {
     const { rows: dbAttendance } = await pool.query(
-      'SELECT id, aluno_id as "studentId", turma_id as "classId", data as "date", foto as "photo", verificado as "verified", tipo as "type", justificativa as "justification", justificativa_aceita as "justificationAccepted" FROM frequencias WHERE aluno_id = $1',
+      'SELECT id, aluno_id as "studentId", turma_id as "classId", TO_CHAR(data, \'YYYY-MM-DD"T"HH24:MI:SS\') as "date", foto as "photo", verificado as "verified", tipo as "type", justificativa as "justification", justificativa_aceita as "justificationAccepted" FROM frequencias WHERE aluno_id = $1',
       [req.user.studentId]
     );
     res.json({ attendance: dbAttendance });

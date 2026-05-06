@@ -145,20 +145,14 @@ export default function Frequencia() {
     const atts = attendance.filter(a => {
       if (!a.date || typeof a.date !== 'string') return false;
       
-      // 1. Exact Match (Best case)
-      if (a.date === lessonFullISO) return true;
+      // 1. Exact Match (Including Manager DB fallback format)
+      if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00` || a.date === lessonFullISO) return true;
 
       const attMs = new Date(a.date).getTime();
+      const presenceStartWindow = lessonStartMs - 30 * 60000;
 
-      // 2. Presence Match (Biometrics)
-      // Allow any presence within the lesson duration (+ buffer)
-      if (a.type === 'presence') {
-        return attMs >= (lessonStartMs - 10 * 60000) && attMs <= (lessonEndMs + 5 * 60000);
-      }
-
-      // 3. Justification Proximity Match (Strict 10 mins from start)
-      const diffMinutes = Math.abs(attMs - lessonStartMs) / (1000 * 60);
-      return diffMinutes <= 10;
+      // 2. Window Match (Matches Manager Logic: 30 mins before until end of lesson)
+      return attMs >= presenceStartWindow && attMs <= lessonEndMs;
     });
     
     const { isInProgress, isCompleted } = getLessonTimeStatus(lesson, now);

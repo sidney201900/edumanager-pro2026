@@ -39,6 +39,7 @@ const App = () => {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error' | 'conflict'>('idle');
   const [isCloudEnabled, setIsCloudEnabled] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isUpdatingFromSaveRef = useRef<boolean>(false);
 
   // 0. Load from IndexedDB on mount
   useEffect(() => {
@@ -89,6 +90,11 @@ const App = () => {
     // Immediate Local Save
     dbService.saveData(data);
 
+    if (isUpdatingFromSaveRef.current) {
+      isUpdatingFromSaveRef.current = false;
+      return;
+    }
+
     // Debounced Cloud Save
     if (isCloudEnabled) {
       setSyncStatus('syncing');
@@ -98,6 +104,7 @@ const App = () => {
         try {
           const result = await dbService.saveToCloud(data);
           if (result.success && result.lastUpdated) {
+            isUpdatingFromSaveRef.current = true;
             // Sincroniza o timestamp local com o do servidor para evitar conflitos no polling
             setData(prev => ({ ...prev, lastUpdated: result.lastUpdated }));
             setSyncStatus('saved');
