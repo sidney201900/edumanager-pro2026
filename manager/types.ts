@@ -253,6 +253,7 @@ export interface Exam {
   allowRetake?: boolean;
   evaluationType?: 'exam' | 'activity';
   maxScore?: number;
+  isDeleted?: boolean;
 }
 
 export interface SchoolData {

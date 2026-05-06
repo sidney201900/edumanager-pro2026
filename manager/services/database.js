@@ -351,6 +351,13 @@ export async function syncJsonToRelationalTables() {
 
     // 1. Sincronizar Cursos
     if (data.courses && Array.isArray(data.courses)) {
+      const courseIds = data.courses.map(c => c.id).filter(Boolean);
+      if (courseIds.length > 0) {
+        await client.query('DELETE FROM cursos WHERE id != ALL($1)', [courseIds]);
+      } else {
+        await client.query('DELETE FROM cursos');
+      }
+
       for (const c of data.courses) {
         if (!c.id || !c.name) continue;
         await client.query(
@@ -369,8 +376,15 @@ export async function syncJsonToRelationalTables() {
     // Garantir colunas de refação em provas
     await client.query('ALTER TABLE provas ADD COLUMN IF NOT EXISTS permitir_refacao BOOLEAN DEFAULT FALSE');
 
-    // 1. Sincronizar Disciplinas (Subjects)
+    // 2. Sincronizar Disciplinas (Subjects)
     if (data.subjects && Array.isArray(data.subjects)) {
+      const subIds = data.subjects.map(s => s.id).filter(Boolean);
+      if (subIds.length > 0) {
+        await client.query('DELETE FROM disciplinas WHERE id != ALL($1)', [subIds]);
+      } else {
+        await client.query('DELETE FROM disciplinas');
+      }
+
       for (const sub of data.subjects) {
         if (!sub.id || !sub.name) continue;
         await client.query(
@@ -384,6 +398,13 @@ export async function syncJsonToRelationalTables() {
 
     // 3. Sincronizar Períodos (Bimestres)
     if (data.periods && Array.isArray(data.periods)) {
+      const periodIds = data.periods.map(p => p.id).filter(Boolean);
+      if (periodIds.length > 0) {
+        await client.query('DELETE FROM periodos WHERE id != ALL($1)', [periodIds]);
+      } else {
+        await client.query('DELETE FROM periodos');
+      }
+
       for (const p of data.periods) {
         if (!p.id || !p.name) continue;
         await client.query(
@@ -397,6 +418,13 @@ export async function syncJsonToRelationalTables() {
 
     // 4. Sincronizar Turmas
     if (data.classes && Array.isArray(data.classes)) {
+      const classIds = data.classes.map(t => t.id).filter(Boolean);
+      if (classIds.length > 0) {
+        await client.query('DELETE FROM turmas WHERE id != ALL($1)', [classIds]);
+      } else {
+        await client.query('DELETE FROM turmas');
+      }
+
       for (const t of data.classes) {
         if (!t.id || !t.name) continue;
         await client.query(
@@ -412,8 +440,15 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 5. Sincronizar Alunos (Mapeamento Completo de Campos)
+    // 5. Sincronizar Alunos
     if (data.students && Array.isArray(data.students)) {
+      const studentIds = data.students.map(s => s.id).filter(Boolean);
+      if (studentIds.length > 0) {
+        await client.query('DELETE FROM alunos WHERE id != ALL($1)', [studentIds]);
+      } else {
+        await client.query('DELETE FROM alunos');
+      }
+
       for (const s of data.students) {
         if (!s.id || !s.name) continue;
         await client.query(
@@ -445,8 +480,15 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 6. Sincronizar Provas (Corrigindo vínculo com disciplinas)
+    // 6. Sincronizar Provas
     if (data.exams && Array.isArray(data.exams)) {
+      const examIds = data.exams.map(e => e.id).filter(Boolean);
+      if (examIds.length > 0) {
+        await client.query('DELETE FROM provas WHERE id != ALL($1)', [examIds]);
+      } else {
+        await client.query('DELETE FROM provas');
+      }
+
       for (const e of data.exams) {
         if (!e.id || !e.title) continue;
         await client.query(
@@ -461,8 +503,15 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 7. Sincronizar Frequências (Baseado na estrutura real do JSON)
+    // 7. Sincronizar Frequências
     if (data.attendance && Array.isArray(data.attendance)) {
+      const attIds = data.attendance.map(f => f.id).filter(Boolean);
+      if (attIds.length > 0) {
+        await client.query('DELETE FROM frequencias WHERE id != ALL($1)', [attIds]);
+      } else {
+        await client.query('DELETE FROM frequencias');
+      }
+
       for (const f of data.attendance) {
         if (!f.id || !f.studentId || !f.classId) continue;
         await client.query(

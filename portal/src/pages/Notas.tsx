@@ -56,10 +56,43 @@ export default function Notas() {
       }));
 
   // General average logic
-  const validGrades = grades.filter(g => g.value > 0);
-  const totalAvg = displaySubjects.length > 0 && validGrades.length > 0
-    ? validGrades.reduce((s, g) => s + g.value, 0) / validGrades.length
-    : 0;
+  const calculateGeneralAverage = () => {
+    if (displaySubjects.length === 0 || grades.length === 0) return 0;
+    
+    let totalSum = 0;
+    let totalCount = 0;
+
+    displaySubjects.forEach(subject => {
+      const subjectId = typeof subject === 'string' ? subject : subject.id;
+      const subjectGrades = grades.filter(g => String(g.subjectId) === String(subjectId));
+      if (subjectGrades.length === 0) return;
+
+      const periodValues: Record<string, number[]> = {};
+      subjectGrades.forEach(g => {
+        const periodKey = String(g.periodName || g.period);
+        if (!periodValues[periodKey]) periodValues[periodKey] = [];
+        periodValues[periodKey].push(g.value);
+      });
+
+      const periodAvgs: number[] = [];
+      Object.values(periodValues).forEach(values => {
+        if (values.length > 0) {
+          const sum = values.reduce((a, b) => a + b, 0);
+          periodAvgs.push(sum / values.length);
+        }
+      });
+
+      if (periodAvgs.length > 0) {
+        const subjectAvg = periodAvgs.reduce((a, b) => a + b, 0) / periodAvgs.length;
+        totalSum += subjectAvg;
+        totalCount++;
+      }
+    });
+
+    return totalCount > 0 ? totalSum / totalCount : 0;
+  };
+
+  const totalAvg = calculateGeneralAverage();
 
   const getGradeColor = (value: number, maxScore: number = 10) => {
     const percentage = (value / maxScore) * 10;
@@ -134,10 +167,30 @@ export default function Notas() {
             const subjectName = typeof subject === 'string' ? subject : subject.name;
             const subjectGrades = grades.filter(g => String(g.subjectId) === String(subjectId));
             
+            // Calculate Subject Average
+            const periodValues: Record<string, number[]> = {};
+            subjectGrades.forEach(g => {
+              const periodKey = String(g.periodName || g.period);
+              if (!periodValues[periodKey]) periodValues[periodKey] = [];
+              periodValues[periodKey].push(g.value);
+            });
+            const pAvgs: number[] = [];
+            Object.values(periodValues).forEach(values => {
+              if (values.length > 0) {
+                pAvgs.push(values.reduce((a, b) => a + b, 0) / values.length);
+              }
+            });
+            const subjectAvg = pAvgs.length > 0 ? pAvgs.reduce((a, b) => a + b, 0) / pAvgs.length : null;
+            
             return (
               <div key={subjectId} className="glass-card animate-fade-in" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
-                <div style={{ padding: '1.5rem', background: 'var(--color-surface-light)', borderBottom: '1px solid var(--glass-border)' }}>
+                <div style={{ padding: '1.5rem', background: 'var(--color-surface-light)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-primary)' }}>{subjectName}</h2>
+                  {subjectAvg !== null && (
+                    <div style={{ padding: '4px 12px', borderRadius: '8px', background: getBgColor(subjectAvg), color: getGradeColor(subjectAvg), fontWeight: 800, fontSize: '0.85rem' }}>
+                      MÉDIA: {subjectAvg.toFixed(1)}
+                    </div>
+                  )}
                 </div>
                 
                 <div style={{ padding: '1.5rem' }}>
@@ -145,14 +198,14 @@ export default function Notas() {
                     const periodGrades = subjectGrades.filter(g => String(g.periodName || g.period) === String(period));
                     if (periodGrades.length === 0) return null;
 
-                    const periodTotal = periodGrades.reduce((sum, g) => sum + g.value, 0);
+                    const periodAvg = periodGrades.length > 0 ? periodGrades.reduce((sum, g) => sum + g.value, 0) / periodGrades.length : 0;
 
                     return (
                       <div key={period} style={{ marginBottom: '1.5rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '2px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
                           <h3 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>{period}</h3>
                           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                            Total do Período: <span style={{ color: getGradeColor(periodTotal, 10) }}>{periodTotal.toFixed(1)}</span>
+                            Média do Período: <span style={{ color: getGradeColor(periodAvg, 10) }}>{periodAvg.toFixed(1)}</span>
                           </div>
                         </div>
 

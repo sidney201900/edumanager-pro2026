@@ -202,10 +202,14 @@ app.put('/api/school-data', async (req, res) => {
     // Sincronização em tempo real (JSON -> Relacional)
     syncJsonToRelationalTables().catch(err => console.error('[Real-time Sync] Erro:', err.message));
     
-    res.json({ success: true });
+    res.json({ 
+      success: true, 
+      message: 'Dados salvos com sucesso',
+      lastUpdated: schoolData.lastUpdated
+    });
   } catch (error) {
-    console.error('Erro ao salvar school_data:', error);
-    res.status(500).json({ success: false, reason: 'error' });
+    console.error('Erro ao salvar school-data:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -978,13 +982,21 @@ app.post('/api/excluir_cobranca', async (req, res) => {
     if (!isSinglePayment) {
       const asaasTargetId = formatInstallmentId(id);
       const resp = await fetch(`${ASAAS_BASE_URL}/v3/installments/${asaasTargetId}`, { method: 'DELETE', headers: { 'access_token': process.env.ASAAS_API_KEY } });
-      if (resp.ok) addLog('Asaas', 'Exclusão Parcelamento OK', { id });
+      if (resp.ok) {
+        addLog('Asaas', 'Exclusão Parcelamento OK', { id: asaasTargetId });
+        // Exclusão imediata no SQL local para evitar que reapareça na UI antes do webhook
+        await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_installment_id = $1', [asaasTargetId]);
+      }
     } else {
       const resp = await fetch(`${ASAAS_BASE_URL}/v3/payments/${id}`, { method: 'DELETE', headers: { 'access_token': process.env.ASAAS_API_KEY } });
       if (!resp.ok) { const e = await resp.json().catch(() => ({})); return res.status(400).json({ error: e.errors?.[0]?.description || 'Falha Asaas' }); }
+      
+      // Exclusão imediata no SQL local
+      await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = $1', [id]);
+      addLog('Asaas', 'Exclusão Cobrança OK', { id });
     }
 
-    return res.status(200).json({ message: 'Excluído no Asaas (Aguardando Webhook)' });
+    return res.status(200).json({ message: 'Excluído no Asaas e na base local' });
   } catch (error) {
     console.error('[Exclusão] Erro:', error);
     return res.status(500).json({ error: 'Erro interno.' });

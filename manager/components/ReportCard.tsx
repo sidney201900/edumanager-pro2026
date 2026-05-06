@@ -259,17 +259,18 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     let totalCount = 0;
 
     Object.entries(studentGrades).forEach(([subjectId, subjectPeriods]) => {
-      const periodSums: number[] = [];
+      const periodAvgs: number[] = [];
 
       Object.values(subjectPeriods).forEach((examValues: any) => {
-        const sum: number = Object.values(examValues).reduce<number>((a, b: any) => a + (b !== '' ? Number(b) : 0), 0);
-        if (Object.values(examValues).some(v => v !== '')) {
-          periodSums.push(sum);
+        const validValues = Object.values(examValues).filter(v => v !== '');
+        if (validValues.length > 0) {
+          const sum: number = validValues.reduce<number>((a, b: any) => a + Number(b), 0);
+          periodAvgs.push(sum / validValues.length);
         }
       });
 
-      if (periodSums.length > 0) {
-        const subjectAvg = periodSums.reduce((a, b) => a + b, 0) / periodSums.length;
+      if (periodAvgs.length > 0) {
+        const subjectAvg = periodAvgs.reduce((a, b) => a + b, 0) / periodAvgs.length;
         totalSum += subjectAvg;
         totalCount++;
       }
@@ -292,15 +293,23 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     subjectsWithGrades.forEach(subId => {
       const subGrades = studentGradesList.filter(g => g.subjectId === subId);
 
-      const periodSums: Record<string, number> = {};
+      const periodValues: Record<string, number[]> = {};
       subGrades.forEach(g => {
-        periodSums[g.period] = (periodSums[g.period] || 0) + g.value;
+        if (!periodValues[g.period]) periodValues[g.period] = [];
+        periodValues[g.period].push(g.value);
       });
 
-      const periodsCount = Object.keys(periodSums).length;
-      if (periodsCount > 0) {
-        const totalSum = Object.values(periodSums).reduce((a, b) => a + b, 0);
-        subjectAverages.push(totalSum / periodsCount);
+      const periodAvgs: number[] = [];
+      Object.values(periodValues).forEach(values => {
+        if (values.length > 0) {
+          const sum = values.reduce((a, b) => a + b, 0);
+          periodAvgs.push(sum / values.length);
+        }
+      });
+
+      if (periodAvgs.length > 0) {
+        const totalSum = periodAvgs.reduce((a, b) => a + b, 0);
+        subjectAverages.push(totalSum / periodAvgs.length);
       }
     });
 
@@ -611,9 +620,14 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                             <div className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-500">
                               MÉDIA: {(() => {
                                 const subjectGrades = studentGrades[subject.id] || {};
-                                const pSums: number[] = Object.values(subjectGrades).map((exVals: any) => Object.values(exVals).reduce<number>((a, b: any) => a + (b !== '' ? Number(b) : 0), 0));
-                                const valid = pSums.filter(s => s > 0);
-                                return valid.length > 0 ? (valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(1) : '0.0';
+                                const pAvgs: number[] = [];
+                                Object.values(subjectGrades).forEach((exVals: any) => {
+                                  const validValues = Object.values(exVals).filter(v => v !== '');
+                                  if (validValues.length > 0) {
+                                    pAvgs.push(validValues.reduce<number>((a, b: any) => a + Number(b), 0) / validValues.length);
+                                  }
+                                });
+                                return pAvgs.length > 0 ? (pAvgs.reduce((a, b) => a + b, 0) / pAvgs.length).toFixed(1) : '0.0';
                               })()}
                             </div>
                           </div>
@@ -626,13 +640,16 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                               (e.status === 'published' || !!studentSubmissions[String(e.id).trim()])
                             );
                             const periodGrades = studentGrades[subject.id]?.[period.id] || {};
-                            const periodSum: number = Object.values(periodGrades).reduce<number>((a, b: any) => a + (b !== '' ? Number(b) : 0), 0);
+                            const validPeriodValues = Object.values(periodGrades).filter(v => v !== '');
+                            const periodAvg: number = validPeriodValues.length > 0 
+                              ? validPeriodValues.reduce<number>((a, b: any) => a + Number(b), 0) / validPeriodValues.length 
+                              : 0;
 
                             return (
                               <div key={period.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 relative">
                                 <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
                                   <label className="block text-xs font-black text-slate-700 uppercase tracking-widest">{period.name}</label>
-                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-md">Total: {periodSum.toFixed(1)}</span>
+                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-md">Média: {periodAvg.toFixed(1)}</span>
                                 </div>
 
                                 {linkedExams.length > 0 ? (

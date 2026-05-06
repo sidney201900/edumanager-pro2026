@@ -540,7 +540,7 @@ app.get('/api/portal/avaliacoes', authMiddleware, async (req, res) => {
     if (!student) return res.json({ exams: [], submissions: [] });
 
     const exams = (schoolData.exams || [])
-      .filter(e => e.status === 'published' && e.classId === student.classId)
+      .filter(e => e.status === 'published' && e.classId === student.classId && !e.isDeleted)
       .map(e => ({
         ...e,
         questions: e.questions.map(q => ({

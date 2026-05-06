@@ -17,6 +17,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [duplicatingExam, setDuplicatingExam] = useState<Exam | null>(null);
   const [targetClassId, setTargetClassId] = useState('');
+  const [activeTab, setActiveTab] = useState<'ativos' | 'lixeira'>('ativos');
   const { showAlert, showConfirm } = useDialog();
 
   const normalizePhotoUrl = (url?: string) => {
@@ -32,8 +33,9 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const exams = data.exams || [];
 
   const filteredExams = exams.filter(exam =>
-    exam.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    data.classes.find(c => c.id === exam.classId)?.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (activeTab === 'ativos' ? !exam.isDeleted : !!exam.isDeleted) &&
+    (exam.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    data.classes.find(c => c.id === exam.classId)?.name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleStartCreate = () => {
@@ -69,15 +71,22 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
 
   const handleDeleteExam = (examId: string) => {
     showConfirm(
-      'Excluir Avaliação',
-      'Tem certeza que deseja excluir esta avaliação? Esta ação não pode ser desfeita e notas vinculadas no boletim perderão o vínculo.',
+      'Mover para Lixeira',
+      'Tem certeza que deseja mover esta avaliação para a lixeira? Ela será ocultada para os alunos, mas as notas no boletim continuarão intactas.',
       () => {
-        const updatedExams = exams.filter(e => e.id !== examId);
+        const updatedExams = exams.map(e => e.id === examId ? { ...e, isDeleted: true } : e);
         updateData({ exams: updatedExams });
         dbService.saveData({ ...data, exams: updatedExams });
-        showAlert('Sucesso', 'Avaliação excluída com sucesso.', 'success');
+        showAlert('Sucesso', 'Avaliação movida para a lixeira.', 'success');
       }
     );
+  };
+
+  const handleRestoreExam = (examId: string) => {
+    const updatedExams = exams.map(e => e.id === examId ? { ...e, isDeleted: false } : e);
+    updateData({ exams: updatedExams });
+    dbService.saveData({ ...data, exams: updatedExams });
+    showAlert('Sucesso', 'Avaliação reativada.', 'success');
   };
 
   const handleDuplicateExam = () => {
@@ -515,6 +524,20 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
         </div>
 
         <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex bg-slate-100 p-1 rounded-xl shrink-0 self-start md:self-auto">
+            <button
+              onClick={() => setActiveTab('ativos')}
+              className={`px-4 py-2.5 rounded-lg text-sm font-black transition-all ${activeTab === 'ativos' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Ativos
+            </button>
+            <button
+              onClick={() => setActiveTab('lixeira')}
+              className={`px-4 py-2.5 rounded-lg text-sm font-black transition-all ${activeTab === 'lixeira' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Lixeira
+            </button>
+          </div>
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             <input
@@ -554,8 +577,8 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
           {filteredExams.map(exam => {
             const classObj = data.classes.find(c => c.id === exam.classId);
             return (
-              <div key={exam.id} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500 rounded-l-2xl"></div>
+              <div key={exam.id} className={`rounded-2xl p-6 shadow-sm border transition-shadow relative overflow-hidden group ${exam.isDeleted ? 'bg-slate-50 border-slate-200 opacity-80' : 'bg-white border-slate-100 hover:shadow-md'}`}>
+                <div className={`absolute top-0 left-0 w-1.5 h-full rounded-l-2xl ${exam.isDeleted ? 'bg-slate-400' : 'bg-indigo-500'}`}></div>
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex flex-col gap-1">
                     <h3 className="font-bold text-lg text-slate-800 line-clamp-2 pr-4">{exam.title}</h3>
@@ -569,9 +592,9 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                       </span>
                     </div>
                   </div>
-                  <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg shrink-0 mt-1 ${exam.status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                  <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg shrink-0 mt-1 ${exam.isDeleted ? 'bg-slate-200 text-slate-500' : (exam.status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')
                     }`}>
-                    {exam.status === 'published' ? 'Publicada' : 'Rascunho'}
+                    {exam.isDeleted ? 'Excluída' : (exam.status === 'published' ? 'Publicada' : 'Rascunho')}
                   </span>
                 </div>
                 <div className="space-y-2 mb-6">
@@ -612,45 +635,56 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                   )}
                 </div>
                 <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  {exam.isDeleted ? (
                     <button
-                      onClick={() => handleToggleRetake(exam.id)}
-                      className={`p-2 rounded-lg transition-colors ${exam.allowRetake ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-                      title={exam.allowRetake ? 'Refação Permitida (Clique para bloquear)' : 'Refação Bloqueada (Clique para permitir)'}
+                      onClick={() => handleRestoreExam(exam.id)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-colors"
                     >
-                      {exam.allowRetake ? <Unlock size={18} /> : <Lock size={18} />}
+                      <RefreshCw size={18} /> Reativar
                     </button>
-                    <button
-                      onClick={() => {
-                        setDuplicatingExam(exam);
-                        setTargetClassId(exam.classId);
-                      }}
-                      className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
-                      title="Duplicar para outra turma"
-                    >
-                      <Copy size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleNotifyStudents(exam)}
-                      className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
-                      title="Notificar Turma"
-                    >
-                      <Bell size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteExam(exam.id)}
-                      className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
-                      title="Excluir"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => handleEditExam(exam)}
-                    className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 group-hover:translate-x-1 transition-transform"
-                  >
-                    Editar {exam.evaluationType === 'activity' ? 'Atividade' : 'Prova'}
-                  </button>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleRetake(exam.id)}
+                          className={`p-2 rounded-lg transition-colors ${exam.allowRetake ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                          title={exam.allowRetake ? 'Refação Permitida (Clique para bloquear)' : 'Refação Bloqueada (Clique para permitir)'}
+                        >
+                          {exam.allowRetake ? <Unlock size={18} /> : <Lock size={18} />}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDuplicatingExam(exam);
+                            setTargetClassId(exam.classId);
+                          }}
+                          className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                          title="Duplicar para outra turma"
+                        >
+                          <Copy size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleNotifyStudents(exam)}
+                          className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                          title="Notificar Turma"
+                        >
+                          <Bell size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteExam(exam.id)}
+                          className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
+                          title="Mover para Lixeira"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => handleEditExam(exam)}
+                        className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 group-hover:translate-x-1 transition-transform"
+                      >
+                        Editar <ArrowLeft size={16} className="rotate-180" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );

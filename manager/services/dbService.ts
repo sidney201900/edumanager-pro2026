@@ -255,7 +255,7 @@ export const dbService = {
   // Em vez de: supabase.from('school_data').upsert(...)
   // Agora usa: fetch('/api/school-data', { method: 'PUT' })
   // ============================================================
-  saveToCloud: async (data: SchoolData): Promise<{ success: boolean; reason?: 'newer_version' | 'error' }> => {
+  saveToCloud: async (data: SchoolData): Promise<{ success: boolean; reason?: 'newer_version' | 'error'; lastUpdated?: string }> => {
     try {
       const response = await fetch('/api/school-data', {
         method: 'PUT',
@@ -263,8 +263,9 @@ export const dbService = {
         body: JSON.stringify(data),
       });
 
+      const result = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
         if (response.status === 409 && result.reason === 'newer_version') {
           console.warn("Servidor tem versão mais nova. Abortando save.");
           return { success: false, reason: 'newer_version' };
@@ -272,7 +273,10 @@ export const dbService = {
         throw new Error('Erro ao salvar');
       }
 
-      return { success: true };
+      return { 
+        success: true, 
+        lastUpdated: result.lastUpdated 
+      };
     } catch (e) {
       console.error("Erro ao salvar na nuvem:", e);
       return { success: false, reason: 'error' };

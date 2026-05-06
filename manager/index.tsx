@@ -97,7 +97,9 @@ const App = () => {
       saveTimeoutRef.current = setTimeout(async () => {
         try {
           const result = await dbService.saveToCloud(data);
-          if (result.success) {
+          if (result.success && result.lastUpdated) {
+            // Sincroniza o timestamp local com o do servidor para evitar conflitos no polling
+            setData(prev => ({ ...prev, lastUpdated: result.lastUpdated }));
             setSyncStatus('saved');
           } else if (result.reason === 'newer_version') {
             setSyncStatus('conflict');
