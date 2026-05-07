@@ -548,8 +548,8 @@ export default function Frequencia() {
                             <CheckCircle2 size={16} /> Presente
                           </span>
                         ) : isJustificationAccepted ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-success)', fontWeight: 600 }}>
-                            <CheckCircle2 size={16} /> Falta Justificada
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b', fontWeight: 600 }}>
+                            <AlertTriangle size={16} /> Falta Justificada
                           </span>
                         ) : hasJustification ? (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b', fontWeight: 500 }}>
@@ -603,7 +603,7 @@ export default function Frequencia() {
                       </td>
                       <td>
                         {justText ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', color: isJustificationAccepted ? 'var(--color-success)' : '#f59e0b', fontWeight: isJustificationAccepted ? 600 : 500 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', color: '#f59e0b', fontWeight: 600 }}>
                             <FileText size={14} color="currentColor" />
                             {isJustificationAccepted ? 'Justificativa Aceita' : 'Em Análise'}
                           </span>

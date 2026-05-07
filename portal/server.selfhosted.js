@@ -290,21 +290,11 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/portal/frequencia (Relacional)
+// GET /api/portal/frequencia (Leitura direta do school_data — mesma fonte do Manager)
 app.get('/api/portal/frequencia', authMiddleware, async (req, res) => {
   try {
-    const { rows: dbAttendance } = await pool.query(
-      'SELECT id, aluno_id as "studentId", turma_id as "classId", data as "rawDate", foto as "photo", verificado as "verified", tipo as "type", justificativa as "justification", justificativa_aceita as "justificationAccepted" FROM frequencias WHERE aluno_id = $1',
-      [req.user.studentId]
-    );
-    // Converter datas para ISO string COM timezone (formato idêntico ao Manager JSON)
-    // O pg driver retorna TIMESTAMPTZ como Date objects do JS, e toISOString() preserva o UTC correto.
-    // O browser então faz new Date(isoString) e converte para hora local automaticamente.
-    const attendance = dbAttendance.map(row => ({
-      ...row,
-      date: row.rawDate instanceof Date ? row.rawDate.toISOString() : (row.rawDate || ''),
-      rawDate: undefined
-    }));
+    const schoolData = await getSchoolData();
+    const attendance = (schoolData.attendance || []).filter(a => a.studentId === req.user.studentId);
     res.json({ attendance });
   } catch (err) {
     console.error('Frequencia error:', err);
@@ -424,21 +414,17 @@ app.get('/api/portal/config', (req, res) => {
   });
 });
 
-// GET /api/portal/aulas
+// GET /api/portal/aulas (Leitura direta do school_data — mesma fonte do Manager)
 app.get('/api/portal/aulas', authMiddleware, async (req, res) => {
   try {
     const schoolData = await getSchoolData();
     const student = (schoolData.students || []).find(s => s.id === req.user.studentId);
     if (!student) return res.json({ lessons: [] });
 
-    const { rows: turmasData } = await pool.query(
-      'SELECT DISTINCT turma_id FROM frequencias WHERE aluno_id = $1',
-      [req.user.studentId]
-    );
-    
+    // Obter turmas do aluno a partir do JSON (mesma lógica do Manager)
     const studentClassIds = new Set([
       student.classId,
-      ...turmasData.map(r => r.turma_id)
+      ...(schoolData.attendance || []).filter(a => a.studentId === req.user.studentId).map(a => a.classId)
     ].filter(Boolean));
 
     const parseDateHelper = (dStr) => {
