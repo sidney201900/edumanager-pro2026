@@ -34,19 +34,14 @@
 - [x] **Blindagem de Conversão ISO:** Resolvida falha crítica de `RangeError: Invalid time value` em todo o Portal. Agora o sistema ignora datas corrompidas ou inválidas em vez de quebrar a interface inteira.
 - [x] **Resolução de ReferenceError:** Identificada e corrigida a causa raiz da tela preta persistente (variáveis não declaradas após refatoração da pauta).
 - [x] **Auditoria TypeScript:** Realizada varredura total com `tsc` no Portal, corrigindo todos os erros de tipagem remanescentes em Notas e Avaliações para garantir estabilidade absoluta.
-- [ ] Próximo Passo: Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
+- [x] **Paridade Lógica Absoluta (Frequência):** A lógica de matching de frequência do Portal (`Frequencia.tsx` e `Dashboard.tsx`) agora é um clone 100% idêntico ao do Manager (`AttendanceQuery.tsx`).
+- [x] **Fix Janela de Matching (Portal):** Corrigido bug onde aulas sem `endTime` fechavam a janela de presença prematuramente (fallback alterado de `00:00:00` para `23:59:00`).
+- [x] **Resolução de Justificativas Invisíveis:** Justificativas enviadas agora são corretamente mapeadas às aulas no Portal através da sincronização de janelas de tempo e IDs.
 
+## 📋 Próximos Passos
+- [ ] Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
 
 ## 📅 Histórico Anterior (06/05/2026)
-
-- [x] Correção do "Bug da Tela Preta" na câmera ao alternar para câmera traseira no celular.
-- [x] Unificação do servidor de produção: Dockerfile agora utiliza `server.selfhosted.js` (Manager e Portal).
-- [x] Correção dos Cards de Monitoramento (PostgreSQL/MinIO) com tratativa de erro independente.
-- [x] Vacina de cache global: Injeção de `normalizePhotoUrl` nos módulos de Boletim, Turmas e Frequência.
-- [x] Estabilização do Build ARM64: Injeção de `max_old_space_size=4096` nos Dockerfiles para evitar crashes do Vite no Github Actions.
-- [x] Correção de Rota Express 5: Migração de curingas `*` para Regex para evitar falhas de inicialização no servidor.
-- [x] Correção do Crash 404 no Portal: Injeção da pasta `src/services` no container de produção para permitir o import do `storage.js`.
-- [x] Correção das Imagens de Prova: Normalização das URLs nas questões de avaliações (Portal e Manager).
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
 - [x] Correção do Sino de Notificações: Botões sempre visíveis, suporte a anexo via chave `arquivo` e exibição do **Motivo da Falta** direto na lista do sino.
 - [x] **Segurança Financeira:** Implementada trava de segurança (`isCreating`) contra cliques múltiplos em formulários financeiros, resolvendo a duplicidade de cobranças no Asaas.

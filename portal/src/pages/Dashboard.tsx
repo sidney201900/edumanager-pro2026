@@ -83,21 +83,20 @@ export default function Dashboard() {
       if (lesson.status === 'cancelled') return;
       validLessonsCount++;
 
-      const lessonMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00');
-      const lessonFullISO = !isNaN(lessonMs) ? new Date(lessonMs).toISOString() : '';
-      const lessonStartMs = lessonMs;
-      const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '00:00:00', lesson.endTime ? 0 : 60);
+      // Construir janela de tempo EXATAMENTE como o Manager faz
+      const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
+      const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
+      const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000);
 
-      const atts = data.attendance.filter(a => {
+      const att = data.attendance.find(a => {
         if (!a.date || typeof a.date !== 'string') return false;
-        if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00` || a.date === lessonFullISO) return true;
-        
-        const attMs = new Date(a.date).getTime();
-        const presenceStartWindow = lessonStartMs - 30 * 60000;
-        return attMs >= presenceStartWindow && attMs <= lessonEndMs;
+        if ((a as any).lessonId === lesson.id) return true;
+        if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
+        const recordTime = new Date(a.date);
+        return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
       });
 
-      const isPresent = atts.some(a => a.type === 'presence' || a.verified === true);
+      const isPresent = att && (att.type === 'presence' || (!att.type && !(att as any).isVirtual) || att.verified === true);
       if (isPresent) presencesCount++;
     });
   }

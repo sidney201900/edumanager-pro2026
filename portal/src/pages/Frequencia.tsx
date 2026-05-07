@@ -143,44 +143,46 @@ export default function Frequencia() {
     ))
   );
 
-  // Merge and Categorize
+  // Merge and Categorize — Clone EXATO do Manager (AttendanceQuery.tsx)
   const processedItems = deduplicatedLessons.map(lesson => {
-    const lessonMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00:00');
-    const lessonFullISO = !isNaN(lessonMs) ? new Date(lessonMs).toISOString() : '';
-    const lessonStartMs = lessonMs;
-    const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '00:00:00', lesson.endTime ? 0 : 60);
+    // Construir janela de tempo EXATAMENTE como o Manager faz (com Date objects)
+    const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
+    const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
+    const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000); // 30 mins before
 
-    // Pega todos os registros válidos na janela de tempo
-    const allAtts = attendance.filter(a => {
+    // Buscar registro com a MESMA lógica do Manager (find, não filter)
+    let record = attendance.find(a => {
       if (!a.date || typeof a.date !== 'string') return false;
-      if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00` || a.date === lessonFullISO) return true;
-      const attMs = new Date(a.date).getTime();
-      const presenceStartWindow = lessonStartMs - 30 * 60000;
-      return attMs >= presenceStartWindow && attMs <= lessonEndMs;
+      // 1. Match por lessonId (se existir)
+      if ((a as any).lessonId === lesson.id) return true;
+      // 2. Match exato de string (formato do JSON/sync)
+      if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
+      // 3. Match por janela de tempo (30 min antes até fim da aula)
+      const recordTime = new Date(a.date);
+      return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
     });
-    
-    // Prioridade de seleção para o status da aula:
-    // 1. Presença
-    // 2. Justificativa
-    // 3. Qualquer outro (Falta/Aguardando)
-    let bestRecord = allAtts.find(a => a.type === 'presence' || (!a.type && !a.isVirtual) || a.verified === true);
-    if (!bestRecord) {
-      bestRecord = allAtts.find(a => !!a.justification);
-    }
-    if (!bestRecord && allAtts.length > 0) {
-      bestRecord = allAtts[0];
+
+    // Se não encontrou registro real, verificar se precisa de justificativa associada
+    // (pode existir um registro de justificativa com data ligeiramente diferente)
+    if (!record) {
+      record = attendance.find(a => {
+        if (!a.date || typeof a.date !== 'string' || !a.justification) return false;
+        if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
+        const recordTime = new Date(a.date);
+        return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
+      }) || undefined;
     }
 
     const { isInProgress, isCompleted } = getLessonTimeStatus(lesson, now);
     return { 
       lesson, 
-      attendances: bestRecord ? [bestRecord] : [], // Mantém 1 registro para alinhar com Manager
+      attendances: record ? [record] : [],
       isInProgress,
       isCompleted
     };
   });
 
-  // Stats calculation (UNIFIED with list logic)
+  // Stats calculation — Clone EXATO do Manager (AttendanceQuery.tsx linhas 548-559)
   let presences = 0;
   let absences = 0;
   let justified = 0;
@@ -196,7 +198,7 @@ export default function Frequencia() {
       if (record.type === 'absence') {
         if (record.justificationAccepted) justified++;
         else absences++;
-      } else if (record.type === 'presence' || (!record.type && !record.isVirtual) || record.verified) {
+      } else if (record.type === 'presence' || (!record.type && !(record as any).isVirtual)) {
         presences++;
       }
     } else if (now > lessonEnd) {
@@ -230,21 +232,18 @@ export default function Frequencia() {
     // Check window (uses new 24h before/after logic)
     if (!isLessonWithinJustificationWindow(l, now)) return false;
     
-    const lMs = parseLessonDateTime(l.date, l.startTime || '00:00:00');
-    const lessonFullISO = !isNaN(lMs) ? new Date(lMs).toISOString() : '';
-    const lessonStartMs = lMs;
-    const lessonEndMs = parseLessonDateTime(l.date, l.endTime || '00:00:00', l.endTime ? 0 : 60);
+    // Construir janela como o Manager
+    const lessonStart = new Date(l.date + 'T' + (l.startTime || '00:00') + ':00');
+    const lessonEnd = new Date(l.date + 'T' + (l.endTime || '23:59') + ':00');
+    const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000);
 
     // Find if THIS SPECIFIC lesson has attendance/justification
     const att = attendance.find(a => {
       if (!a.date || typeof a.date !== 'string') return false;
-      const attMs = new Date(a.date).getTime();
-      
-      // Strict match by ISO or within duration for presence
-      if (a.date === lessonFullISO) return true;
-      if (a.type === 'presence' && attMs >= (lessonStartMs - 10 * 60000) && attMs <= (lessonEndMs + 5 * 60000)) return true;
-      
-      return false;
+      if ((a as any).lessonId === l.id) return true;
+      if (a.date === `${l.date}T${l.startTime || '00:00'}:00`) return true;
+      const recordTime = new Date(a.date);
+      return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
     });
 
     if (att) {
