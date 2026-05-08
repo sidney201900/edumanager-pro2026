@@ -107,13 +107,11 @@
 - **Melhoria:** O build agora ocorre diretamente na arquitetura de destino, sem emulação QEMU, garantindo velocidade e estabilidade total.
 
 ### 📅 08/05/2026 - Estabilização Crítica de Automação e Sincronia Financeira
-- 30. **Financial Data Integrity**: Automation routines MUST prioritize `school_data.payments` (JSON) as the trigger source while using `alunos_cobrancas` (SQL) for tracking notification counters (spam control), ensuring 100% parity with the management UI.
-- 31. **Real-Time Bidirectional Sync**: Asaas webhooks MUST update both the PostgreSQL `alunos_cobrancas` table and the legacy `school_data.json` file in real-time to ensure immediate UI feedback in the administrative panel.
-- 32. **Numerical Type Enforcement**: When serving data from PostgreSQL `NUMERIC` columns, the backend MUST map the result to ensure amounts are sent as `Number` (not String) to prevent string concatenation bugs in the frontend.
-- **Sincronização Bidirecional (Webhook):** O webhook do Asaas agora atualiza o SQL **e** o arquivo `school_data.json` em tempo real, garantindo que o status "Pago" apareça instantaneamente no painel.
-- **Integridade Numérica:** Resolvido bug de exibição de valores (concatenação de strings) através de casting explícito para `Number()` no backend e frontend.
-- **Busca Híbrida de Alunos:** O envio de WhatsApp agora busca o aluno no JSON e faz fallback no SQL.
-- **Resiliência de Telefone:** Lógica de "Melhor Esforço" para seleção de telefone (Responsável vs Aluno).
+- **Fonte de Disparos:** A rotina de cobranças agora utiliza o `school_data.payments` (JSON) como fonte primária, mas com **Sincronização Reversa** ativa (SQL -> JSON).
+- **Sincronização Bidirecional (Webhook):** O webhook do Asaas atualiza o SQL e o JSON em tempo real.
+- **Resolução de Fantasmas:** Refinada a lógica de sincronia no Financeiro para atualizar apenas mudanças de status reais, eliminando o aviso persistente de "96 atualizações".
+- **Inteligência de Mensagens:** O sistema agora garante que lembretes preventivos NUNCA sejam enviados para boletos já pagos no SQL/JSON.
+- **Integridade Numérica:** Casting explícito para `Number()` em todo o fluxo financeiro.
 
 ### 📢 Automação de Mensagens
 - [x] **Estabilização de Lembretes (V2):** Resolvido bug de deslocamento de fuso horário (-1 dia) nas datas de vencimento. Implementadas ferramentas de debug (ignorar trava diária e reset de contadores) e **controle manual de delay para disparos em massa** para facilitar testes e garantir segurança contra banimento.
