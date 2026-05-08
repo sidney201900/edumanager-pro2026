@@ -193,10 +193,39 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
         console.log('[Sync] Tudo atualizado com o Asaas.');
       }
 
-      // 2. Busca os dados atualizados para exibir na tela
+      // 2. Busca os dados atualizados do SQL para refletir na UI
       const resp = await fetch('/api/admin/cobrancas');
       if (!resp.ok) throw new Error('API fetch failed');
       const cloudPayments = await resp.json();
+
+      // 3. ATUALIZAÇÃO CRÍTICA: Mescla os dados do SQL com o estado local do React
+      if (Array.isArray(cloudPayments) && cloudPayments.length > 0) {
+        setData(prev => {
+          const newPayments = [...prev.payments];
+          let updated = false;
+
+          cloudPayments.forEach((cp: any) => {
+            const idx = newPayments.findIndex(p => p.asaasPaymentId === cp.asaas_payment_id);
+            if (idx !== -1) {
+              const statusStr = (cp.status || '').toLowerCase();
+              const newStatus = statusStr === 'pago' ? 'paid' :
+                                statusStr === 'atrasado' ? 'overdue' :
+                                statusStr === 'cancelado' ? 'cancelled' : 'pending';
+
+              if (newPayments[idx].status !== newStatus) {
+                newPayments[idx] = { 
+                  ...newPayments[idx], 
+                  status: newStatus as any,
+                  paidDate: cp.data_pagamento || newPayments[idx].paidDate 
+                };
+                updated = true;
+              }
+            }
+          });
+
+          return updated ? { ...prev, payments: newPayments } : prev;
+        });
+      }
 
       if (cloudPayments && cloudPayments.length > 0) {
         let updatedCount = 0;

@@ -1326,24 +1326,25 @@ function agendarRotina(tipo, hora, minuto) {
 
 async function syncPaymentsWithAsaasAPI() {
   try {
-    // Busca abrangente: todos os pagos/confirmados desde o início de 2026
+    console.log(`[Asaas:Sync] 🚀 Iniciando Sincronização JSON-First...`);
+    
+    // 1. Carregamos o JSON principal (Fonte de Verdade da UI)
+    const appData = await getSchoolData();
+    if (!appData || !appData.payments) {
+      throw new Error('Dados da escola ou pagamentos não encontrados no JSON.');
+    }
+
+    // 2. Definimos as URLs de busca (Pagos e Confirmados)
     const url = `${ASAAS_BASE_URL}/v3/payments?limit=100&status=RECEIVED&paymentDate%5Bge%5D=2026-01-01`;
     const urlConfirmed = `${ASAAS_BASE_URL}/v3/payments?limit=100&status=CONFIRMED`;
-    
-    console.log(`[Asaas:Sync] 🚀 Iniciando Sincronização Atômica Retroativa...`);
     
     const fetchPayments = async (targetUrl) => {
       try {
         const response = await fetch(targetUrl, { headers: { 'access_token': ASAAS_KEY } });
-        if (!response.ok) {
-          console.error(`[Asaas:Sync] Erro na URL ${targetUrl}: ${response.status}`);
-          return [];
-        }
+        if (!response.ok) return [];
         const data = await response.json();
         return data.data || [];
-      } catch (e) {
-        return [];
-      }
+      } catch (e) { return []; }
     };
 
     const received = await fetchPayments(url);
@@ -1351,8 +1352,8 @@ async function syncPaymentsWithAsaasAPI() {
     const allRecent = [...received, ...confirmed];
 
     if (allRecent.length === 0) {
-      console.log('[Asaas:Sync] ℹ Nenhum pagamento confirmado encontrado no Asaas para 2026.');
-      return await syncRelationalToJsonPayments();
+      console.log('[Asaas:Sync] ℹ Nenhum pagamento confirmado encontrado no Asaas.');
+      return 0;
     }
     
     const statusMap = { 
@@ -1365,37 +1366,51 @@ async function syncPaymentsWithAsaasAPI() {
       'DELETED': 'CANCELADO' 
     };
 
-    let totalUpdated = 0;
-    for (const payment of allRecent) {
-      const updateData = {
-        valor: payment.value,
-        vencimento: payment.dueDate,
-        status: statusMap[payment.status] || 'PENDENTE',
-        data_pagamento: payment.confirmedDate || payment.paymentDate || null,
-        link_boleto: payment.bankSlipUrl || payment.invoiceUrl || null
-      };
-      
-      const valorNum = Number(updateData.valor);
+    // Mapeamento para o JSON legado
+    const jsonStatusMap = {
+      'PAGO': 'paid',
+      'ATRASADO': 'overdue',
+      'CANCELADO': 'cancelled',
+      'PENDENTE': 'pending'
+    };
 
-      const result = await pool.query(`
+    let totalUpdated = 0;
+    
+    for (const payment of allRecent) {
+      const internalStatus = statusMap[payment.status] || 'PENDENTE';
+      const valorNum = Number(payment.value);
+
+      // A. Atualiza o SQL (Backup e Relatórios)
+      await pool.query(`
         INSERT INTO alunos_cobrancas (asaas_payment_id, valor, vencimento, status, data_pagamento, link_boleto)
         VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (asaas_payment_id) DO UPDATE SET
-          valor = EXCLUDED.valor,
-          vencimento = EXCLUDED.vencimento,
           status = EXCLUDED.status,
-          data_pagamento = EXCLUDED.data_pagamento,
-          link_boleto = EXCLUDED.link_boleto
-        RETURNING *
-      `, [payment.id, valorNum, updateData.vencimento, updateData.status, updateData.data_pagamento, updateData.link_boleto]);
+          data_pagamento = EXCLUDED.data_pagamento
+      `, [payment.id, valorNum, payment.dueDate, internalStatus, payment.confirmedDate || payment.paymentDate, payment.bankSlipUrl || payment.invoiceUrl]);
 
-      if (result.rowCount > 0) totalUpdated++;
+      // B. Atualiza o JSON (Visualização na Tela)
+      const pIdx = appData.payments.findIndex(p => p.asaasPaymentId === payment.id);
+      if (pIdx !== -1) {
+        const newJsonStatus = jsonStatusMap[internalStatus] || 'pending';
+        if (appData.payments[pIdx].status !== newJsonStatus) {
+          appData.payments[pIdx].status = newJsonStatus;
+          appData.payments[pIdx].paidDate = payment.confirmedDate || payment.paymentDate || appData.payments[pIdx].paidDate;
+          totalUpdated++;
+        }
+      }
     }
     
-    console.log(`[Asaas:Sync] ✅ Sincronização SQL concluída. Processados ${allRecent.length} itens.`);
-    return await syncRelationalToJsonPayments();
+    // 3. Salva o JSON atualizado (Isso reflete na UI imediatamente)
+    if (totalUpdated > 0) {
+      appData.lastUpdated = new Date().toISOString();
+      await saveSchoolData(appData);
+      console.log(`[Asaas:Sync] ✅ Sincronização concluída: ${totalUpdated} pagamentos atualizados no JSON.`);
+    }
+
+    return totalUpdated;
   } catch (err) {
-    console.error('[Asaas:Sync] ❌ Erro fatal na sincronização:', err.message);
+    console.error('[Asaas:Sync] ❌ Erro na sincronização JSON-First:', err.message);
     throw err;
   }
 }
