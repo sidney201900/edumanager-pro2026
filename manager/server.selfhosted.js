@@ -1154,22 +1154,23 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
   const rules = appData?.messageTemplates?.automationRules || {};
   const sendDaysBefore = parseInt(rules.sendDaysBefore) || 3;
   const maxPreWarnings = parseInt(rules.maxPreWarnings) || 1;
-  const sendDaysAfter = parseInt(rules.sendDaysAfter) || 1;
   const repeatEveryDays = parseInt(rules.repeatEveryDays) || 3;
 
-  let enviadasAtraso = 0;
-  let enviadasAviso = 0;
+  const allPayments = appData.payments || [];
+  const hoje = getLocalSafeDate(new Date());
 
   // 1. Processar Atrasados
   if (tipo === 'atrasado' || tipo === 'ambos') {
-    const atrasados = await getCobrancasAtrasadas();
-    const hoje = new Date();
-    hoje.setHours(0,0,0,0);
+    const atrasados = allPayments.filter(p => (p.status || '').toUpperCase() === 'ATRASADO');
 
-    for (const cob of atrasados) {
-      if (!cob.asaas_payment_id || !cob.vencimento) continue;
+    for (const pJSON of atrasados) {
+      if (!pJSON.asaasPaymentId || !pJSON.dueDate) continue;
+
+      // Pegamos os contadores do SQL para este boleto específico
+      const cob = await getCobrancaByPaymentId(pJSON.asaasPaymentId);
+      if (!cob) continue; // Sincronização cuidará de criar no SQL depois
       
-      const vencimento = getLocalSafeDate(cob.vencimento);
+      const vencimento = getLocalSafeDate(pJSON.dueDate);
       if (!vencimento) continue;
       
       const diffDiasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
@@ -1202,14 +1203,16 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
 
   // 2. Processar A Vencer (Lembretes Preventivos)
   if (tipo === 'preventivo' || tipo === 'ambos') {
-    const pendentes = await getCobrancasPendentes();
-    const hoje = new Date();
-    hoje.setHours(0,0,0,0);
+    const pendentes = allPayments.filter(p => ['PENDENTE', 'PENDING'].includes((p.status || '').toUpperCase()));
 
-    for (const cob of pendentes) {
-      if (!cob.asaas_payment_id || !cob.vencimento) continue;
+    for (const pJSON of pendentes) {
+      if (!pJSON.asaasPaymentId || !pJSON.dueDate) continue;
       
-      const vencimento = getLocalSafeDate(cob.vencimento);
+      // Pegamos os contadores do SQL para este boleto específico
+      const cob = await getCobrancaByPaymentId(pJSON.asaasPaymentId);
+      if (!cob) continue;
+      
+      const vencimento = getLocalSafeDate(pJSON.dueDate);
       if (!vencimento) continue;
       
       const diffDias = Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
