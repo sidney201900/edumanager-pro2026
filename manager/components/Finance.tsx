@@ -913,6 +913,16 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
           </button>
 
           <button
+            onClick={syncAsaasPayments}
+            disabled={isSyncing}
+            className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg font-bold active:scale-95 disabled:opacity-50"
+            title="Sincronizar pagamentos com Asaas"
+          >
+            <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
+            {isSyncing ? 'Sincronizando...' : 'Sincronizar Asaas'}
+          </button>
+
+          <button
             onClick={() => setIsModalOpen(true)}
             className="flex-1 sm:flex-none bg-indigo-600 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-lg font-bold active:scale-95"
           >

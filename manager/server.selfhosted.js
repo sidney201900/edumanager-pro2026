@@ -1326,18 +1326,26 @@ function agendarRotina(tipo, hora, minuto) {
 
 async function syncPaymentsWithAsaasAPI() {
   try {
-    const url = `${ASAAS_BASE_URL}/v3/payments?limit=100`;
-    console.log(`[Asaas:Sync] 📡 Iniciando busca em: ${url}`);
+    // Buscamos os últimos 100 pagamentos RECEBIDOS ou CONFIRMADOS para garantir que o sistema não perca nada
+    const url = `${ASAAS_BASE_URL}/v3/payments?limit=100&status=RECEIVED`;
+    const urlConfirmed = `${ASAAS_BASE_URL}/v3/payments?limit=100&status=CONFIRMED`;
     
-    const response = await fetch(url, {
-      headers: { 'access_token': ASAAS_KEY }
-    });
-    if (!response.ok) throw new Error(`Erro API Asaas: ${response.status}`);
-    const data = await response.json();
+    console.log(`[Asaas:Sync] 📡 Iniciando busca profunda de pagamentos recebidos...`);
     
-    if (!data.data || !Array.isArray(data.data)) {
-      console.log('[Asaas:Sync] ℹ Nenhuma cobrança encontrada na API.');
-      return 0;
+    const fetchPayments = async (targetUrl) => {
+      const response = await fetch(targetUrl, { headers: { 'access_token': ASAAS_KEY } });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.data || [];
+    };
+
+    const received = await fetchPayments(url);
+    const confirmed = await fetchPayments(urlConfirmed);
+    const allRecent = [...received, ...confirmed];
+
+    if (allRecent.length === 0) {
+      console.log('[Asaas:Sync] ℹ Nenhum pagamento recebido encontrado na API nas últimas consultas.');
+      return await syncRelationalToJsonPayments(); // Tenta sincronizar o que já tem no SQL para o JSON
     }
     
     const statusMap = { 
@@ -1350,9 +1358,9 @@ async function syncPaymentsWithAsaasAPI() {
       'DELETED': 'CANCELADO' 
     };
 
-    console.log(`[Asaas:Sync] 📥 Recebidas ${data.data.length} cobranças do Asaas.`);
+    console.log(`[Asaas:Sync] 📥 Processando ${allRecent.length} confirmações encontradas no Asaas.`);
 
-    for (const payment of data.data) {
+    for (const payment of allRecent) {
       const updateData = {
         valor: payment.value,
         vencimento: payment.dueDate,
@@ -1377,7 +1385,7 @@ async function syncPaymentsWithAsaasAPI() {
     
     return await syncRelationalToJsonPayments();
   } catch (err) {
-    console.error('[Asaas:Sync] ❌ Falha na sincronização ativa:', err.message);
+    console.error('[Asaas:Sync] ❌ Falha na sincronização profunda:', err.message);
     throw err;
   }
 }
