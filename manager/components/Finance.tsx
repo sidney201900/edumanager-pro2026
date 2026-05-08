@@ -183,12 +183,14 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
 
     setIsSyncing(true);
     try {
-      // 1. Solicita ao backend que sincronize o SQL para o JSON
-      const syncResp = await fetch('/api/admin/sync-finance-json', { method: 'POST' });
+      // 1. Realiza a sincronização PESADA: Busca no Asaas -> Salva no SQL -> Atualiza o JSON
+      const syncResp = await fetch('/api/admin/sync-asaas-full', { method: 'POST' });
       const syncResult = await syncResp.json();
 
       if (syncResult.success && syncResult.updatedCount > 0) {
-        showAlert('Sincronização', `${syncResult.updatedCount} pagamentos foram atualizados e salvos no sistema.`, 'success');
+        showAlert('Sincronização Ativa', `${syncResult.updatedCount} pagamentos foram atualizados diretamente do Asaas e salvos no sistema.`, 'success');
+      } else if (syncResult.success) {
+        console.log('[Sync] Tudo atualizado com o Asaas.');
       }
 
       // 2. Busca os dados atualizados para exibir na tela

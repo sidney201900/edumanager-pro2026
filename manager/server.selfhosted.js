@@ -1324,6 +1324,60 @@ function agendarRotina(tipo, hora, minuto) {
   console.log(`[Cron:${label}] ✅ Rotina agendada para ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} (America/Sao_Paulo)`);
 }
 
+async function syncPaymentsWithAsaasAPI() {
+  try {
+    const response = await fetch(`${process.env.ASAAS_BASE_URL || 'https://api.asaas.com'}/v3/payments?limit=100`, {
+      headers: { 'access_token': process.env.ASAAS_API_KEY }
+    });
+    if (!response.ok) throw new Error(`Erro API Asaas: ${response.status}`);
+    const data = await response.json();
+    
+    if (!data.data || !Array.isArray(data.data)) return 0;
+    
+    const statusMap = { 
+      'PENDING': 'PENDENTE', 
+      'OVERDUE': 'ATRASADO', 
+      'RECEIVED': 'PAGO', 
+      'CONFIRMED': 'PAGO', 
+      'RECEIVED_IN_CASH': 'PAGO', 
+      'REFUNDED': 'CANCELADO', 
+      'DELETED': 'CANCELADO' 
+    };
+
+    console.log(`[Asaas:Sync] Processando ${data.data.length} cobranças da API...`);
+
+    for (const payment of data.data) {
+      const updateData = {
+        valor: payment.value,
+        vencimento: payment.dueDate,
+        status: statusMap[payment.status] || 'PENDENTE',
+        data_pagamento: payment.confirmedDate || payment.paymentDate || null,
+        link_boleto: payment.bankSlipUrl || payment.invoiceUrl || null
+      };
+      
+      // Atualiza o SQL (updateCobranca já faz o UPSERT internamente se implementado via banco.js)
+      // Se não existir, a função deve tratar ou usamos pool.query diretamente aqui.
+      await pool.query(`
+        INSERT INTO alunos_cobrancas (asaas_payment_id, valor, vencimento, status, data_pagamento, link_boleto)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (asaas_payment_id) DO UPDATE SET
+          valor = EXCLUDED.valor,
+          vencimento = EXCLUDED.vencimento,
+          status = EXCLUDED.status,
+          data_pagamento = EXCLUDED.data_pagamento,
+          link_boleto = EXCLUDED.link_boleto
+      `, [payment.id, updateData.valor, updateData.vencimento, updateData.status, updateData.data_pagamento, updateData.link_boleto]);
+    }
+    
+    // Após atualizar o SQL, sincroniza o status para o arquivo JSON legado
+    const jsonUpdated = await syncRelationalToJsonPayments();
+    return jsonUpdated;
+  } catch (err) {
+    console.error('[Asaas:Sync] ❌ Falha na sincronização ativa:', err.message);
+    throw err;
+  }
+}
+
 async function syncRelationalToJsonPayments() {
   try {
     const { rows: cloudPayments } = await pool.query('SELECT * FROM alunos_cobrancas');
@@ -1463,6 +1517,17 @@ async function startServer() {
     } catch (error) { 
       console.error('[Disparo] Erro:', error);
       return res.status(500).json({ error: 'Erro interno.' }); 
+    }
+  });
+
+  // Endpoint para forçar sincronização direta com a API do Asaas (Aba Financeiro)
+  app.post('/api/admin/sync-asaas-full', async (req, res) => {
+    try {
+      const updatedCount = await syncPaymentsWithAsaasAPI();
+      res.json({ success: true, updatedCount });
+    } catch (e) {
+      console.error('[Asaas:FullSync] Erro:', e.message);
+      res.status(500).json({ error: e.message });
     }
   });
 
