@@ -277,6 +277,20 @@ export async function initNotasTable() {
     console.log('[PostgreSQL] ℹ️ Submissoes fkey já removidas ou tabela não existe.');
   }
 
+  // Garantir unicidade do asaas_payment_id para permitir ON CONFLICT
+  try {
+    await pool.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_asaas_payment_id') THEN
+          ALTER TABLE alunos_cobrancas ADD CONSTRAINT unique_asaas_payment_id UNIQUE (asaas_payment_id);
+        END IF;
+      END $$;
+    `);
+  } catch (err) {
+    console.warn('[PostgreSQL] Erro ao garantir UNIQUE em alunos_cobrancas:', err.message);
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notas_boletim (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -523,6 +537,38 @@ export async function syncJsonToRelationalTables() {
             justificativa = EXCLUDED.justificativa, justificativa_aceita = EXCLUDED.justificativa_aceita`,
           [f.id, f.studentId, f.classId, f.date, f.photo || '', f.verified || false, f.type || 'presence', f.justification || null, f.justificationAccepted || false]
         );
+      }
+    }
+
+    // 8. Sincronizar Cobranças (Financeiro)
+    if (data.payments && Array.isArray(data.payments)) {
+      for (const p of data.payments) {
+        if (!p.asaasPaymentId || !p.studentId) continue;
+        
+        await client.query(
+          `INSERT INTO alunos_cobrancas (
+            aluno_id, asaas_payment_id, asaas_installment_id, installment, 
+            valor, vencimento, link_boleto, status
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (asaas_payment_id) DO UPDATE SET 
+            aluno_id = EXCLUDED.aluno_id,
+            asaas_installment_id = EXCLUDED.asaas_installment_id,
+            installment = EXCLUDED.installment,
+            valor = EXCLUDED.valor,
+            vencimento = EXCLUDED.vencimento,
+            link_boleto = EXCLUDED.link_boleto,
+            status = EXCLUDED.status`,
+          [
+            p.studentId, 
+            p.asaasPaymentId, 
+            p.asaasInstallmentId || p.installmentId || null, 
+            p.installment || null,
+            p.amount || 0, 
+            p.dueDate, 
+            p.bankSlipUrl || p.link || null, 
+            (p.status || 'PENDENTE').toUpperCase()
+          ]
+        ).catch(err => console.warn(`[Sync:Finance] Erro no boleto ${p.asaasPaymentId}:`, err.message));
       }
     }
 
