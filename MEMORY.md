@@ -107,7 +107,7 @@
 - **Melhoria:** O build agora ocorre diretamente na arquitetura de destino, sem emulação QEMU, garantindo velocidade e estabilidade total.
 
 ### 📢 Automação de Mensagens
-- [x] **Estabilização de Lembretes:** Sistema de avisos preventivos e de inadimplência agora é 100% confiável, com tracking preciso de envios e suporte a múltiplos templates dinâmicos.
+- [x] **Estabilização de Lembretes (V2):** Resolvido bug de deslocamento de fuso horário (-1 dia) nas datas de vencimento. Implementadas ferramentas de debug (ignorar trava diária e reset de contadores) e **controle manual de delay para disparos em massa** para facilitar testes e garantir segurança contra banimento.
 
 ## 📋 Próximos Passos Pendentes
 

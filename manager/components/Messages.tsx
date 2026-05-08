@@ -67,6 +67,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
   const [targetId, setTargetId] = useState('');
   const [messageText, setMessageText] = useState('');
   const [isSendingMass, setIsSendingMass] = useState(false);
+  const [massDelay, setMassDelay] = useState('60');
   const [isSendingBdays, setIsSendingBdays] = useState(false);
   
   // Modal de Edição de Modelo
@@ -237,7 +238,11 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
       const resp = await fetch('/api/enviar-massa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alunos: payloadAlunos, mensagem: normalizeLineBreaks(messageText) })
+        body: JSON.stringify({ 
+          alunos: payloadAlunos, 
+          mensagem: normalizeLineBreaks(messageText),
+          delay: parseInt(massDelay) || 60
+        })
       });
       const resData = await resp.json();
       
@@ -366,6 +371,21 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                 />
               </div>
 
+              <div className="bg-white/50 p-3 rounded-xl border border-emerald-100 mb-2">
+                <label className="block text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1.5 ml-1">Intervalo Mínimo (Segundos)</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" 
+                    min="10" max="600"
+                    value={massDelay}
+                    onChange={(e) => setMassDelay(e.target.value)}
+                    className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm font-bold text-center focus:ring-emerald-500 focus:outline-none"
+                  />
+                  <div className="text-[10px] text-emerald-400 font-bold whitespace-nowrap">seg/msg</div>
+                </div>
+                <p className="text-[8px] text-emerald-400 mt-1 font-medium leading-tight">Recomendado: 60s ou mais para evitar banimento.</p>
+              </div>
+
               <button 
                 onClick={handleMassSend}
                 disabled={isSendingMass || !data.evolutionConfig?.apiUrl}
@@ -385,15 +405,52 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
             <p className="text-[10px] text-indigo-600 font-medium mb-4">
               Envia avisos para boletos que vencem em até {templates.automationRules.sendDaysBefore} dias.
             </p>
-            <button 
-              onClick={handleDispararPreventivos}
-              disabled={isSendingPreventive || !data.evolutionConfig?.apiUrl}
-              className={`w-full py-3.5 px-4 rounded-xl font-black text-sm text-white shadow-lg transition-all active:scale-95 ${
-                isSendingPreventive || !data.evolutionConfig?.apiUrl ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700'
-              }`}
-            >
-              {isSendingPreventive ? 'Processando...' : 'Enviar Lembretes Agora'}
-            </button>
+            <div className="space-y-3 mb-4">
+              <button 
+                onClick={handleDispararPreventivos}
+                disabled={isSendingPreventive || !data.evolutionConfig?.apiUrl}
+                className={`w-full py-3.5 px-4 rounded-xl font-black text-sm text-white shadow-lg transition-all active:scale-95 ${
+                  isSendingPreventive || !data.evolutionConfig?.apiUrl ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700'
+                }`}
+              >
+                {isSendingPreventive ? 'Processando...' : 'Enviar Lembretes Agora'}
+              </button>
+
+              <div className="flex flex-col gap-2 p-3 bg-white/50 rounded-xl border border-indigo-100">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input 
+                    type="checkbox"
+                    checked={!!templates.automationRules.ignoreDailyLock}
+                    onChange={(e) => {
+                      const newRules = { ...templates.automationRules, ignoreDailyLock: e.target.checked };
+                      setTemplates(prev => ({ ...prev, automationRules: newRules }));
+                      updateData({ messageTemplates: { ...templates, automationRules: newRules } });
+                    }}
+                    className="w-4 h-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tight group-hover:text-indigo-900 transition-colors">
+                    Ignorar trava de envio diário (Debug)
+                  </span>
+                </label>
+
+                <button
+                  onClick={async () => {
+                    showConfirm('Zerar Contadores', 'Tem certeza que deseja zerar todos os contadores de avisos (preventivos e atrasos) de todos os alunos? Isso permitirá que eles recebam os avisos novamente.', async () => {
+                      try {
+                        const resp = await fetch('/api/admin/reset-cobrancas-counters', { method: 'POST' });
+                        if (resp.ok) showAlert('Sucesso', 'Todos os contadores foram zerados!', 'success');
+                        else showAlert('Erro', 'Falha ao zerar contadores.', 'error');
+                      } catch (e) {
+                        showAlert('Erro', 'Erro de conexão.', 'error');
+                      }
+                    });
+                  }}
+                  className="w-full py-2 px-3 bg-white border border-indigo-200 text-indigo-600 rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-300 transition-all active:scale-95"
+                >
+                  Zerar Contadores de Avisos
+                </button>
+              </div>
+            </div>
 
             {/* Agendamento Automático */}
             <div className="mt-5 pt-5 border-t border-indigo-200">

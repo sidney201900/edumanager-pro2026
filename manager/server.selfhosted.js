@@ -937,13 +937,13 @@ app.put('/api/notificacoes/remover-anexo/:id', async (req, res) => {
 // Disparo em Massa
 // ============================================================
 app.post('/api/enviar-massa', (req, res) => {
-  const { alunos, mensagem } = req.body;
+  const { alunos, mensagem, delay } = req.body;
   if (!alunos || !Array.isArray(alunos) || alunos.length === 0) return res.status(400).json({ error: 'Nenhum aluno.' });
   res.status(200).json({ success: true, message: 'Background iniciado.' });
-  processarFilaWhatsApp(alunos, mensagem);
+  processarFilaWhatsApp(alunos, mensagem, delay || 60);
 });
 
-async function processarFilaWhatsApp(alunos, mensagemTemplate) {
+async function processarFilaWhatsApp(alunos, mensagemTemplate, customDelay = 60) {
   const appData = await getSchoolData();
   const evoConfig = appData?.evolutionConfig;
   if (!evoConfig?.apiUrl || !evoConfig?.apiKey || !evoConfig?.instanceName) return;
@@ -957,7 +957,11 @@ async function processarFilaWhatsApp(alunos, mensagemTemplate) {
       const url = `${evoConfig.apiUrl.replace(/\/$/, '')}/message/sendText/${evoConfig.instanceName}`;
       await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoConfig.apiKey }, body: JSON.stringify({ number: cleanPhone, text: msg }) });
     } catch (error) { console.error(`[Massa] Erro ${aluno.nome}:`, error.message); }
-    if (i < alunos.length - 1) await new Promise(r => setTimeout(r, Math.floor(Math.random() * 120000) + 60000));
+    if (i < alunos.length - 1) {
+      // Delay base informado pelo usuário + variância aleatória de 0-30s para evitar padrões robóticos
+      const delayMs = (customDelay * 1000) + (Math.floor(Math.random() * 30000));
+      await new Promise(r => setTimeout(r, delayMs));
+    }
   }
 }
 
@@ -1104,6 +1108,27 @@ app.get('/api/alunos/:id/carne', async (req, res) => {
 // ============================================================
 // LÓGICA REUTILIZÁVEL DE DISPARO DE COBRANÇAS
 // ============================================================
+// Helpers de Data
+// ============================================================
+const getLocalSafeDate = (val) => {
+  if (!val) return null;
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return null;
+  
+  // Se for string YYYY-MM-DD pura, o JS cria em UTC. 
+  // Forçamos para os componentes locais para evitar o deslocamento de -1 dia.
+  if (typeof val === 'string' && val.includes('-') && !val.includes('T') && !val.includes(':')) {
+    const parts = val.split(' ')[0].split('-');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 0, 0, 0, 0);
+    }
+  }
+  
+  // Para objetos Date ou strings com tempo, extraímos o dia civil local
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+};
+
+// ============================================================
 async function executarRotinaCobrancas(tipo = 'ambos') {
   const appData = await getSchoolData();
   const rules = appData?.messageTemplates?.automationRules || {};
@@ -1124,19 +1149,19 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
     for (const cob of atrasados) {
       if (!cob.asaas_payment_id || !cob.vencimento) continue;
       
-      const vencimento = new Date(cob.vencimento);
-      vencimento.setHours(0,0,0,0);
+      const vencimento = getLocalSafeDate(cob.vencimento);
+      if (!vencimento) continue;
+      
       const diffDiasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
 
       if (diffDiasAtraso >= sendDaysAfter) {
-        const lastWarn = cob.last_overdue_warning_at ? new Date(cob.last_overdue_warning_at) : null;
-        if (lastWarn) lastWarn.setHours(0,0,0,0);
+        const lastWarn = getLocalSafeDate(cob.last_overdue_warning_at);
         
         const diasDesdeUltimoAviso = lastWarn 
             ? Math.floor((hoje.getTime() - lastWarn.getTime()) / (1000 * 60 * 60 * 24)) 
             : null;
 
-        const jaEnviadoHoje = lastWarn && lastWarn.getTime() === hoje.getTime();
+        const jaEnviadoHoje = !rules.ignoreDailyLock && lastWarn && lastWarn.toDateString() === hoje.toDateString();
 
         if (!jaEnviadoHoje && (diasDesdeUltimoAviso === null || diasDesdeUltimoAviso >= repeatEveryDays)) {
           const sent = await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE');
@@ -1164,8 +1189,8 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
     for (const cob of pendentes) {
       if (!cob.asaas_payment_id || !cob.vencimento) continue;
       
-      const vencimento = new Date(cob.vencimento);
-      vencimento.setHours(0,0,0,0);
+      const vencimento = getLocalSafeDate(cob.vencimento);
+      if (!vencimento) continue;
       
       const diffDias = Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
       const sendOnDueDate = rules.sendOnDueDate !== false;
@@ -1174,8 +1199,8 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
         const currentCount = parseInt(cob.pre_warnings_count) || 0;
         
         if (currentCount < maxPreWarnings) {
-          const lastWarn = cob.last_pre_warning_at ? new Date(cob.last_pre_warning_at) : null;
-          const jaEnviadoHoje = lastWarn && lastWarn.toDateString() === hoje.toDateString();
+          const lastWarn = getLocalSafeDate(cob.last_pre_warning_at);
+          const jaEnviadoHoje = !rules.ignoreDailyLock && lastWarn && lastWarn.toDateString() === hoje.toDateString();
 
           if (!jaEnviadoHoje) {
             const sent = await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING');
@@ -1313,6 +1338,16 @@ async function inicializarAgendamento() {
 }
 
 async function startServer() {
+
+  // Rota para zerar contadores de avisos
+  app.post('/api/admin/reset-cobrancas-counters', async (req, res) => {
+    try {
+      await pool.query('UPDATE alunos_cobrancas SET pre_warnings_count = 0, last_pre_warning_at = NULL, overdue_warnings_count = 0, last_overdue_warning_at = NULL');
+      return res.json({ success: true, message: 'Contadores zerados com sucesso!' });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
 
   // Disparo Manual de Inadimplência e Lembretes
   app.post('/api/disparar_cobrancas', async (req, res) => {
