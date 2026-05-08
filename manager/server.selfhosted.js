@@ -490,26 +490,43 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
     sentCache.add(cacheKey);
     setTimeout(() => sentCache.delete(cacheKey), 30000);
 
-    const aluno = appData.students?.find(s => s.id === cob.aluno_id);
-    if (!aluno) return console.log('[WhatsApp] Aluno não encontrado.');
+    let aluno = appData.students?.find(s => s.id === cob.aluno_id);
+    
+    // Fallback: Se não achar no JSON, busca na tabela SQL de alunos
+    if (!aluno) {
+      const { rows } = await pool.query('SELECT * FROM alunos WHERE id = $1', [cob.aluno_id]);
+      if (rows[0]) {
+        const a = rows[0];
+        aluno = {
+          id: a.id,
+          name: a.nome,
+          phone: a.telefone,
+          guardianPhone: a.telefone_responsavel,
+          birthDate: a.data_nascimento,
+          enrollmentNumber: a.numero_matricula
+        };
+      }
+    }
 
-    const birthDateStr = aluno.data_nascimento || aluno.birthDate || '';
-    let age = 18;
-    if (birthDateStr && birthDateStr.includes('-')) {
-      const parts = birthDateStr.split('T')[0].split('-');
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10);
-      const day = parseInt(parts[2], 10);
-      const birthDate = new Date(year, month - 1, day);
+    if (!aluno) return console.log('[WhatsApp] Aluno não encontrado:', cob.aluno_id);
+
+    let age = 18; // Padrão adulto para evitar travas se bday faltar
+    if (aluno.birthDate) {
+      const bDate = new Date(aluno.birthDate);
       const today = new Date();
-      age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+      age = today.getFullYear() - bDate.getFullYear();
+      const m = today.getMonth() - bDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < bDate.getDate())) age--;
     }
 
     const isMinor = age < 18;
-    const targetPhone = (isMinor && (aluno.telefone_responsavel || aluno.guardianPhone)) ? (aluno.telefone_responsavel || aluno.guardianPhone) : (aluno.telefone || aluno.phone);
-    const targetName = (isMinor && (aluno.nome_responsavel || aluno.guardianName)) ? (aluno.nome_responsavel || aluno.guardianName) : (aluno.nome || aluno.name);
+    // Seleção resiliente: Tenta responsável se menor, mas aceita o do aluno se o do pai faltar (e vice-versa)
+    const targetPhone = isMinor 
+      ? (aluno.guardianPhone || aluno.telefone_responsavel || aluno.phone || aluno.telefone)
+      : (aluno.phone || aluno.telefone || aluno.guardianPhone || aluno.telefone_responsavel);
+
+    const targetName = (isMinor && (aluno.nome_responsavel || aluno.guardianName)) ? (aluno.nome_responsavel || aluno.guardianName) : (aluno.name || aluno.nome);
+    
     if (!targetPhone) return console.log('[WhatsApp] Sem telefone.');
 
     let cleanPhone = targetPhone.replace(/\D/g, '');
@@ -557,11 +574,14 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
 
     if (!templateText) return;
 
+    const valNum = parseFloat(fallbackValor);
+    const valorFormatado = !isNaN(valNum) ? valNum.toFixed(2).replace('.', ',') : '—';
+
     let msgFinal = templateText
       .replace(/{nome}/g, targetName)
-      .replace(/{nome_aluno}/g, aluno.name)
-      .replace(/{matricula}/g, aluno.enrollmentNumber || aluno.matricula || '—')
-      .replace(/{valor}/g, parseFloat(fallbackValor).toFixed(2).replace('.', ','))
+      .replace(/{nome_aluno}/g, aluno.name || aluno.nome)
+      .replace(/{matricula}/g, aluno.enrollmentNumber || aluno.numero_matricula || aluno.matricula || '—')
+      .replace(/{valor}/g, valorFormatado)
       .replace(/{vencimento}/g, formatCobrancaDate(typeof fallbackVencimento === 'string' ? fallbackVencimento : (fallbackVencimento instanceof Date ? fallbackVencimento.toISOString().split('T')[0] : '')))
       .replace(/{link_boleto}/g, pdfUrl)
       .replace(/{descricao}/g, descricao);
@@ -1164,7 +1184,7 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
         const jaEnviadoHoje = !rules.ignoreDailyLock && lastWarn && lastWarn.toDateString() === hoje.toDateString();
 
         if (!jaEnviadoHoje && (diasDesdeUltimoAviso === null || diasDesdeUltimoAviso >= repeatEveryDays)) {
-          const sent = await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE');
+          const sent = await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE', cob.valor, cob.vencimento);
           
           if (sent) {
             const currentCount = parseInt(cob.overdue_warnings_count) || 0;
@@ -1203,7 +1223,7 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
           const jaEnviadoHoje = !rules.ignoreDailyLock && lastWarn && lastWarn.toDateString() === hoje.toDateString();
 
           if (!jaEnviadoHoje) {
-            const sent = await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING');
+            const sent = await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING', cob.valor, cob.vencimento);
             
             if (sent) {
               await pool.query(
