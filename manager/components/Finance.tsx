@@ -183,6 +183,15 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
 
     setIsSyncing(true);
     try {
+      // 1. Solicita ao backend que sincronize o SQL para o JSON
+      const syncResp = await fetch('/api/admin/sync-finance-json', { method: 'POST' });
+      const syncResult = await syncResp.json();
+
+      if (syncResult.success && syncResult.updatedCount > 0) {
+        showAlert('Sincronização', `${syncResult.updatedCount} pagamentos foram atualizados e salvos no sistema.`, 'success');
+      }
+
+      // 2. Busca os dados atualizados para exibir na tela
       const resp = await fetch('/api/admin/cobrancas');
       if (!resp.ok) throw new Error('API fetch failed');
       const cloudPayments = await resp.json();
@@ -191,14 +200,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
         let updatedCount = 0;
         const currentPayments = dataPaymentsRef.current;
         const updatedPayments = currentPayments.map(p => {
-          const match = cloudPayments.find((cp: any) => {
-            if (p.asaasPaymentId) {
-              return cp.asaas_payment_id === p.asaasPaymentId;
-            }
-            return cp.aluno_id === p.studentId &&
-              Math.abs(cp.valor - p.amount) < 0.01 &&
-              cp.vencimento === p.dueDate;
-          });
+          const match = cloudPayments.find((cp: any) => cp.asaas_payment_id === p.asaasPaymentId);
 
           if (match) {
             const statusStr = (match.status || '').toLowerCase();
@@ -206,14 +208,13 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
               statusStr === 'atrasado' ? 'overdue' :
                 statusStr === 'cancelado' ? 'cancelled' : 'pending';
 
-            if (p.status !== newStatus || p.amount !== match.valor || p.installmentId !== (match.asaas_installment_id || match.installment) || p.asaasPaymentUrl !== match.link_boleto || p.asaasPaymentId !== match.asaas_payment_id) {
+            if (p.status !== newStatus) {
               updatedCount++;
               return {
                 ...p,
                 status: newStatus as any,
-                amount: match.valor,
+                amount: Number(match.valor),
                 paidDate: match.data_pagamento || p.paidDate,
-                installmentId: match.asaas_installment_id || match.installment || p.installmentId,
                 asaasPaymentUrl: match.link_boleto || p.asaasPaymentUrl,
                 asaasPaymentId: match.asaas_payment_id || p.asaasPaymentId
               };
@@ -224,28 +225,10 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
 
         if (updatedCount > 0) {
           updateData({ payments: updatedPayments });
-
-          const hasOverdue = updatedPayments.some((p, idx) => {
-            const oldP = currentPayments[idx];
-            return oldP && oldP.status !== 'overdue' && p.status === 'overdue';
-          });
-
-          const hasPaid = updatedPayments.some((p, idx) => {
-            const oldP = currentPayments[idx];
-            return oldP && oldP.status !== 'paid' && p.status === 'paid';
-          });
-
-          let message = `${updatedCount} pagamento(s) atualizado(s).`;
-          if (hasPaid && !hasOverdue) message = 'Pagamento confirmado e registrado.';
-          if (hasOverdue && !hasPaid) message = 'Status atualizado para Atrasado.';
-          if (hasPaid && hasOverdue) message = 'Pagamentos e atrasos atualizados.';
-
-          showAlert('Sincronização', message, 'success');
         }
       }
     } catch (error) {
       console.error('Erro ao sincronizar pagamentos:', error);
-      // Suppress alert so it doesn't pop up randomly to the user if the server restarts temporarily
     } finally {
       setIsSyncing(false);
     }

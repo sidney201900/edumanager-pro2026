@@ -1324,6 +1324,43 @@ function agendarRotina(tipo, hora, minuto) {
   console.log(`[Cron:${label}] ✅ Rotina agendada para ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} (America/Sao_Paulo)`);
 }
 
+async function syncRelationalToJsonPayments() {
+  try {
+    const { rows: cloudPayments } = await pool.query('SELECT * FROM alunos_cobrancas');
+    const appData = await getSchoolData();
+    let updatedCount = 0;
+
+    if (!appData || !appData.payments) return;
+
+    const updatedPayments = appData.payments.map(p => {
+      const match = cloudPayments.find(cp => cp.asaas_payment_id === p.asaasPaymentId);
+      if (match) {
+        const statusStr = (match.status || '').toLowerCase();
+        const newStatus = statusStr === 'pago' ? 'paid' :
+                          statusStr === 'atrasado' ? 'overdue' :
+                          statusStr === 'cancelado' ? 'cancelled' : 'pending';
+
+        if (p.status !== newStatus) {
+          updatedCount++;
+          return { ...p, status: newStatus, paidDate: match.data_pagamento || p.paidDate };
+        }
+      }
+      return p;
+    });
+
+    if (updatedCount > 0) {
+      appData.payments = updatedPayments;
+      appData.lastUpdated = new Date().toISOString();
+      await saveSchoolData(appData);
+      console.log(`[Sync:SQL->JSON] ✅ ${updatedCount} status de pagamentos sincronizados com sucesso.`);
+    }
+    return updatedCount;
+  } catch (err) {
+    console.error('[Sync:SQL->JSON] ❌ Erro na sincronização reversa:', err.message);
+    return 0;
+  }
+}
+
 async function inicializarAgendamento() {
   try {
     // Inicialização DB para colunas de automação (garantir no boot)
@@ -1350,6 +1387,9 @@ async function inicializarAgendamento() {
     
     // Sincronização de Integridade (JSON -> Tabelas Relacionais)
     await syncJsonToRelationalTables();
+
+    // Sincronização Reversa (SQL -> JSON) - Garante que status pagos no DB reflitam no painel administrativo
+    await syncRelationalToJsonPayments();
 
     const appData = await getSchoolData();
     
@@ -1423,6 +1463,16 @@ async function startServer() {
     } catch (error) { 
       console.error('[Disparo] Erro:', error);
       return res.status(500).json({ error: 'Erro interno.' }); 
+    }
+  });
+
+  // Endpoint para forçar sincronização SQL -> JSON (Aba Financeiro)
+  app.post('/api/admin/sync-finance-json', async (req, res) => {
+    try {
+      const updatedCount = await syncRelationalToJsonPayments();
+      res.json({ success: true, updatedCount });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
     }
   });
 
