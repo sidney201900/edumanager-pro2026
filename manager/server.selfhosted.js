@@ -1326,17 +1326,24 @@ function agendarRotina(tipo, hora, minuto) {
 
 async function syncPaymentsWithAsaasAPI() {
   try {
-    // Buscamos os últimos 100 pagamentos RECEBIDOS ou CONFIRMADOS para garantir que o sistema não perca nada
-    const url = `${ASAAS_BASE_URL}/v3/payments?limit=100&status=RECEIVED`;
+    // Busca abrangente: todos os pagos/confirmados desde o início de 2026
+    const url = `${ASAAS_BASE_URL}/v3/payments?limit=100&status=RECEIVED&paymentDate%5Bge%5D=2026-01-01`;
     const urlConfirmed = `${ASAAS_BASE_URL}/v3/payments?limit=100&status=CONFIRMED`;
     
-    console.log(`[Asaas:Sync] 📡 Iniciando busca profunda de pagamentos recebidos...`);
+    console.log(`[Asaas:Sync] 🚀 Iniciando Sincronização Atômica Retroativa...`);
     
     const fetchPayments = async (targetUrl) => {
-      const response = await fetch(targetUrl, { headers: { 'access_token': ASAAS_KEY } });
-      if (!response.ok) return [];
-      const data = await response.json();
-      return data.data || [];
+      try {
+        const response = await fetch(targetUrl, { headers: { 'access_token': ASAAS_KEY } });
+        if (!response.ok) {
+          console.error(`[Asaas:Sync] Erro na URL ${targetUrl}: ${response.status}`);
+          return [];
+        }
+        const data = await response.json();
+        return data.data || [];
+      } catch (e) {
+        return [];
+      }
     };
 
     const received = await fetchPayments(url);
@@ -1344,8 +1351,8 @@ async function syncPaymentsWithAsaasAPI() {
     const allRecent = [...received, ...confirmed];
 
     if (allRecent.length === 0) {
-      console.log('[Asaas:Sync] ℹ Nenhum pagamento recebido encontrado na API nas últimas consultas.');
-      return await syncRelationalToJsonPayments(); // Tenta sincronizar o que já tem no SQL para o JSON
+      console.log('[Asaas:Sync] ℹ Nenhum pagamento confirmado encontrado no Asaas para 2026.');
+      return await syncRelationalToJsonPayments();
     }
     
     const statusMap = { 
@@ -1358,8 +1365,7 @@ async function syncPaymentsWithAsaasAPI() {
       'DELETED': 'CANCELADO' 
     };
 
-    console.log(`[Asaas:Sync] 📥 Processando ${allRecent.length} confirmações encontradas no Asaas.`);
-
+    let totalUpdated = 0;
     for (const payment of allRecent) {
       const updateData = {
         valor: payment.value,
@@ -1371,7 +1377,7 @@ async function syncPaymentsWithAsaasAPI() {
       
       const valorNum = Number(updateData.valor);
 
-      await pool.query(`
+      const result = await pool.query(`
         INSERT INTO alunos_cobrancas (asaas_payment_id, valor, vencimento, status, data_pagamento, link_boleto)
         VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (asaas_payment_id) DO UPDATE SET
@@ -1380,12 +1386,16 @@ async function syncPaymentsWithAsaasAPI() {
           status = EXCLUDED.status,
           data_pagamento = EXCLUDED.data_pagamento,
           link_boleto = EXCLUDED.link_boleto
+        RETURNING *
       `, [payment.id, valorNum, updateData.vencimento, updateData.status, updateData.data_pagamento, updateData.link_boleto]);
+
+      if (result.rowCount > 0) totalUpdated++;
     }
     
+    console.log(`[Asaas:Sync] ✅ Sincronização SQL concluída. Processados ${allRecent.length} itens.`);
     return await syncRelationalToJsonPayments();
   } catch (err) {
-    console.error('[Asaas:Sync] ❌ Falha na sincronização profunda:', err.message);
+    console.error('[Asaas:Sync] ❌ Erro fatal na sincronização:', err.message);
     throw err;
   }
 }
