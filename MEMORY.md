@@ -106,6 +106,12 @@
 - **Estado Atual:** Pipeline 100% estabilizado no GitHub Actions usando `self-hosted` runner (Oracle ARM64 nativo). 
 - **Melhoria:** O build agora ocorre diretamente na arquitetura de destino, sem emulação QEMU, garantindo velocidade e estabilidade total.
 
+### 📅 08/05/2026 - Estabilização Crítica de Automação e Sincronia Financeira
+- **Fonte de Disparos:** A rotina de cobranças agora utiliza o `school_data.payments` (JSON) como fonte primária para garantir 100% de paridade com o painel financeiro, eliminando falhas de "tabela vazia".
+- **Sincronização Financeira:** Implementado o espelhamento automático de `data.payments` (JSON) para a tabela `alunos_cobrancas` (SQL) com trava de unicidade no `asaas_payment_id`.
+- **Busca Híbrida de Alunos:** O envio de WhatsApp agora busca o aluno primeiro no JSON e, caso não encontre, faz o fallback para a tabela SQL `alunos`.
+- **Resiliência de Telefone:** Implementada lógica de "Melhor Esforço" para seleção de telefone (Responsável vs Aluno) e proteção contra erro de `NaN` na formatação de valores.
+
 ### 📢 Automação de Mensagens
 - [x] **Estabilização de Lembretes (V2):** Resolvido bug de deslocamento de fuso horário (-1 dia) nas datas de vencimento. Implementadas ferramentas de debug (ignorar trava diária e reset de contadores) e **controle manual de delay para disparos em massa** para facilitar testes e garantir segurança contra banimento.
 

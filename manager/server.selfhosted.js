@@ -459,7 +459,7 @@ function formatCobrancaDate(dateStr) {
 // Integração WhatsApp Evolution API
 // (Mesma lógica, trocando supabase por database.js)
 // ============================================================
-async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = null) {
+async function sendEvolutionMessage(asaasPaymentId, eventType, fallbackValorArg = null, fallbackVencimentoArg = null) {
   try {
     let cob = null;
     for (let i = 0; i < 3; i++) {
@@ -470,9 +470,9 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
 
     if (!cob) return console.log(`[Evolution] Cobrança não encontrada: ${asaasPaymentId}`);
 
-    let fallbackValor = cob.valor;
-    let fallbackVencimento = cob.vencimento;
-    let fallbackDescricao = paymentPayload?.description || 'serviços educacionais';
+    let fallbackValor = fallbackValorArg || cob.valor;
+    let fallbackVencimento = fallbackVencimentoArg || cob.vencimento;
+    let fallbackDescricao = 'serviços educacionais';
 
     const appData = await getSchoolData();
     if (!appData) return console.log('[WhatsApp] school_data não encontrado');
@@ -1154,7 +1154,11 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
   const rules = appData?.messageTemplates?.automationRules || {};
   const sendDaysBefore = parseInt(rules.sendDaysBefore) || 3;
   const maxPreWarnings = parseInt(rules.maxPreWarnings) || 1;
+  const sendDaysAfter = parseInt(rules.sendDaysAfter) || 1;
   const repeatEveryDays = parseInt(rules.repeatEveryDays) || 3;
+
+  let enviadasAtraso = 0;
+  let enviadasAviso = 0;
 
   const allPayments = appData.payments || [];
   const hoje = getLocalSafeDate(new Date());

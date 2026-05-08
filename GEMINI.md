@@ -55,4 +55,5 @@
 26. **SQL-First Architecture Pattern**: New features or module refactors SHOULD prioritize 100% SQL persistence (using `notas_boletim` as a template). The legacy JSON `school_data` should be treated as secondary or deprecated for these modules, ensuring real-time consistency between Manager and Portal.
 27. **Safe Rendering Principle (Portal)**: All property accesses on dynamic objects (like `data` or `student`) MUST use optional chaining (`?.`). Avoid using undeclared variables copied from other modules; always perform a `tsc` check in the portal before committing to prevent "White Screen of Death" crashes.
 28. **Frequency Parity Rule**: The Portal MUST mirror the Manager's attendance matching logic exactly, including time windows (30m before) and end-of-day fallbacks (23:59), to ensure data consistency between Admin and Student views.
-
+29. **Hybrid Identity Lookup**: Automated messaging services MUST implement a hybrid lookup for students: first check the legacy `school_data` JSON, then fallback to the PostgreSQL `alunos` table. This ensures support for both migrated and newly created students.
+30. **Financial Data Integrity**: Automation routines MUST prioritize `school_data.payments` (JSON) as the trigger source while using `alunos_cobrancas` (SQL) for tracking notification counters (spam control), ensuring 100% parity with the management UI.
