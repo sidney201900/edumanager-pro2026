@@ -433,7 +433,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
         installmentId: id,
         payments: sorted,
         studentId: sorted[0].studentId,
-        totalAmount: sorted.reduce((sum, p) => sum + p.amount, 0),
+        totalAmount: sorted.reduce((sum, p) => sum + Number(p.amount), 0),
         totalInstallments: sorted[0].totalInstallments || sorted.length,
         description: sorted[0].description?.split(' (')[0] || 'Parcelamento',
         dueDate: sorted[0].dueDate

@@ -716,6 +716,33 @@ app.post('/api/webhook_asaas', async (req, res) => {
     }
 
     await updateCobranca(asaasPaymentId, updateData);
+
+    // Sincronização em tempo real com o JSON legado
+    try {
+      const appData = await getSchoolData();
+      const pIdx = appData.payments?.findIndex(p => p.asaasPaymentId === asaasPaymentId);
+      if (pIdx !== undefined && pIdx !== -1) {
+        const p = appData.payments[pIdx];
+        const statusStr = (updateData.status || '').toLowerCase();
+        const newStatus = statusStr === 'pago' ? 'paid' :
+                          statusStr === 'atrasado' ? 'overdue' :
+                          statusStr === 'cancelado' ? 'cancelled' : 'pending';
+        
+        appData.payments[pIdx] = { 
+          ...p, 
+          status: newStatus,
+          amount: updateData.valor || p.amount,
+          dueDate: updateData.vencimento || p.dueDate,
+          paidDate: updateData.data_pagamento || p.paidDate
+        };
+        appData.lastUpdated = new Date().toISOString();
+        await saveSchoolData(appData);
+        console.log(`[Webhook:Sync] JSON atualizado para boleto ${asaasPaymentId}`);
+      }
+    } catch (syncErr) {
+      console.error('[Webhook:Sync] Erro ao sincronizar JSON:', syncErr.message);
+    }
+
     addLog('Webhook', `Sucesso ${payload.event}`, { asaasPaymentId });
     return res.status(200).json({ message: 'OK' });
   } catch (error) {
@@ -728,7 +755,12 @@ app.post('/api/webhook_asaas', async (req, res) => {
 app.get('/api/admin/cobrancas', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM alunos_cobrancas ORDER BY vencimento DESC');
-    res.json(result.rows);
+    // Garantir que valores numéricos sejam retornados como Number para evitar bugs de string no front
+    const rows = result.rows.map(r => ({
+      ...r,
+      valor: Number(r.valor)
+    }));
+    res.json(rows);
   } catch(e) {
     res.status(500).json({error: e.message});
   }
