@@ -562,7 +562,7 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
       .replace(/{nome_aluno}/g, aluno.name)
       .replace(/{matricula}/g, aluno.enrollmentNumber || aluno.matricula || '—')
       .replace(/{valor}/g, parseFloat(fallbackValor).toFixed(2).replace('.', ','))
-      .replace(/{vencimento}/g, formatCobrancaDate(typeof fallbackVencimento === 'string' ? fallbackVencimento : ''))
+      .replace(/{vencimento}/g, formatCobrancaDate(typeof fallbackVencimento === 'string' ? fallbackVencimento : (fallbackVencimento instanceof Date ? fallbackVencimento.toISOString().split('T')[0] : '')))
       .replace(/{link_boleto}/g, pdfUrl)
       .replace(/{descricao}/g, descricao);
 
@@ -593,7 +593,7 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
       }
     }
 
-    if ((isCreationEvent || isPaymentConfirmation || eventType === 'PAYMENT_UPDATED') && !base64Pdf && pdfUrl) {
+    if ((isCreationEvent || isPaymentConfirmation || eventType === 'PAYMENT_UPDATED' || eventType === 'PAYMENT_UPCOMING') && !base64Pdf && pdfUrl) {
       msgFinal += `\n\n📄 Acesse aqui sua cobrança:\n${pdfUrl}`;
     }
 
@@ -613,10 +613,16 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, paymentPayload = 
     const url = `${evoConfig.apiUrl.replace(/\/$/, '')}/message/${endpoint}/${evoConfig.instanceName}`;
     const sendResp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoConfig.apiKey }, body: JSON.stringify(payload) });
 
-    if (sendResp.ok) console.log(`[WhatsApp] ✅ Enviado para ${cleanPhone}`);
-    else console.error(`[WhatsApp] ❌ Erro:`, sendResp.status);
+    if (sendResp.ok) {
+      console.log(`[WhatsApp] ✅ Enviado para ${cleanPhone}`);
+      return true;
+    } else {
+      console.error(`[WhatsApp] ❌ Erro:`, sendResp.status);
+      return false;
+    }
   } catch (error) {
     console.error('[WhatsApp] Erro interno:', error.message);
+    return false;
   }
 }
 
@@ -1133,15 +1139,17 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
         const jaEnviadoHoje = lastWarn && lastWarn.getTime() === hoje.getTime();
 
         if (!jaEnviadoHoje && (diasDesdeUltimoAviso === null || diasDesdeUltimoAviso >= repeatEveryDays)) {
-          await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE');
+          const sent = await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_OVERDUE');
           
-          const currentCount = parseInt(cob.overdue_warnings_count) || 0;
-          await pool.query(
-            'UPDATE alunos_cobrancas SET overdue_warnings_count = $1, last_overdue_warning_at = NOW() WHERE asaas_payment_id = $2',
-            [currentCount + 1, cob.asaas_payment_id]
-          );
-          
-          enviadasAtraso++; 
+          if (sent) {
+            const currentCount = parseInt(cob.overdue_warnings_count) || 0;
+            await pool.query(
+              'UPDATE alunos_cobrancas SET overdue_warnings_count = $1, last_overdue_warning_at = NOW() WHERE asaas_payment_id = $2',
+              [currentCount + 1, cob.asaas_payment_id]
+            );
+            
+            enviadasAtraso++; 
+          }
         }
       }
     }
@@ -1160,8 +1168,9 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
       vencimento.setHours(0,0,0,0);
       
       const diffDias = Math.ceil((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+      const sendOnDueDate = rules.sendOnDueDate !== false;
       
-      if (diffDias > 0 && diffDias <= sendDaysBefore) {
+      if ((diffDias > 0 && diffDias <= sendDaysBefore) || (diffDias === 0 && sendOnDueDate)) {
         const currentCount = parseInt(cob.pre_warnings_count) || 0;
         
         if (currentCount < maxPreWarnings) {
@@ -1169,13 +1178,15 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
           const jaEnviadoHoje = lastWarn && lastWarn.toDateString() === hoje.toDateString();
 
           if (!jaEnviadoHoje) {
-            await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING');
+            const sent = await sendEvolutionMessage(cob.asaas_payment_id, 'PAYMENT_UPCOMING');
             
-            await pool.query(
-              'UPDATE alunos_cobrancas SET pre_warnings_count = $1, last_pre_warning_at = NOW() WHERE asaas_payment_id = $2',
-              [currentCount + 1, cob.asaas_payment_id]
-            );
-            enviadasAviso++;
+            if (sent) {
+              await pool.query(
+                'UPDATE alunos_cobrancas SET pre_warnings_count = $1, last_pre_warning_at = NOW() WHERE asaas_payment_id = $2',
+                [currentCount + 1, cob.asaas_payment_id]
+              );
+              enviadasAviso++;
+            }
           }
         }
       }

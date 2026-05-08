@@ -106,8 +106,13 @@
 - **Estado Atual:** Pipeline 100% estabilizado no GitHub Actions usando `self-hosted` runner (Oracle ARM64 nativo). 
 - **Melhoria:** O build agora ocorre diretamente na arquitetura de destino, sem emulação QEMU, garantindo velocidade e estabilidade total.
 
+### 📢 Automação de Mensagens
+- [x] **Estabilização de Lembretes:** Sistema de avisos preventivos e de inadimplência agora é 100% confiável, com tracking preciso de envios e suporte a múltiplos templates dinâmicos.
+
 ## 📋 Próximos Passos Pendentes
 
-1. **Concluída a Arquitetura de Storage Local (MinIO):** Todo o sistema (Tanto portal quanto manager) agora utiliza `FormData` para envio físico de arquivos aos servidores, salvando apenas a `URL pública` no banco de dados.
-2. **Otimização de Build:** Re-explorar o cache do Docker ou considerar a remoção do suporte nativo ARM64 se não for estritamente necessário para o servidor final.
-3. **Financeiro:** Implementar visualização de extrato detalhado e integração com gateway de pagamento direto via cartão.
+1. **Módulo Financeiro SQL:** Iniciar a migração total do financeiro para PostgreSQL (padrão `notas_boletim`).
+2. **Otimização de Build:** Re-explorar o cache do Docker.
+3. **Financeiro:** Implementar visualização de extrato detalhado.
+
+**Nota Técnica:** O arquivo `server.js` deve ser mantido como espelho ou ignorado conforme orientação do usuário, com foco total no `server.selfhosted.js`.
