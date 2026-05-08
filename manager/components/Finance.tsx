@@ -188,44 +188,15 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
       const syncResult = await syncResp.json();
 
       if (syncResult.success && syncResult.updatedCount > 0) {
-        showAlert('Sincronização Ativa', `${syncResult.updatedCount} pagamentos foram atualizados diretamente do Asaas. A página será atualizada.`, 'success');
-        setTimeout(() => window.location.reload(), 2000);
+        showAlert('Sincronização Ativa', `${syncResult.updatedCount} pagamentos foram atualizados diretamente do Asaas.`, 'success');
+        if (syncResult.data) {
+          updateData(syncResult.data);
+        }
         return;
       } else if (syncResult.success) {
         console.log('[Sync] Tudo atualizado com o Asaas.');
       }
 
-      if (cloudPayments && cloudPayments.length > 0) {
-        let updatedCount = 0;
-        const currentPayments = dataPaymentsRef.current;
-        const updatedPayments = currentPayments.map(p => {
-          const match = cloudPayments.find((cp: any) => cp.asaas_payment_id === p.asaasPaymentId);
-
-          if (match) {
-            const statusStr = (match.status || '').toLowerCase();
-            const newStatus = statusStr === 'pago' ? 'paid' :
-              statusStr === 'atrasado' ? 'overdue' :
-                statusStr === 'cancelado' ? 'cancelled' : 'pending';
-
-            if (p.status !== newStatus) {
-              updatedCount++;
-              return {
-                ...p,
-                status: newStatus as any,
-                amount: Number(match.valor),
-                paidDate: match.data_pagamento || p.paidDate,
-                asaasPaymentUrl: match.link_boleto || p.asaasPaymentUrl,
-                asaasPaymentId: match.asaas_payment_id || p.asaasPaymentId
-              };
-            }
-          }
-          return p;
-        });
-
-        if (updatedCount > 0) {
-          updateData({ payments: updatedPayments });
-        }
-      }
     } catch (error) {
       console.error('Erro ao sincronizar pagamentos:', error);
     } finally {

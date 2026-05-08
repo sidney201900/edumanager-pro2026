@@ -1399,11 +1399,26 @@ async function syncPaymentsWithAsaasAPI() {
       const pIdx = appData.payments.findIndex(p => p.asaasPaymentId === payment.id);
       if (pIdx !== -1) {
         const newStatus = jsonStatusMap[internalStatus];
+        let changed = false;
+
         if (appData.payments[pIdx].status !== newStatus) {
           appData.payments[pIdx].status = newStatus;
-          appData.payments[pIdx].paidDate = payment.confirmedDate || payment.paymentDate || appData.payments[pIdx].paidDate;
-          totalUpdated++;
+          changed = true;
         }
+
+        // SEMPRE atualiza o valor e a data para garantir fidelidade ao Asaas
+        if (appData.payments[pIdx].amount !== valorNum) {
+          appData.payments[pIdx].amount = valorNum;
+          changed = true;
+        }
+
+        const newPaidDate = payment.confirmedDate || payment.paymentDate;
+        if (newPaidDate && appData.payments[pIdx].paidDate !== newPaidDate) {
+          appData.payments[pIdx].paidDate = newPaidDate;
+          changed = true;
+        }
+
+        if (changed) totalUpdated++;
       }
     }
     
@@ -1571,7 +1586,8 @@ async function startServer() {
   app.post('/api/admin/sync-asaas-full', async (req, res) => {
     try {
       const updatedCount = await syncPaymentsWithAsaasAPI();
-      res.json({ success: true, updatedCount });
+      const appData = await getSchoolData(); // Busca o JSON já atualizado
+      res.json({ success: true, updatedCount, data: appData });
     } catch (e) {
       console.error('[Asaas:FullSync] Erro:', e.message);
       res.status(500).json({ error: e.message });
