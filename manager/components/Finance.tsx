@@ -188,43 +188,11 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
       const syncResult = await syncResp.json();
 
       if (syncResult.success && syncResult.updatedCount > 0) {
-        showAlert('Sincronização Ativa', `${syncResult.updatedCount} pagamentos foram atualizados diretamente do Asaas e salvos no sistema.`, 'success');
+        showAlert('Sincronização Ativa', `${syncResult.updatedCount} pagamentos foram atualizados diretamente do Asaas. A página será atualizada.`, 'success');
+        setTimeout(() => window.location.reload(), 2000);
+        return;
       } else if (syncResult.success) {
         console.log('[Sync] Tudo atualizado com o Asaas.');
-      }
-
-      // 2. Busca os dados atualizados do SQL para refletir na UI
-      const resp = await fetch('/api/admin/cobrancas');
-      if (!resp.ok) throw new Error('API fetch failed');
-      const cloudPayments = await resp.json();
-
-      // 3. ATUALIZAÇÃO CRÍTICA: Mescla os dados do SQL com o estado local do React
-      if (Array.isArray(cloudPayments) && cloudPayments.length > 0) {
-        setData(prev => {
-          const newPayments = [...prev.payments];
-          let updated = false;
-
-          cloudPayments.forEach((cp: any) => {
-            const idx = newPayments.findIndex(p => p.asaasPaymentId === cp.asaas_payment_id);
-            if (idx !== -1) {
-              const statusStr = (cp.status || '').toLowerCase();
-              const newStatus = statusStr === 'pago' ? 'paid' :
-                                statusStr === 'atrasado' ? 'overdue' :
-                                statusStr === 'cancelado' ? 'cancelled' : 'pending';
-
-              if (newPayments[idx].status !== newStatus) {
-                newPayments[idx] = { 
-                  ...newPayments[idx], 
-                  status: newStatus as any,
-                  paidDate: cp.data_pagamento || newPayments[idx].paidDate 
-                };
-                updated = true;
-              }
-            }
-          });
-
-          return updated ? { ...prev, payments: newPayments } : prev;
-        });
       }
 
       if (cloudPayments && cloudPayments.length > 0) {
