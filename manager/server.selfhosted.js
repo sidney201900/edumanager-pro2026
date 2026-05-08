@@ -1326,13 +1326,19 @@ function agendarRotina(tipo, hora, minuto) {
 
 async function syncPaymentsWithAsaasAPI() {
   try {
-    const response = await fetch(`${process.env.ASAAS_BASE_URL || 'https://api.asaas.com'}/v3/payments?limit=100`, {
-      headers: { 'access_token': process.env.ASAAS_API_KEY }
+    const url = `${ASAAS_BASE_URL}/v3/payments?limit=100`;
+    console.log(`[Asaas:Sync] 📡 Iniciando busca em: ${url}`);
+    
+    const response = await fetch(url, {
+      headers: { 'access_token': ASAAS_KEY }
     });
     if (!response.ok) throw new Error(`Erro API Asaas: ${response.status}`);
     const data = await response.json();
     
-    if (!data.data || !Array.isArray(data.data)) return 0;
+    if (!data.data || !Array.isArray(data.data)) {
+      console.log('[Asaas:Sync] ℹ Nenhuma cobrança encontrada na API.');
+      return 0;
+    }
     
     const statusMap = { 
       'PENDING': 'PENDENTE', 
@@ -1344,7 +1350,7 @@ async function syncPaymentsWithAsaasAPI() {
       'DELETED': 'CANCELADO' 
     };
 
-    console.log(`[Asaas:Sync] Processando ${data.data.length} cobranças da API...`);
+    console.log(`[Asaas:Sync] 📥 Recebidas ${data.data.length} cobranças do Asaas.`);
 
     for (const payment of data.data) {
       const updateData = {
@@ -1355,8 +1361,8 @@ async function syncPaymentsWithAsaasAPI() {
         link_boleto: payment.bankSlipUrl || payment.invoiceUrl || null
       };
       
-      // Atualiza o SQL (updateCobranca já faz o UPSERT internamente se implementado via banco.js)
-      // Se não existir, a função deve tratar ou usamos pool.query diretamente aqui.
+      const valorNum = Number(updateData.valor);
+
       await pool.query(`
         INSERT INTO alunos_cobrancas (asaas_payment_id, valor, vencimento, status, data_pagamento, link_boleto)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -1366,12 +1372,10 @@ async function syncPaymentsWithAsaasAPI() {
           status = EXCLUDED.status,
           data_pagamento = EXCLUDED.data_pagamento,
           link_boleto = EXCLUDED.link_boleto
-      `, [payment.id, updateData.valor, updateData.vencimento, updateData.status, updateData.data_pagamento, updateData.link_boleto]);
+      `, [payment.id, valorNum, updateData.vencimento, updateData.status, updateData.data_pagamento, updateData.link_boleto]);
     }
     
-    // Após atualizar o SQL, sincroniza o status para o arquivo JSON legado
-    const jsonUpdated = await syncRelationalToJsonPayments();
-    return jsonUpdated;
+    return await syncRelationalToJsonPayments();
   } catch (err) {
     console.error('[Asaas:Sync] ❌ Falha na sincronização ativa:', err.message);
     throw err;
@@ -1432,6 +1436,11 @@ async function inicializarAgendamento() {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='last_overdue_warning_at') THEN
           ALTER TABLE alunos_cobrancas ADD COLUMN last_overdue_warning_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+
+        -- Garantir índice de unicidade para o UPSERT funcionar
+        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'alunos_cobrancas' AND indexname = 'idx_asaas_payment_id_unique') THEN
+          CREATE UNIQUE INDEX idx_asaas_payment_id_unique ON alunos_cobrancas(asaas_payment_id);
         END IF;
       END $$;
     `).catch(err => console.error('[PostgreSQL] Erro boot automação:', err));
