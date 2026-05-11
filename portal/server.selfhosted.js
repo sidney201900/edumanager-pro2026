@@ -641,7 +641,7 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
       
       const studentName = info[0]?.student_name || req.user.name || 'Aluno';
       const className = info[0]?.class_name || 'Turma não identificada';
-      const typeLabel = (exam as any).evaluationType === 'activity' ? 'Atividade' : 'Prova';
+      const typeLabel = exam.evaluationType === 'activity' ? 'Atividade' : 'Prova';
 
       await pool.query(
         `INSERT INTO notificacoes (aluno_id, titulo, mensagem, anexo, lida, created_at)
