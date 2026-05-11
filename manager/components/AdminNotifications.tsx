@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Bell, X, CheckCircle, Trash2, ShieldCheck, FileText, Paperclip } from 'lucide-react';
+import { Bell, X, CheckCircle, Trash2, ShieldCheck, FileText, Paperclip, DollarSign, AlertTriangle, Info, TrendingUp, CreditCard } from 'lucide-react';
 import { SchoolData, Notification, View } from '../types';
 import { dbService } from '../services/dbService';
 
@@ -81,6 +80,21 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
   const handleAction = (notif: Notification) => {
     if (!notif.read) handleMarkAsRead(notif.id);
     
+    const isFinance = notif.title.toLowerCase().includes('pagamento') || notif.title.toLowerCase().includes('cobrança');
+    const isExam = notif.title.toLowerCase().includes('prova') || notif.title.toLowerCase().includes('atividade');
+    
+    if (isFinance) {
+      setView(View.Finance);
+      setIsOpen(false);
+      return;
+    }
+
+    if (isExam) {
+      setView(View.ReportCard);
+      setIsOpen(false);
+      return;
+    }
+
     if (notif.title.toLowerCase().includes('justificativa') || notif.message.toLowerCase().includes('justificativa')) {
       const targetId = (notif as any).fromStudentId || notif.studentId;
       if (onNavigateToStudent && targetId !== 'admin') {
@@ -164,7 +178,7 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
         <div className="absolute top-14 right-0 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-top-4 fade-in duration-200 flex flex-col max-h-[80vh]">
           <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between sticky top-0 z-10">
             <div>
-              <h3 className="font-black text-slate-800 flex items-center gap-2">Atividades/Provas Pendentes
+              <h3 className="font-black text-slate-800 flex items-center gap-2">Central de Alertas
                 {unreadCount > 0 && <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-bold">{unreadCount}</span>}
               </h3>
             </div>
@@ -193,6 +207,7 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
                   let displayMessage = notif.message;
                   let justificationMotive = '';
                   let attachmentFromMessage = null;
+                  let metadata: any = {};
                   
                   if (notif.message.startsWith('{')) {
                     try {
@@ -203,20 +218,64 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
                     } catch(e) {}
                   }
 
+                  if (notif.anexo && notif.anexo.startsWith('{')) {
+                    try { metadata = JSON.parse(notif.anexo); } catch(e) {}
+                  }
+
                   const finalAttachment = notif.attachment || attachmentFromMessage;
+                  const isFinance = metadata.type === 'finance' || notif.title.toLowerCase().includes('pagamento') || notif.title.toLowerCase().includes('cobrança');
+                  const isExam = metadata.type === 'exam' || notif.title.toLowerCase().includes('prova') || notif.title.toLowerCase().includes('atividade');
+                  
+                  // Configuração dinâmica de cores e ícones
+                  let icon = <Info size={16} />;
+                  let colorClass = 'text-indigo-500';
+                  let bgClass = 'bg-indigo-50';
+                  let borderClass = 'border-indigo-100';
+
+                  if (isFinance) {
+                    if (metadata.status === 'paid' || notif.title.includes('Confirmado')) {
+                      icon = <DollarSign size={16} />;
+                      colorClass = 'text-emerald-500';
+                      bgClass = 'bg-emerald-50';
+                      borderClass = 'border-emerald-100';
+                    } else if (metadata.status === 'overdue' || notif.title.includes('Atraso')) {
+                      icon = <AlertTriangle size={16} />;
+                      colorClass = 'text-red-500';
+                      bgClass = 'bg-red-50';
+                      borderClass = 'border-red-100';
+                    } else {
+                      icon = <TrendingUp size={16} />;
+                      colorClass = 'text-blue-500';
+                      bgClass = 'bg-blue-50';
+                      borderClass = 'border-blue-100';
+                    }
+                  } else if (isExam) {
+                    icon = <ClipboardList size={16} />;
+                    colorClass = 'text-violet-600';
+                    bgClass = 'bg-violet-50';
+                    borderClass = 'border-violet-100';
+                  } else if (isJustificativa) {
+                    icon = <FileText size={16} />;
+                    colorClass = 'text-amber-500';
+                    bgClass = 'bg-amber-50';
+                    borderClass = 'border-amber-100';
+                  }
 
                   return (
-                    <div key={notif.id} onClick={() => handleAction(notif)} className={`p-3 rounded-xl border transition-all cursor-pointer relative overflow-hidden group ${notif.read ? 'bg-slate-50 border-transparent opacity-70' : 'bg-white border-indigo-100 hover:border-indigo-300 shadow-sm'}`}>
-                      {!notif.read && <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>}
+                    <div key={notif.id} onClick={() => handleAction(notif)} className={`p-3 rounded-xl border transition-all cursor-pointer relative overflow-hidden group ${notif.read ? 'bg-slate-50 border-transparent opacity-70' : `bg-white ${borderClass} hover:shadow-md shadow-sm`}`}>
+                      {!notif.read && <div className={`absolute left-0 top-0 bottom-0 w-1 ${colorClass.replace('text-', 'bg-')}`}></div>}
                       <div className="flex justify-between items-start mb-1 gap-4">
-                        <h4 className={`text-base font-black tracking-tight ${notif.read ? 'text-slate-400' : 'text-emerald-500 animate-pulse'}`}>
-                          {notif.title}
-                        </h4>
-                        <span className={`text-[10px] font-bold whitespace-nowrap px-2 py-1 rounded ${notif.read ? 'bg-slate-100 text-slate-400' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`${colorClass} ${bgClass} p-1 rounded-md`}>{icon}</span>
+                          <h4 className={`text-sm font-black tracking-tight ${notif.read ? 'text-slate-400' : 'text-slate-800'}`}>
+                            {notif.title}
+                          </h4>
+                        </div>
+                        <span className={`text-[10px] font-bold whitespace-nowrap px-2 py-1 rounded ${notif.read ? 'bg-slate-100 text-slate-400' : `${bgClass} ${colorClass} border ${borderClass}`}`}>
                           {new Date(notif.createdAt).toLocaleDateString('pt-BR')}
                         </span>
                       </div>
-                      <p className={`text-sm font-medium leading-relaxed mb-2 ${notif.read ? 'text-slate-400' : 'text-emerald-600/90'}`}>
+                      <p className={`text-xs font-medium leading-relaxed mb-2 ${notif.read ? 'text-slate-400' : 'text-slate-600'}`}>
                         {displayMessage}
                       </p>
                       {isJustificativa && justificationMotive && (

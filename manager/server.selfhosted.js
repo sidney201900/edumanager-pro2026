@@ -56,9 +56,20 @@ const lockCache = new Set();
 let activeCronJob = null; // Referência global para o agendamento preventivo
 let activeCronJobOverdue = null; // Referência global para o agendamento de inadimplência
 
-// ============================================================
+// === Funções Auxiliares de Notificação ===
+async function createAdminNotification(titulo, mensagem, metadata = {}) {
+  try {
+    await pool.query(
+      'INSERT INTO notificacoes (aluno_id, titulo, mensagem, anexo) VALUES ($1, $2, $3, $4)',
+      ['admin', titulo, mensagem, JSON.stringify(metadata)]
+    );
+    console.log(`[Notification] Alerta Admin criado: ${titulo}`);
+  } catch (err) {
+    console.error('[Notification] Erro ao criar alerta admin:', err.message);
+  }
+}
+
 // Proxy de Imagens do MinIO (acesso público via backend)
-// ============================================================
 app.get(/^\/storage\/([^\/]+)\/(.+)$/, async (req, res) => {
   try {
     const bucket = req.params[0];
@@ -724,6 +735,7 @@ app.post('/api/webhook_asaas', async (req, res) => {
 
     const asaasPaymentId = payload.payment.id;
     let updateData = {};
+    const targetName = payload.payment.customerName || 'Cliente';
 
     switch (payload.event) {
       case 'PAYMENT_CREATED':
@@ -740,23 +752,48 @@ app.post('/api/webhook_asaas', async (req, res) => {
         if (payload.payment.transactionReceiptUrl) {
           updateData.transaction_receipt_url = payload.payment.transactionReceiptUrl;
         }
-        // Chamada única: sendEvolutionMessage já possui trava interna de cache por ID de pagamento
+        
+        // Alerta no Sino (Admin)
+        createAdminNotification(
+          '✅ Pagamento Confirmado',
+          `Recebemos R$ ${Number(payload.payment.value).toFixed(2)} de ${targetName}.`,
+          { type: 'finance', status: 'paid', paymentId: asaasPaymentId }
+        );
+
         sendEvolutionMessage(asaasPaymentId, 'PAYMENT_RECEIVED');
         break;
 
       case 'PAYMENT_OVERDUE':
+        updateData = { status: 'ATRASADO' };
+        
+        // Alerta no Sino (Admin)
+        createAdminNotification(
+          '⚠️ Pagamento em Atraso',
+          `A cobrança de ${targetName} no valor de R$ ${Number(payload.payment.value).toFixed(2)} está vencida.`,
+          { type: 'finance', status: 'overdue', paymentId: asaasPaymentId }
+        );
+
+        sendEvolutionMessage(asaasPaymentId, 'PAYMENT_OVERDUE');
+        break;
+
       case 'PAYMENT_UPDATED':
-      case 'PAYMENT_RESTORED':
-        const statusMap = { 'PENDING': 'PENDENTE', 'OVERDUE': 'ATRASADO', 'RECEIVED': 'PAGO', 'CONFIRMED': 'PAGO', 'RECEIVED_IN_CASH': 'PAGO', 'REFUNDED': 'CANCELADO', 'DELETED': 'CANCELADO' };
-        updateData = { valor: payload.payment.value, vencimento: payload.payment.dueDate, status: statusMap[payload.payment.status] || undefined };
-        Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
-        // Ocultado PAYMENT_OVERDUE aqui para ser enviado apenas pela rotina/cron (conforme regras)
-        // if (payload.event === 'PAYMENT_OVERDUE') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_OVERDUE');
+        // Alerta no Sino (Admin)
+        createAdminNotification(
+          '📝 Cobrança Alterada',
+          `A cobrança de ${targetName} foi atualizada no Asaas.`,
+          { type: 'finance', status: 'updated', paymentId: asaasPaymentId }
+        );
         if (payload.event === 'PAYMENT_UPDATED') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_UPDATED');
         break;
 
       case 'PAYMENT_DELETED':
       case 'PAYMENT_CANCELED':
+        // Alerta no Sino (Admin)
+        createAdminNotification(
+          '🗑️ Cobrança Removida',
+          `A cobrança de ${targetName} (R$ ${Number(payload.payment.value).toFixed(2)}) foi excluída no Asaas.`,
+          { type: 'finance', status: 'deleted', paymentId: asaasPaymentId }
+        );
         const installmentId = payload.payment.installment;
         if (installmentId) {
           if (cancelCache.has(installmentId)) {

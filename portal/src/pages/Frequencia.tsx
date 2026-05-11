@@ -188,20 +188,20 @@ export default function Frequencia() {
   let justified = 0;
 
   processedItems.forEach(item => {
-    const { lesson, attendances: atts } = item;
+    const { lesson, attendances: atts, isCompleted } = item;
     if (lesson.status === 'cancelled') return;
 
     const record = atts[0];
-    const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
 
     if (record) {
       if (record.type === 'absence') {
         if (record.justificationAccepted) justified++;
         else absences++;
       } else if (record.type === 'presence' || (!record.type && !(record as any).isVirtual)) {
+        // No portal, só contamos como presença nas estatísticas se a aula terminou ou se já foi marcada
         presences++;
       }
-    } else if (now > lessonEnd) {
+    } else if (isCompleted) {
       absences++;
     }
   });
@@ -232,18 +232,18 @@ export default function Frequencia() {
     // Check window (uses new 24h before/after logic)
     if (!isLessonWithinJustificationWindow(l, now)) return false;
     
-    // Construir janela como o Manager
-    const lessonStart = new Date(l.date + 'T' + (l.startTime || '00:00') + ':00');
-    const lessonEnd = new Date(l.date + 'T' + (l.endTime || '23:59') + ':00');
-    const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000);
+    // Usar parseLessonDateTime para evitar bugs de fuso horário
+    const lessonStartMs = parseLessonDateTime(l.date, l.startTime || '00:00', 0);
+    const lessonEndMs = parseLessonDateTime(l.date, l.endTime || '23:59', 23);
+    const presenceStartWindowMs = lessonStartMs - (30 * 60 * 1000);
 
     // Find if THIS SPECIFIC lesson has attendance/justification
     const att = attendance.find(a => {
       if (!a.date || typeof a.date !== 'string') return false;
       if ((a as any).lessonId === l.id) return true;
-      if (a.date === `${l.date}T${l.startTime || '00:00'}:00`) return true;
-      const recordTime = new Date(a.date);
-      return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
+      
+      const recordTime = new Date(a.date).getTime();
+      return recordTime >= presenceStartWindowMs && recordTime <= lessonEndMs;
     });
 
     if (att) {
@@ -547,6 +547,10 @@ export default function Frequencia() {
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-success)' }}>
                             <CheckCircle2 size={16} /> Presente
                           </span>
+                        ) : (!isCompleted && !isCancelled) ? (
+                          <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                             <Clock size={16} className="animate-pulse" /> Aguardando Presença
+                          </span>
                         ) : isJustificationAccepted ? (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b', fontWeight: 600 }}>
                             <AlertTriangle size={16} /> Falta Justificada
@@ -555,13 +559,13 @@ export default function Frequencia() {
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b', fontWeight: 500 }}>
                             <Clock size={16} /> Justificativa Pendente
                           </span>
-                        ) : (isCompleted || parseLessonDateTime(lesson.date || '', '23:59:59') < now.getTime()) && !isCancelled ? (
+                        ) : isCompleted && !isCancelled ? (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-danger)' }}>
                             <XCircle size={16} /> Falta
                           </span>
                         ) : (
                           <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
-                            Aguardando
+                            —
                           </span>
                         )}
                       </td>

@@ -616,13 +616,46 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
 
     // Integrar com notas_boletim (Nova Tabela) em vez de school_data
     if (exam.subjectId && exam.periodId) {
-      await pool.query(
-        `INSERT INTO notas_boletim (aluno_id, disciplina_id, periodo_id, prova_id, valor, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())
-         ON CONFLICT (aluno_id, disciplina_id, periodo_id, prova_id) 
-         DO UPDATE SET valor = EXCLUDED.valor, updated_at = NOW()`,
-        [req.user.studentId, exam.subjectId, exam.periodId, examId, finalScore]
+      try {
+        await pool.query(
+          `INSERT INTO notas_boletim (aluno_id, disciplina_id, periodo_id, prova_id, valor, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())
+           ON CONFLICT (aluno_id, disciplina_id, periodo_id, prova_id) 
+           DO UPDATE SET valor = EXCLUDED.valor, updated_at = NOW()`,
+          [req.user.studentId, exam.subjectId, exam.periodId, examId, finalScore]
+        );
+      } catch (gradeErr) {
+        console.error('[Portal:Submissão] Erro ao salvar nota no boletim:', gradeErr.message);
+      }
+    }
+
+    // Inserir notificação para o ADMIN no Sino
+    try {
+      const { rows: info } = await pool.query(
+        `SELECT a.nome as student_name, t.nome as class_name 
+         FROM alunos a 
+         LEFT JOIN turmas t ON a.turma_id = t.id 
+         WHERE a.id = $1`,
+        [req.user.studentId]
       );
+      
+      const studentName = info[0]?.student_name || req.user.name || 'Aluno';
+      const className = info[0]?.class_name || 'Turma não identificada';
+      const typeLabel = (exam as any).evaluationType === 'activity' ? 'Atividade' : 'Prova';
+
+      await pool.query(
+        `INSERT INTO notificacoes (aluno_id, titulo, mensagem, anexo, lida, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [
+          'admin', 
+          `📝 ${typeLabel} Finalizada`, 
+          `${studentName} (${className}) finalizou a ${typeLabel.toLowerCase()} "${exam.title}" com nota ${finalScore}.`,
+          JSON.stringify({ type: 'exam', studentId: req.user.studentId, examId, grade: finalScore }),
+          false
+        ]
+      );
+    } catch (notifErr) {
+      console.error('[Portal:Submissão] Erro ao disparar notificação admin:', notifErr.message);
     }
 
     res.json({ success: true, result: { total_questions: totalQuestions, correct_count: correctCount, wrong_count: wrongCount, percentage, final_score: finalScore } });
