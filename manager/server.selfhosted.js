@@ -33,7 +33,7 @@ import {
   initNotasTable, getNotasByAluno, upsertNota,
   syncJsonToRelationalTables
 } from './services/database.js';
-import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, getMinioStats, s3Client, getBucketObjects, deleteMinioObject } from './services/storage.js';
+import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, uploadReceipt as uploadReceiptToStorage, getMinioStats, s3Client, getBucketObjects, deleteMinioObject } from './services/storage.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -631,7 +631,16 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, fallbackValorArg 
         doc.text('Autenticação Digital EduManager', 105, 108, { align: 'center' });
 
         const pdfArrayBuffer = doc.output('arraybuffer');
-        base64Pdf = Buffer.from(pdfArrayBuffer).toString('base64');
+        const pdfBuffer = Buffer.from(pdfArrayBuffer);
+        
+        // Upload para o MinIO (Pasta recibos)
+        const minioFileName = `recibo_${asaasPaymentId}.pdf`;
+        const minioUrl = await uploadReceiptToStorage(minioFileName, pdfBuffer);
+        
+        // Atualiza o link no banco de dados para apontar para o seu MinIO
+        await updateCobranca(asaasPaymentId, { transaction_receipt_url: minioUrl });
+
+        base64Pdf = pdfBuffer.toString('base64');
         fileName = `Recibo-${targetName.replace(/\s+/g, '')}.pdf`;
       } catch (pdfErr) {
         console.error('[WhatsApp] Erro ao gerar PDF de recibo:', pdfErr.message);

@@ -79,6 +79,13 @@ export async function uploadCarne(fileName, pdfBuffer) {
 }
 
 /**
+ * Upload de recibo PDF
+ */
+export async function uploadReceipt(fileName, pdfBuffer) {
+  return uploadFile('recibos', fileName, pdfBuffer, 'application/pdf');
+}
+
+/**
  * Upload de imagem de prova
  */
 export async function uploadExamImage(fileBuffer, contentType) {
