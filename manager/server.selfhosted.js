@@ -12,7 +12,9 @@
  */
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import fetch from 'node-fetch';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
@@ -586,16 +588,56 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, fallbackValorArg 
       .replace(/{link_boleto}/g, pdfUrl)
       .replace(/{descricao}/g, descricao);
 
-    const isTextOnlyEvent = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_DELETED'].includes(eventType);
     const isPaymentConfirmation = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'].includes(eventType);
     const isCreationEvent = eventType === 'PAYMENT_CREATED';
 
-    if (isPaymentConfirmation && pdfUrl && !templateText.includes('{link_boleto}')) {
-      msgFinal += `\n\n📄 Acesse seu comprovante aqui:\n${pdfUrl}`;
-    }
-
+    // 1. GERAÇÃO DE PDF (Recibo ou Boleto)
     let base64Pdf = null;
-    if (pdfUrl && !isTextOnlyEvent) {
+    let fileName = `Documento-${targetName.replace(/\s+/g, '')}.pdf`;
+
+    if (isPaymentConfirmation) {
+      // GERAÇÃO DE RECIBO PROFISSIONAL (BACKEND - NODE COMPATIBLE)
+      try {
+        const doc = new jsPDF();
+        const profile = appData.profile || {};
+        
+        // Moldura e Cabeçalho
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.rect(10, 10, 190, 100); 
+        
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(profile.name || 'EduManager School', 105, 25, { align: 'center' });
+        
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`CNPJ: ${profile.cnpj || '---'} | Contato: ${profile.phone || ''}`, 105, 32, { align: 'center' });
+        
+        doc.setFontSize(16);
+        doc.text('RECIBO DE PAGAMENTO', 105, 50, { align: 'center' });
+        
+        doc.setFontSize(11);
+        doc.text(`Recebemos de: ${aluno.name || aluno.nome}`, 20, 65);
+        doc.text(`A quantia de: R$ ${valorFormatado}`, 20, 75);
+        doc.text(`Referente a: ${descricao}`, 20, 85);
+        
+        const dataHj = new Date().toLocaleDateString('pt-BR');
+        const dataPagamento = fallbackVencimento ? formatCobrancaDate(typeof fallbackVencimento === 'string' ? fallbackVencimento : dataHj) : dataHj;
+        doc.text(`Data do Pagamento: ${dataPagamento}`, 20, 95);
+        
+        doc.line(60, 105, 150, 105);
+        doc.setFontSize(8);
+        doc.text('Autenticação Digital EduManager', 105, 108, { align: 'center' });
+
+        const pdfArrayBuffer = doc.output('arraybuffer');
+        base64Pdf = Buffer.from(pdfArrayBuffer).toString('base64');
+        fileName = `Recibo-${targetName.replace(/\s+/g, '')}.pdf`;
+      } catch (pdfErr) {
+        console.error('[WhatsApp] Erro ao gerar PDF de recibo:', pdfErr.message);
+      }
+    } else if (pdfUrl && !['PAYMENT_DELETED'].includes(eventType)) {
+      // TENTA BUSCAR PDF EXTERNO (BOLETO/CARNÊ)
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           const fetchOptions = { headers: { 'Accept': 'application/pdf' } };
@@ -614,7 +656,9 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, fallbackValorArg 
     }
 
     if ((isCreationEvent || isPaymentConfirmation || eventType === 'PAYMENT_UPDATED' || eventType === 'PAYMENT_UPCOMING') && !base64Pdf && pdfUrl) {
-      msgFinal += `\n\n📄 Acesse aqui sua cobrança:\n${pdfUrl}`;
+      if (!templateText.includes('{link_boleto}')) {
+        msgFinal += `\n\n📄 Acesse aqui seu documento:\n${pdfUrl}`;
+      }
     }
 
     let endpoint = 'sendText';
@@ -622,10 +666,16 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, fallbackValorArg 
 
     if (base64Pdf) {
       endpoint = 'sendMedia';
-      let fileName = `Boleto-${targetName.replace(/\s+/g, '')}.pdf`;
       if (isCarneCompleto) fileName = `Carne-${targetName.replace(/\s+/g, '')}.pdf`;
-      if (isPaymentConfirmation) fileName = `Comprovante-${targetName.replace(/\s+/g, '')}.pdf`;
-      payload = { number: cleanPhone, options: { delay: 1200, presence: "composing" }, mediatype: "document", mimetype: "application/pdf", fileName, media: base64Pdf, caption: msgFinal };
+      payload = { 
+        number: cleanPhone, 
+        options: { delay: 1200, presence: "composing" }, 
+        mediatype: "document", 
+        mimetype: "application/pdf", 
+        fileName, 
+        media: base64Pdf, 
+        caption: msgFinal 
+      };
     } else {
       payload = { number: cleanPhone, text: msgFinal };
     }
@@ -634,10 +684,10 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, fallbackValorArg 
     const sendResp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoConfig.apiKey }, body: JSON.stringify(payload) });
 
     if (sendResp.ok) {
-      console.log(`[WhatsApp] ✅ Enviado para ${cleanPhone}`);
+      console.log(`[WhatsApp] ✅ Enviado para ${cleanPhone} (${eventType})`);
       return true;
     } else {
-      console.error(`[WhatsApp] ❌ Erro:`, sendResp.status);
+      console.error(`[WhatsApp] ❌ Erro ao enviar WhatsApp:`, sendResp.status);
       return false;
     }
   } catch (error) {
@@ -681,6 +731,7 @@ app.post('/api/webhook_asaas', async (req, res) => {
         if (payload.payment.transactionReceiptUrl) {
           updateData.transaction_receipt_url = payload.payment.transactionReceiptUrl;
         }
+        // Chamada única: sendEvolutionMessage já possui trava interna de cache por ID de pagamento
         sendEvolutionMessage(asaasPaymentId, 'PAYMENT_RECEIVED');
         break;
 
