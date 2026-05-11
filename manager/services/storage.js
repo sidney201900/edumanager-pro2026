@@ -4,7 +4,7 @@
  * Substitui todas as chamadas supabase.storage do sistema
  * ============================================================
  */
-import { S3Client, PutObjectCommand, GetObjectCommand, ListBucketsCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, ListBucketsCommand, ListObjectsV2Command, DeleteObjectCommand, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || 'minio';
 const MINIO_PORT = process.env.MINIO_PORT || '9000';
@@ -24,14 +24,29 @@ const s3Client = new S3Client({
 });
 
 /**
+ * Garante que o bucket existe, criando-o se necessário
+ */
+async function ensureBucketExists(bucket) {
+  try {
+    await s3Client.send(new HeadBucketCommand({ Bucket: bucket }));
+  } catch (err) {
+    // Se o erro for 404 (não encontrado), cria o bucket
+    try {
+      await s3Client.send(new CreateBucketCommand({ Bucket: bucket }));
+      console.log(`[Storage] Bucket criado com sucesso: ${bucket}`);
+    } catch (createErr) {
+      console.error(`[Storage] Erro ao criar bucket ${bucket}:`, createErr.message);
+    }
+  }
+}
+
+/**
  * Upload de arquivo para o MinIO
- * @param {string} bucket - Nome do bucket (ex: 'logos', 'fotos-alunos', 'carnes')
- * @param {string} fileName - Nome do arquivo (ex: 'logo_123.webp')
- * @param {Buffer} fileBuffer - Conteúdo do arquivo
- * @param {string} contentType - MIME type (ex: 'image/webp')
- * @returns {string} URL pública do arquivo
  */
 export async function uploadFile(bucket, fileName, fileBuffer, contentType) {
+  // Garantir que o bucket existe antes do upload
+  await ensureBucketExists(bucket);
+
   const command = new PutObjectCommand({
     Bucket: bucket,
     Key: fileName,
@@ -42,7 +57,6 @@ export async function uploadFile(bucket, fileName, fileBuffer, contentType) {
   await s3Client.send(command);
 
   // Retorna URL relativa que será servida pelo proxy do backend
-  // Isso garante que o browser acessa via nosso servidor, sem precisar de acesso direto ao MinIO
   return `/storage/${bucket}/${fileName}`;
 }
 
@@ -172,3 +186,11 @@ export async function deleteMinioObject(bucketName, key) {
 }
 
 export { s3Client };
+
+// Inicialização proativa de buckets essenciais
+ensureBucketExists('recibos');
+ensureBucketExists('carnes');
+ensureBucketExists('logos');
+ensureBucketExists('fotos-alunos');
+ensureBucketExists('atestados');
+ensureBucketExists('exames');
