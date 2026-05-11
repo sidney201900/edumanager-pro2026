@@ -21,6 +21,7 @@ import multer from 'multer';
 import sharp from 'sharp';
 import jwt from 'jsonwebtoken';
 import cron from 'node-cron';
+import path from 'path';
 
 // === Novos módulos Self-Hosted (substituem Supabase) ===
 import {

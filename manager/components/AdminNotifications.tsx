@@ -1,4 +1,5 @@
-import { Bell, X, CheckCircle, Trash2, ShieldCheck, FileText, Paperclip, DollarSign, AlertTriangle, Info, TrendingUp, CreditCard } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bell, X, CheckCircle, Trash2, ShieldCheck, FileText, Paperclip, DollarSign, AlertTriangle, Info, TrendingUp, CreditCard, ClipboardList } from 'lucide-react';
 import { SchoolData, Notification, View } from '../types';
 import { dbService } from '../services/dbService';
 

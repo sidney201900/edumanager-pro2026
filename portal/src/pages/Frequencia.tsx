@@ -145,10 +145,10 @@ export default function Frequencia() {
 
   // Merge and Categorize — Clone EXATO do Manager (AttendanceQuery.tsx)
   const processedItems = deduplicatedLessons.map(lesson => {
-    // Construir janela de tempo EXATAMENTE como o Manager faz (com Date objects)
-    const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
-    const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
-    const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000); // 30 mins before
+    // Construir janela de tempo de forma resiliente
+    const lessonStartMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00', 0);
+    const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '23:59', 23);
+    const presenceStartWindowMs = lessonStartMs - (30 * 60 * 1000); // 30 mins before
 
     // Buscar registro com a MESMA lógica do Manager (find, não filter)
     let record = attendance.find(a => {
@@ -158,8 +158,8 @@ export default function Frequencia() {
       // 2. Match exato de string (formato do JSON/sync)
       if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
       // 3. Match por janela de tempo (30 min antes até fim da aula)
-      const recordTime = new Date(a.date);
-      return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
+      const recordTimeMs = new Date(a.date).getTime();
+      return recordTimeMs >= presenceStartWindowMs && recordTimeMs <= lessonEndMs;
     });
 
     // Se não encontrou registro real, verificar se precisa de justificativa associada
@@ -168,8 +168,8 @@ export default function Frequencia() {
       record = attendance.find(a => {
         if (!a.date || typeof a.date !== 'string' || !a.justification) return false;
         if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
-        const recordTime = new Date(a.date);
-        return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
+        const recordTimeMs = new Date(a.date).getTime();
+        return recordTimeMs >= presenceStartWindowMs && recordTimeMs <= lessonEndMs;
       }) || undefined;
     }
 
