@@ -646,7 +646,7 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, fallbackValorArg 
         const pdfBuffer = Buffer.from(pdfArrayBuffer);
         
         // Upload para o MinIO (Pasta recibos)
-        const minioFileName = `recibo_${asaasPaymentId}.pdf`;
+        const minioFileName = `recibos/recibo_${asaasPaymentId}.pdf`;
         const minioUrl = await uploadReceiptToStorage(minioFileName, pdfBuffer);
         
         // Atualiza o link no banco de dados para apontar para o seu MinIO
