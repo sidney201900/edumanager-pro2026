@@ -143,12 +143,11 @@ export default function Frequencia() {
     ))
   );
 
-  // Merge and Categorize — Clone EXATO do Manager (AttendanceQuery.tsx)
+    // Merge and Categorize — Clone EXATO do Manager (AttendanceQuery.tsx)
   const processedItems = deduplicatedLessons.map(lesson => {
     // Construir janela de tempo de forma resiliente
     const lessonStartMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00', 0);
     const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '23:59', 23);
-    const presenceStartWindowMs = lessonStartMs - (30 * 60 * 1000); // 30 mins before
 
     // Buscar registro com a MESMA lógica do Manager (find, não filter)
     let record = attendance.find(a => {
@@ -157,19 +156,18 @@ export default function Frequencia() {
       if ((a as any).lessonId === lesson.id) return true;
       // 2. Match exato de string (formato do JSON/sync)
       if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
-      // 3. Match por janela de tempo (30 min antes até fim da aula)
+      // 3. Match por janela de tempo (Início ao Fim da aula - REGRA ESTREITA)
       const recordTimeMs = new Date(a.date).getTime();
-      return recordTimeMs >= presenceStartWindowMs && recordTimeMs <= lessonEndMs;
+      return recordTimeMs >= lessonStartMs && recordTimeMs <= lessonEndMs;
     });
 
     // Se não encontrou registro real, verificar se precisa de justificativa associada
-    // (pode existir um registro de justificativa com data ligeiramente diferente)
     if (!record) {
       record = attendance.find(a => {
         if (!a.date || typeof a.date !== 'string' || !a.justification) return false;
         if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
         const recordTimeMs = new Date(a.date).getTime();
-        return recordTimeMs >= presenceStartWindowMs && recordTimeMs <= lessonEndMs;
+        return recordTimeMs >= lessonStartMs && recordTimeMs <= lessonEndMs;
       }) || undefined;
     }
 

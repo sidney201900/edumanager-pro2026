@@ -231,7 +231,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
       return;
     }
 
-    // Encontrar a aula ativa para esta turma/aluno no momento da captura
+    // Encontrar a aula ativa para esta turma/aluno no momento exato da captura (Sem tolerância de 30 min)
     const nowLocal = new Date();
     const activeLesson = (data.lessons || []).find(l => {
       if (l.classId !== detectedClassId || l.status === 'cancelled') return false;
@@ -240,19 +240,19 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
       const endStr = `${lessonDate}T${l.endTime || '23:59'}:00`;
       const lessonStart = new Date(startStr);
       const lessonEnd = new Date(endStr);
-      // Janela: 30 min antes do início até o fim da aula
-      const windowStart = new Date(lessonStart.getTime() - 30 * 60 * 1000);
-      return nowLocal >= windowStart && nowLocal <= lessonEnd;
+      
+      // REGRA ESTREITA: Apenas do início ao fim da aula
+      return nowLocal >= lessonStart && nowLocal <= lessonEnd;
     });
 
-    // REGRA ESTRITA: A presença só pode ser marcada se houver uma aula ativa
+    // BLOQUEIO: Se não houver aula em andamento, impede o registro
     if (!activeLesson) {
-      showAlert('Atenção', "Nenhuma aula ativa detectada para esta turma no momento. A presença só pode ser registrada a partir de 30 minutos antes do início até o término da aula.", 'warning');
+      showAlert('Atenção', "Nenhuma aula em andamento para esta turma no momento. O registro biométrico só é permitido durante o horário oficial da aula.", 'warning');
       cancelCapture();
       return;
     }
 
-    // Gerar string de data local (YYYY-MM-DDTHH:MM:SS) sem fuso UTC para evitar o bug do dia seguinte
+    // Gerar string de data local para o banco de dados
     const localDateStr = nowLocal.getFullYear() + '-' + 
       String(nowLocal.getMonth() + 1).padStart(2, '0') + '-' + 
       String(nowLocal.getDate()).padStart(2, '0') + 'T' + 
@@ -264,7 +264,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
       id: crypto.randomUUID(),
       studentId: detectedStudentId,
       classId: detectedClassId,
-      lessonId: activeLesson.id, // Vínculo obrigatório agora
+      lessonId: activeLesson.id, 
       date: localDateStr,
       photo: capturedImage,
       type: 'presence',
@@ -273,16 +273,20 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
 
     const updatedAttendance = [...(data.attendance || []), newAttendance];
     updateData({ attendance: updatedAttendance });
-    dbService.saveData({ ...data, attendance: updatedAttendance });
+    
+    // Sincronização em duas etapas: Local e Servidor (SQL)
+    const updatedData = { ...data, attendance: updatedAttendance };
+    dbService.saveData(updatedData);
+    dbService.saveToCloud(updatedData); 
 
-    // Reset for next student
+    // Reset de interface
     setCapturedImage(null);
     setShowConfirmModal(false);
     setDetectedStudentId(null);
     setDetectedClassId(null);
     setIsProcessing(false);
     closeModal();
-    showAlert('Sucesso', "Presença confirmada com sucesso!", 'success');
+    showAlert('Sucesso', "Presença registrada e sincronizada com o servidor!", 'success');
   };
 
   const cancelCapture = () => {

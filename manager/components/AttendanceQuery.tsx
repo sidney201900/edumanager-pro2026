@@ -118,7 +118,9 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     }
 
     updateData({ attendance: updatedAttendance });
-    dbService.saveData({ ...data, attendance: updatedAttendance });
+    const updatedData = { ...data, attendance: updatedAttendance };
+    dbService.saveData(updatedData);
+    dbService.saveToCloud(updatedData); // Sincronia imediata com SQL
     showAlert('Sucesso', 'Status de frequência atualizado com sucesso.', 'success');
   };
 
@@ -216,8 +218,10 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
       updatedAttendance.push(newAbsence);
     }
 
+    const updatedData = { ...data, attendance: updatedAttendance };
     updateData({ attendance: updatedAttendance });
-    dbService.saveData({ ...data, attendance: updatedAttendance });
+    dbService.saveData(updatedData);
+    dbService.saveToCloud(updatedData); // Sincronia imediata com SQL
 
     setAbsenceStudentId('');
     setAbsenceJustification('');
@@ -402,17 +406,16 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                   let justified = 0;
                   const now = new Date();
 
-                  deduplicatedLessons.forEach(lesson => {
-                    const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
-                    const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
-                    const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000);
+                    deduplicatedLessons.forEach(lesson => {
+                      const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
+                      const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
 
-                    const matchedRecord = studentActualRecords.find(a => {
-                      if ((a as any).lessonId === lesson.id) return true;
-                      if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
-                      const recordTime = new Date(a.date);
-                      return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
-                    });
+                      const matchedRecord = studentActualRecords.find(a => {
+                        if ((a as any).lessonId === lesson.id) return true;
+                        if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
+                        const recordTime = new Date(a.date);
+                        return recordTime >= lessonStart && recordTime <= lessonEnd;
+                      });
 
                     if (matchedRecord) {
                       if (matchedRecord.type === 'absence') {
@@ -520,16 +523,15 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 deduplicatedLessons.forEach(lesson => {
                   const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
                   const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
-                  const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000); // 30 mins before
-
+                  // Regra Estrita: Comparação exata com o horário da aula (sem 30 min de tolerância)
                   let record = actualRecords.find(a => {
                     if ((a as any).lessonId === lesson.id) return true;
                     if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
                     const recordTime = new Date(a.date);
-                    return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
+                    return recordTime >= lessonStart && recordTime <= lessonEnd;
                   });
 
-                  if (!record && now >= presenceStartWindow) {
+                  if (!record && now >= lessonStart) {
                     const isFinished = now > lessonEnd;
                     record = {
                       id: `v-${lesson.id}`,
