@@ -161,7 +161,8 @@ export interface Attendance {
   id: string;
   studentId: string;
   classId: string;
-  date: string; // ISO String
+  lessonId?: string;
+  date: string; // ISO String ou Local ISO
   photo?: string; // Base64 (Optional for absences)
   verified: boolean;
   type?: 'presence' | 'absence';

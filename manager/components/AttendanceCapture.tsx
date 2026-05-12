@@ -19,7 +19,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
   const [isProcessing, setIsProcessing] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  
+
   // Auto-detected state
   const [detectedStudentId, setDetectedStudentId] = useState<string | null>(null);
   const [detectedClassId, setDetectedClassId] = useState<string | null>(null);
@@ -75,18 +75,18 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
         videoRef.current.srcObject = null;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: facingMode } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facingMode }
       });
-      
+
       streamRef.current = stream;
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         try {
-            await videoRef.current.play();
+          await videoRef.current.play();
         } catch (e) {
-            console.error("Error playing video", e);
+          console.error("Error playing video", e);
         }
       }
       setCameraActive(true);
@@ -146,7 +146,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
           if (detections.length > 0) {
             // Find best match
             const bestMatch = findBestMatch(detections[0].descriptor);
-            
+
             if (bestMatch) {
               // Found a student!
               setIsProcessing(true);
@@ -174,7 +174,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
     // Iterate through all active students who have a face descriptor
     for (const student of data.students) {
       if (student.status !== 'active' || !student.faceDescriptor) continue;
-      
+
       const studentDescriptor = new Float32Array(student.faceDescriptor);
       const distance = faceapi.euclideanDistance(descriptor, studentDescriptor);
 
@@ -202,7 +202,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = canvas.toDataURL('image/jpeg');
-        
+
         setCapturedImage(imageData);
         setDetectedStudentId(studentId);
         setDetectedClassId(classId);
@@ -231,11 +231,41 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
       return;
     }
 
+    // Encontrar a aula ativa para esta turma/aluno no momento da captura
+    const nowLocal = new Date();
+    const activeLesson = (data.lessons || []).find(l => {
+      if (l.classId !== detectedClassId || l.status === 'cancelled') return false;
+      const lessonDate = l.date; // YYYY-MM-DD
+      const startStr = `${lessonDate}T${l.startTime || '00:00'}:00`;
+      const endStr = `${lessonDate}T${l.endTime || '23:59'}:00`;
+      const lessonStart = new Date(startStr);
+      const lessonEnd = new Date(endStr);
+      // Janela: 30 min antes do início até o fim da aula
+      const windowStart = new Date(lessonStart.getTime() - 30 * 60 * 1000);
+      return nowLocal >= windowStart && nowLocal <= lessonEnd;
+    });
+
+    // REGRA ESTRITA: A presença só pode ser marcada se houver uma aula ativa
+    if (!activeLesson) {
+      showAlert('Atenção', "Nenhuma aula ativa detectada para esta turma no momento. A presença só pode ser registrada a partir de 30 minutos antes do início até o término da aula.", 'warning');
+      cancelCapture();
+      return;
+    }
+
+    // Gerar string de data local (YYYY-MM-DDTHH:MM:SS) sem fuso UTC para evitar o bug do dia seguinte
+    const localDateStr = nowLocal.getFullYear() + '-' + 
+      String(nowLocal.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(nowLocal.getDate()).padStart(2, '0') + 'T' + 
+      String(nowLocal.getHours()).padStart(2, '0') + ':' + 
+      String(nowLocal.getMinutes()).padStart(2, '0') + ':' + 
+      String(nowLocal.getSeconds()).padStart(2, '0');
+
     const newAttendance: Attendance = {
       id: crypto.randomUUID(),
       studentId: detectedStudentId,
       classId: detectedClassId,
-      date: new Date().toISOString(),
+      lessonId: activeLesson.id, // Vínculo obrigatório agora
+      date: localDateStr,
       photo: capturedImage,
       type: 'presence',
       verified: true
@@ -275,15 +305,15 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
           <div className="bg-black rounded-2xl overflow-hidden relative aspect-[3/4] shadow-2xl flex flex-col border-4 border-white">
             {cameraActive ? (
               <>
-                <video 
-                  ref={videoRef} 
-                  autoPlay 
-                  playsInline 
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
                   muted
                   className="w-full h-full object-cover flex-1"
                 />
                 <canvas ref={canvasRef} className="hidden" />
-                
+
                 {/* Overlay UI */}
                 <div className="absolute inset-0 pointer-events-none border-[3px] border-white/20 m-6 md:m-10 rounded-2xl flex flex-col items-center justify-center">
                   <div className="w-40 h-40 md:w-56 md:h-56 border-2 border-dashed border-white/40 rounded-full mb-4 animate-pulse"></div>
@@ -293,7 +323,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
                 </div>
 
                 {/* Switch Camera Button (Floating) */}
-                <button 
+                <button
                   onClick={switchCamera}
                   className="absolute bottom-4 right-4 p-3 bg-white/20 hover:bg-white/30 text-white rounded-full backdrop-blur-md transition-all active:scale-90"
                   title="Alternar Câmera"
@@ -314,7 +344,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
 
           {/* Main Action Button */}
           {!cameraActive ? (
-            <button 
+            <button
               onClick={startCamera}
               disabled={!modelsLoaded}
               className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xl hover:bg-emerald-700 shadow-xl shadow-emerald-100 flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
@@ -322,7 +352,7 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
               <CheckCircle size={28} /> Marcar Presença
             </button>
           ) : (
-            <button 
+            <button
               onClick={stopCamera}
               className="w-full py-5 bg-red-500 text-white rounded-2xl font-black text-xl hover:bg-red-600 shadow-xl shadow-red-100 flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
@@ -352,13 +382,13 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
           <div className={`bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl transition-all duration-400 relative ${isClosing ? 'animate-slide-down-fade-out' : 'animate-slide-up'}`}>
             {/* Blue Top Bar */}
             <div className="bg-indigo-600 h-1.5 w-full absolute top-0 left-0 z-10"></div>
-            
+
             <div className="p-8 text-center space-y-6">
               <div className="space-y-1">
                 <h3 className="text-2xl font-black text-slate-800">Identificado!</h3>
                 <p className="text-slate-500 text-sm font-medium">Confirmar presença para:</p>
               </div>
-              
+
               <div className="relative w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-emerald-500 shadow-2xl">
                 <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
               </div>
@@ -369,13 +399,13 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
               </div>
 
               <div className="flex flex-col gap-3 pt-4">
-                <button 
+                <button
                   onClick={confirmPresence}
                   className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-lg hover:bg-emerald-600 shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 transition-all active:scale-95"
                 >
                   <CheckCircle size={24} /> Confirmar Agora
                 </button>
-                <button 
+                <button
                   onClick={cancelCapture}
                   className="w-full py-3 text-slate-400 font-bold hover:text-red-500 transition-colors"
                 >

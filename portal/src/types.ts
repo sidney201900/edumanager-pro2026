@@ -58,7 +58,8 @@ export interface Attendance {
   id: string;
   studentId: string;
   classId: string;
-  date: string; // ISO String (UTC)
+  lessonId?: string;
+  date: string; // ISO String (UTC) ou Local ISO
   photo?: string;
   verified: boolean;
   type?: 'presence' | 'absence';

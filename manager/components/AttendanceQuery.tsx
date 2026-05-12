@@ -39,12 +39,18 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
   const [showAbsenceModal, setShowAbsenceModal] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [isClosing2, setIsClosing2] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Função para obter data local YYYY-MM-DD sem risco de fuso horário UTC
+  const getTodayLocal = () => {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+
+  const [selectedDate, setSelectedDate] = useState(getTodayLocal());
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  
+
   const [absenceStudentId, setAbsenceStudentId] = useState('');
   const [absenceJustification, setAbsenceJustification] = useState('');
-  const [absenceDate, setAbsenceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [absenceDate, setAbsenceDate] = useState(getTodayLocal());
   const [absenceLessonId, setAbsenceLessonId] = useState('');
   const [viewingAttachment, setViewingAttachment] = useState<string | null>(null);
   const [attendanceForAttachment, setAttendanceForAttachment] = useState<Attendance | null>(null);
@@ -57,36 +63,44 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     if (!url || typeof url !== 'string') return '';
     if (url.startsWith('data:image') || url.startsWith('blob:')) return url;
     if (url.startsWith('/storage/')) return url;
-    
+
     try {
       const match = url.match(/^https?:\/\/[^\/]+\/(.+)$/);
       if (match) return `/storage/${match[1]}`;
-    } catch(e) {}
-    
+    } catch (e) { }
+
     return url;
   };
 
   const toggleAttendanceStatus = (record: any) => {
     let updatedAttendance = [...(data.attendance || [])];
-    
+
     if (record.isVirtual) {
       // Ação do botão do Admin: criar o registro real a partir do virtual
       const lesson = data.lessons.find(l => l.id === record.id.replace('v-', ''));
       const newType = (record.type === 'absence' || record.type === 'awaiting') ? 'presence' : 'absence';
-      
+
+      const now = new Date();
+      const localDate = now.getFullYear() + '-' + 
+        String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(now.getDate()).padStart(2, '0') + 'T' + 
+        String(now.getHours()).padStart(2, '0') + ':' + 
+        String(now.getMinutes()).padStart(2, '0') + ':' + 
+        String(now.getSeconds()).padStart(2, '0');
+        
       const newRecord: Attendance = {
         id: crypto.randomUUID(),
         studentId: record.studentId,
         classId: record.classId,
-        date: lesson ? `${lesson.date}T${lesson.startTime || '00:00'}:00` : new Date().toISOString(),
+        date: lesson ? `${lesson.date}T${lesson.startTime || '00:00'}:00` : localDate,
         verified: true,
         type: newType,
         ...(lesson ? { lessonId: lesson.id } : {}) // Vinculação rígida para não haver duplicidade
       };
 
       // Garantir que não duplica se já houver por algum erro
-      const existingIdx = updatedAttendance.findIndex(a => 
-        a.studentId === record.studentId && 
+      const existingIdx = updatedAttendance.findIndex(a =>
+        a.studentId === record.studentId &&
         ((a as any).lessonId === lesson?.id || a.date === newRecord.date)
       );
 
@@ -98,7 +112,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     } else {
       // Toggle existing record
       const newType = record.type === 'absence' ? 'presence' : 'absence';
-      updatedAttendance = updatedAttendance.map(a => 
+      updatedAttendance = updatedAttendance.map(a =>
         a.id === record.id ? { ...a, type: newType, justification: undefined, justificationAccepted: undefined } : a
       );
     }
@@ -110,23 +124,23 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
 
   const handleDeleteAttachmentRecord = () => {
     if (!attendanceForAttachment || !attendanceForAttachment.justification) return;
-    
+
     try {
       const parsed = JSON.parse(attendanceForAttachment.justification);
       delete parsed.arquivo_base64;
       delete parsed.arquivo;
       const updatedJustification = JSON.stringify(parsed);
-      
-      const updatedAttendance = (data.attendance || []).map(a => 
+
+      const updatedAttendance = (data.attendance || []).map(a =>
         a.id === attendanceForAttachment.id ? { ...a, justification: updatedJustification } : a
       );
-      
+
       updateData({ attendance: updatedAttendance });
       dbService.saveData({ ...data, attendance: updatedAttendance });
       setViewingAttachment(null);
       setAttendanceForAttachment(null);
       showAlert('Sucesso', 'Arquivo removido com sucesso.', 'success');
-    } catch(e) {
+    } catch (e) {
       console.error('Erro ao excluir anexo do registro', e);
     }
   };
@@ -171,8 +185,8 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     }
 
     // Check if there is already a record for this lesson specifically
-    const existingIndex = (data.attendance || []).findIndex(a => 
-      a.studentId === absenceStudentId && 
+    const existingIndex = (data.attendance || []).findIndex(a =>
+      a.studentId === absenceStudentId &&
       ((a as any).lessonId === lesson.id || a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`)
     );
 
@@ -217,15 +231,15 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     try {
       const doc = new jsPDF();
       const startY = await addHeader(doc, data);
-      
+
       doc.setFontSize(18);
       doc.text('Relatório de Frequência', 14, startY + 10);
-      
+
       doc.setFontSize(11);
       doc.text(`Data: ${new Date(selectedDate).toLocaleDateString()}`, 14, startY + 18);
       doc.text(`Turma: ${classObj.name}`, 14, startY + 24);
 
-      const classAttendance = (data.attendance || []).filter(record => 
+      const classAttendance = (data.attendance || []).filter(record =>
         record.classId === classObj.id && record.date.startsWith(selectedDate)
       );
 
@@ -237,9 +251,9 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
           try {
             const parsed = JSON.parse(justMotivo);
             justMotivo = parsed.motivo || justMotivo;
-          } catch(e) {}
+          } catch (e) { }
         }
-        
+
         return [
           student?.name || 'Desconhecido',
           time,
@@ -270,13 +284,13 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
           <p className="text-slate-500 font-medium">Gerencie a frequência por turma e registre faltas justificadas.</p>
         </div>
         <div className="flex items-center gap-3">
-          <input 
-            type="date" 
+          <input
+            type="date"
             className="p-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700"
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)}
           />
-          <button 
+          <button
             onClick={() => setShowAbsenceModal(true)}
             className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-bold text-sm flex items-center gap-2 shadow-lg shadow-amber-100"
           >
@@ -291,9 +305,9 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
           const classStudents = data.students.filter(s => s.classId === classObj.id && s.status === 'active');
           const attendanceCount = (data.attendance || []).filter(a => a.classId === classObj.id && a.date.startsWith(selectedDate)).length;
           const course = data.courses.find(c => c.id === classObj.courseId);
-          
+
           return (
-            <div 
+            <div
               key={classObj.id}
               onClick={() => {
                 setSelectedClass(classObj);
@@ -302,14 +316,14 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
               className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-300 transition-all cursor-pointer group relative overflow-hidden"
             >
               <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500"></div>
-              
+
               <div className="relative z-10">
                 <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 mb-4">
                   <BookOpen size={24} />
                 </div>
                 <h3 className="text-xl font-black text-slate-800 mb-1">{classObj.name}</h3>
                 <p className="text-sm text-slate-500 font-medium mb-4">{course?.name}</p>
-                
+
                 <div className="flex items-center justify-between pt-4 border-t border-slate-50">
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
                     <User size={14} />
@@ -330,14 +344,14 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
         <div className={`fixed inset-0 bg-transparent z-50 flex items-center justify-center p-4 transition-opacity duration-400 ${isClosing ? 'opacity-0' : 'opacity-100 animate-in fade-in'}`}>
           <div className={`bg-white rounded-3xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl transition-all duration-400 relative flex flex-col ${isClosing ? 'animate-slide-down-fade-out' : 'animate-slide-up'}`}>
             <div className="bg-indigo-600 h-1.5 w-full absolute top-0 left-0 z-10"></div>
-            
+
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h3 className="text-xl font-black text-slate-800">Alunos: {selectedClass.name}</h3>
                 <p className="text-sm text-slate-500 font-medium">Clique em um aluno para ver seu histórico individual.</p>
               </div>
               <div className="flex items-center gap-2">
-                <button 
+                <button
                   onClick={() => handleExportPDF(selectedClass)}
                   disabled={isGeneratingPDF}
                   className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
@@ -349,7 +363,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                     <FileDown size={20} />
                   )}
                 </button>
-                <button 
+                <button
                   onClick={closeModal}
                   className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                 >
@@ -376,7 +390,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 return classStudents.map(student => {
                   const studentActualRecords = (data.attendance || []).filter(a => a.studentId === student.id && a.classId === selectedClass.id);
                   const classLessonsRaw = (data.lessons || []).filter(l => l.classId === selectedClass.id && l.status !== 'cancelled');
-                  
+
                   const deduplicatedLessons = classLessonsRaw.filter((lesson, index, self) =>
                     index === self.findIndex((t) => (
                       t.date === lesson.date && t.startTime === lesson.startTime
@@ -391,7 +405,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                   deduplicatedLessons.forEach(lesson => {
                     const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
                     const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
-                    const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000); 
+                    const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000);
 
                     const matchedRecord = studentActualRecords.find(a => {
                       if ((a as any).lessonId === lesson.id) return true;
@@ -401,19 +415,19 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                     });
 
                     if (matchedRecord) {
-                       if (matchedRecord.type === 'absence') {
-                          if (matchedRecord.justificationAccepted) justified++;
-                          else absences++;
-                       } else if (matchedRecord.type === 'presence' || !matchedRecord.type) {
-                          presences++;
-                       }
+                      if (matchedRecord.type === 'absence') {
+                        if (matchedRecord.justificationAccepted) justified++;
+                        else absences++;
+                      } else if (matchedRecord.type === 'presence' || !matchedRecord.type) {
+                        presences++;
+                      }
                     } else if (now > lessonEnd) {
-                       absences++;
+                      absences++;
                     }
                   });
 
                   return (
-                    <div 
+                    <div
                       key={student.id}
                       onClick={() => {
                         setSelectedStudent(student);
@@ -473,7 +487,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                   <p className="text-sm text-slate-500 font-medium">Histórico de Frequência • {selectedClass.name}</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={closeHistoryModal}
                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
@@ -491,7 +505,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
 
                 const actualRecords = (data.attendance || [])
                   .filter(a => a.studentId === selectedStudent.id);
-                
+
                 const classLessonsRaw = (data.lessons || [])
                   .filter(l => studentClassIds.has(l.classId) && l.status !== 'cancelled');
 
@@ -502,12 +516,12 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 );
 
                 const tableRows: any[] = [];
-                
+
                 deduplicatedLessons.forEach(lesson => {
                   const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
                   const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
                   const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000); // 30 mins before
-                  
+
                   let record = actualRecords.find(a => {
                     if ((a as any).lessonId === lesson.id) return true;
                     if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
@@ -528,7 +542,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                       awaiting: !isFinished
                     };
                   }
-                  
+
                   if (record) {
                     tableRows.push({ lesson, record });
                   }
@@ -550,12 +564,12 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 let justified = 0;
 
                 tableRows.forEach(row => {
-                   if (row.record.type === 'absence') {
-                      if (row.record.justificationAccepted) justified++;
-                      else absences++;
-                   } else if (row.record.type === 'presence' || (!row.record.type && !row.record.isVirtual)) {
-                      presences++;
-                   }
+                  if (row.record.type === 'absence') {
+                    if (row.record.justificationAccepted) justified++;
+                    else absences++;
+                  } else if (row.record.type === 'presence' || (!row.record.type && !row.record.isVirtual)) {
+                    presences++;
+                  }
                 });
 
                 return (
@@ -593,7 +607,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                          {tableRows.map(({lesson, record}) => {
+                          {tableRows.map(({ lesson, record }) => {
                             const recordDate = new Date(record.date);
                             const time = recordDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -604,7 +618,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                                 const parsed = JSON.parse(justMotivo);
                                 justMotivo = parsed.motivo || justMotivo;
                                 justAttachment = parsed.arquivo || parsed.arquivo_base64 || null;
-                              } catch(e) {}
+                              } catch (e) { }
                             }
 
                             const isAbsence = record.type === 'absence';
@@ -666,7 +680,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                                   {isAwaiting || isPendente ? (
                                     <span className="text-xs italic text-indigo-400">Aguardando registro ou justificativa...</span>
                                   ) : justMotivo ? (
-                                    <button 
+                                    <button
                                       onClick={() => {
                                         setCurrentJustificationText(justMotivo);
                                         setCurrentRecordForJustification(record);
@@ -684,7 +698,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                   {justAttachment ? (
-                                    <button 
+                                    <button
                                       onClick={() => {
                                         setViewingAttachment(justAttachment!);
                                         setAttendanceForAttachment(record);
@@ -701,11 +715,11 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                                 <td className="px-6 py-4 text-right">
                                   <div className="flex justify-end gap-2">
                                     {(isAbsence || isPendente || isAwaiting) && (
-                                      <button 
+                                      <button
                                         onClick={() => {
                                           setAbsenceStudentId(selectedStudent.id);
                                           setAbsenceDate(record.date.split('T')[0]);
-                                          const lessonId = record.isVirtual ? record.id.replace('v-', '') : 
+                                          const lessonId = record.isVirtual ? record.id.replace('v-', '') :
                                             data.lessons.find(l => l.date === record.date.split('T')[0] && l.classId === record.classId)?.id;
                                           setAbsenceLessonId(lessonId || '');
                                           setShowAbsenceModal(true);
@@ -717,7 +731,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                                     )}
 
                                     {hasPendingJustification && (
-                                      <button 
+                                      <button
                                         onClick={() => {
                                           const updated = (data.attendance || []).map(a => a.id === record.id ? { ...a, justificationAccepted: true } : a);
                                           updateData({ attendance: updated });
@@ -730,7 +744,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                                       </button>
                                     )}
 
-                                    <button 
+                                    <button
                                       onClick={() => toggleAttendanceStatus(record)}
                                       className={`text-[10px] px-2 py-1.5 ${isAbsence || isPendente || isAwaiting ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'} text-white font-bold rounded transition-colors whitespace-nowrap`}
                                     >
@@ -758,12 +772,12 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
           <div className={`bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl transition-all duration-400 relative ${isClosing ? 'animate-slide-down-fade-out' : 'animate-slide-up'}`}>
             {/* Blue Top Bar */}
             <div className="bg-indigo-600 h-1.5 w-full absolute top-0 left-0 z-10"></div>
-            
+
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-amber-50/50">
               <h3 className="text-xl font-black text-amber-800 flex items-center gap-2">
                 <AlertCircle size={24} /> Justificar Falta
               </h3>
-              <button 
+              <button
                 onClick={closeModal}
                 className="p-2 text-amber-400 hover:text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
               >
@@ -788,7 +802,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Data</label>
-                  <input 
+                  <input
                     type="date"
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700"
                     value={absenceDate}
@@ -816,7 +830,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                       })
                       .map(lesson => {
                         const classObj = data.classes.find(c => c.id === lesson.classId);
-                        const hasPresence = (data.attendance || []).some(a => 
+                        const hasPresence = (data.attendance || []).some(a =>
                           a.studentId === absenceStudentId && a.date.startsWith(lesson.date) && a.type === 'presence'
                         );
                         return (
@@ -832,7 +846,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Justificativa</label>
-                <textarea 
+                <textarea
                   className="w-full px-4 py-3 bg-slate-50 text-black border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-sm min-h-[100px]"
                   placeholder="Informe o motivo da falta..."
                   value={absenceJustification}
@@ -840,7 +854,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 />
               </div>
 
-              <button 
+              <button
                 onClick={handleAddAbsence}
                 className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black text-lg hover:bg-amber-600 shadow-lg shadow-amber-100 flex items-center justify-center gap-2 transition-all active:scale-95"
               >
@@ -859,13 +873,13 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 <FileSignature size={20} className="text-indigo-600" /> Visualização do Documento
               </h3>
               <div className="flex items-center gap-2">
-                <button 
+                <button
                   onClick={handleDeleteAttachmentRecord}
                   className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 flex items-center gap-1.5 transition-colors"
                 >
                   <Trash2 size={14} /> Excluir Arquivo
                 </button>
-                <button 
+                <button
                   onClick={() => { setViewingAttachment(null); setAttendanceForAttachment(null); }}
                   className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded-lg transition-colors"
                 >
@@ -888,12 +902,12 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 relative border border-slate-100">
             {/* Design header */}
             <div className="bg-amber-500 h-1.5 w-full absolute top-0 left-0"></div>
-            
+
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-amber-50/30">
               <h3 className="text-lg font-black text-amber-800 flex items-center gap-2">
                 <AlertCircle size={22} /> Motivo da Falta
               </h3>
-              <button 
+              <button
                 onClick={() => setShowJustificationTextModal(false)}
                 className="p-2 text-amber-400 hover:text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
               >
@@ -909,7 +923,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
               </div>
 
               {currentRecordForJustification && !currentRecordForJustification.justificationAccepted && (
-                <button 
+                <button
                   onClick={() => {
                     const updated = (data.attendance || []).map(a => a.id === currentRecordForJustification.id ? { ...a, justificationAccepted: true } : a);
                     updateData({ attendance: updated });
@@ -922,7 +936,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                   <CheckCircle size={20} /> Aceitar Justificativa
                 </button>
               )}
-              
+
               {currentRecordForJustification?.justificationAccepted && (
                 <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 text-emerald-700 rounded-2xl font-black uppercase text-xs border border-emerald-100">
                   <CheckCircle size={18} /> Já Aceita
