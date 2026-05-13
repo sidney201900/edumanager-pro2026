@@ -311,7 +311,7 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
                               <CheckCircle size={12} /> Aceitar
                             </button>
                           )}
-                          {finalAttachment && (
+                          {isJustificativa && finalAttachment && !String(finalAttachment).startsWith('{') && (
                             <button 
                               onClick={(e) => { 
                                 e.stopPropagation(); 

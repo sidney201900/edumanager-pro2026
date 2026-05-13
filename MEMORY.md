@@ -37,6 +37,10 @@
 - [x] **Paridade Lógica Absoluta (Frequência):** A lógica de matching de frequência do Portal (`Frequencia.tsx` e `Dashboard.tsx`) agora é um clone 100% idêntico ao do Manager (`AttendanceQuery.tsx`).
 - [x] **Fix Janela de Matching (Portal):** Corrigido bug onde aulas sem `endTime` fechavam a janela de presença prematuramente (fallback alterado de `00:00:00` para `23:59:00`).
 - [x] **Resolução de Justificativas Invisíveis:** Justificativas enviadas agora são corretamente mapeadas às aulas no Portal através da sincronização de janelas de tempo e IDs.
+- [x] **Correção do Fluxo de Exclusão (WhatsApp):** Ajustada a ordem de exclusão no `server.selfhosted.js` e `Finance.tsx`. A limpeza local agora ocorre apenas após o disparo bem-sucedido do WhatsApp via Webhook, garantindo que as variáveis `{nome}` e `{descricao}` nunca cheguem vazias.
+- [x] **Feedback Real de Exclusão:** Implementado `showAlert` detalhado no Financeiro e confirmação real via **Sino de Notificações** (Admin) após o processamento do Webhook.
+- [x] **Refinamento do Sino (AdminBell):** O botão "Ver Anexo" agora é exclusivo de notificações de justificativa que possuem arquivo físico, ocultando-se em notificações de sistema que usam o campo anexo para metadados JSON.
+- [x] **Blindagem de UI (Financeiro):** Corrigido potencial erro de referência no parse de erro do Asaas que causava "White Screen" em exclusões negadas.
 
 ## 📋 Próximos Passos
 - [ ] Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.

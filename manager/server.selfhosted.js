@@ -804,9 +804,17 @@ app.post('/api/webhook_asaas', async (req, res) => {
           cancelCache.add(installmentId);
           setTimeout(() => cancelCache.delete(installmentId), 60000);
         }
-        await sendEvolutionMessage(asaasPaymentId, 'PAYMENT_DELETED');
+        const sent = await sendEvolutionMessage(asaasPaymentId, 'PAYMENT_DELETED');
         await deleteCobranca(asaasPaymentId);
-        addLog('Webhook', 'PAYMENT_DELETED', { asaasPaymentId });
+        
+        if (sent) {
+          createAdminNotification('✅ WhatsApp Enviado', `O aluno ${targetName} foi notificado sobre o cancelamento da cobrança.`, { type: 'whatsapp', status: 'success' });
+          addLog('WhatsApp', 'Cancelamento Enviado', { aluno: targetName, asaasPaymentId });
+        } else {
+          createAdminNotification('⚠️ Falha no WhatsApp', `Não foi possível enviar a notificação de cancelamento para ${targetName}.`, { type: 'whatsapp', status: 'error' });
+          addLog('WhatsApp', 'Erro no Cancelamento', { aluno: targetName, asaasPaymentId });
+        }
+
         return res.status(200).send('OK');
 
       default:
@@ -1144,15 +1152,11 @@ app.post('/api/excluir_cobranca', async (req, res) => {
       const resp = await fetch(`${ASAAS_BASE_URL}/v3/installments/${asaasTargetId}`, { method: 'DELETE', headers: { 'access_token': process.env.ASAAS_API_KEY } });
       if (resp.ok) {
         addLog('Asaas', 'Exclusão Parcelamento OK', { id: asaasTargetId });
-        // Exclusão imediata no SQL local para evitar que reapareça na UI antes do webhook
-        await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_installment_id = $1', [asaasTargetId]);
       }
     } else {
       const resp = await fetch(`${ASAAS_BASE_URL}/v3/payments/${id}`, { method: 'DELETE', headers: { 'access_token': process.env.ASAAS_API_KEY } });
       if (!resp.ok) { const e = await resp.json().catch(() => ({})); return res.status(400).json({ error: e.errors?.[0]?.description || 'Falha Asaas' }); }
       
-      // Exclusão imediata no SQL local
-      await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = $1', [id]);
       addLog('Asaas', 'Exclusão Cobrança OK', { id });
     }
 

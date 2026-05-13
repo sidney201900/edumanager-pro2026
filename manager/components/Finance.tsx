@@ -712,10 +712,8 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
         body: JSON.stringify({ id: asaasIdToDelete })
       });
 
-      const result = await response.json();
-
       if (response.ok) {
-        showAlert('Sucesso', 'Cobrança excluída com sucesso.', 'success');
+        showAlert('Exclusão Processada', '✅ Cobrança removida no Asaas. O envio do WhatsApp e a limpeza local ocorrerão em segundos. Confira a confirmação final no Sino de Notificações.', 'success');
 
         // SO atualiza se backend confirmou (200 OK)
         let updatedPayments = [...data.payments];
@@ -727,6 +725,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
         updateData({ payments: updatedPayments });
         closeModal();
       } else {
+        const result = await response.json().catch(() => ({}));
         showAlert('Erro', result.error || 'Não é possível excluir. Verifique se já foi paga.', 'error');
       }
     } catch (error) {
