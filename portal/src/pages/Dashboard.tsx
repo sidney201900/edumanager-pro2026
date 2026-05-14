@@ -68,40 +68,46 @@ export default function Dashboard() {
   const overduePayments = data?.payments?.filter(p => p.status === 'overdue') || [];
   const totalPending = pendingPayments.reduce((s, p) => s + (p.amount - (p.discount || 0)), 0);
 
-  // Synchronized Frequency Calculation (Matches Frequencia.tsx & Manager)
-  let presencesCount = 0;
-  let validLessonsCount = 0;
+    // Synchronized Frequency Calculation (Matches Frequencia.tsx & Manager)
+    let presencesCount = 0;
+    let validLessonsCount = 0;
 
-  if (data?.lessons && data?.attendance) {
-    const deduplicatedLessons = data.lessons.filter((lesson, index, self) =>
-      index === self.findIndex((t) => (
-        t.date === lesson.date && t.startTime === lesson.startTime
-      ))
-    );
+    if (data?.lessons && data?.attendance) {
+      const deduplicatedLessons = data.lessons.filter((lesson, index, self) =>
+        index === self.findIndex((t) => (
+          t.date === lesson.date && t.startTime === lesson.startTime
+        ))
+      );
 
-    deduplicatedLessons.forEach(lesson => {
-      if (lesson.status === 'cancelled') return;
-      validLessonsCount++;
+      deduplicatedLessons.forEach(lesson => {
+        if (lesson.status === 'cancelled') return;
 
-      // Construir janela de tempo EXATAMENTE como o Manager faz
-      const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
-      const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
-      const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000);
+        // Mesma lógica de status da página de Frequência
+        const { isCompleted } = getLessonTimeStatus(lesson, now);
 
-      const att = data.attendance.find(a => {
-        if (!a.date || typeof a.date !== 'string') return false;
-        if ((a as any).lessonId === lesson.id) return true;
-        if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
-        const recordTime = new Date(a.date);
-        return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
+        // Construir janela de tempo EXATAMENTE como o Manager faz
+        const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
+        const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
+        const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000);
+
+        const att = data.attendance.find(a => {
+          if (!a.date || typeof a.date !== 'string') return false;
+          if ((a as any).lessonId === lesson.id) return true;
+          if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
+          const recordTime = new Date(a.date);
+          return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
+        });
+
+        // Só entra no cálculo se estiver concluída OU tiver um registro (biometria/falta/justificativa)
+        if (att || isCompleted) {
+          validLessonsCount++;
+          // Mesma lógica de presença da página de Frequência (exclui type: 'absence')
+          const isPresent = att && (att.type === 'presence' || (att.verified === true && att.type !== 'absence'));
+          if (isPresent) presencesCount++;
+        }
       });
-
-      const isPresent = att && (att.type === 'presence' || (!att.type && !(att as any).isVirtual) || att.verified === true);
-      if (isPresent) presencesCount++;
-    });
-  }
-  const totalAttendance = data?.attendance?.length || 0;
-  const frequencyPercent = validLessonsCount > 0 ? Math.round((presencesCount / validLessonsCount) * 100) : 0;
+    }
+    const frequencyPercent = validLessonsCount > 0 ? Math.round((presencesCount / validLessonsCount) * 100) : 0;
 
   const nextDue = pendingPayments
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];
