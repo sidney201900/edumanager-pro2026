@@ -215,13 +215,54 @@ app.get('/api/portal/me', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/portal/financeiro
+// GET /api/portal/financeiro (Mesclagem JSON + PostgreSQL para status atualizado)
 app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
   try {
     const schoolData = await getSchoolData();
     const payments = (schoolData.payments || []).filter((p) => p.studentId === req.user.studentId);
-    res.json({ payments });
+
+    // Buscar status atualizado do PostgreSQL (fonte da verdade para pagamentos)
+    let dbBoletos = [];
+    try {
+      const { rows } = await pool.query(
+        'SELECT asaas_payment_id, status, valor, data_pagamento, transaction_receipt_url FROM alunos_cobrancas WHERE aluno_id = $1',
+        [req.user.studentId]
+      );
+      dbBoletos = rows || [];
+    } catch (dbErr) {
+      console.error('Financeiro: fallback to JSON only -', dbErr.message);
+    }
+
+    // Mesclar: se o PostgreSQL tem um status mais atualizado, ele prevalece
+    const statusMap = {
+      'pago': 'paid', 'paid': 'paid', 'received': 'paid', 'confirmed': 'paid',
+      'atrasado': 'overdue', 'overdue': 'overdue', 'vencido': 'overdue',
+      'pendente': 'pending', 'pending': 'pending',
+      'cancelado': 'cancelled', 'cancelled': 'cancelled'
+    };
+
+    const enrichedPayments = payments.map(p => {
+      const asaasId = p.asaasPaymentId || p.asaas_payment_id;
+      if (!asaasId) return p;
+
+      const dbRecord = dbBoletos.find(b => b.asaas_payment_id === asaasId);
+      if (!dbRecord) return p;
+
+      const dbStatus = (dbRecord.status || '').toLowerCase().trim();
+      const normalizedStatus = statusMap[dbStatus] || p.status;
+
+      return {
+        ...p,
+        status: normalizedStatus,
+        amount: Number(dbRecord.valor) || p.amount,
+        paidDate: dbRecord.data_pagamento || p.paidDate,
+        transactionReceiptUrl: dbRecord.transaction_receipt_url || p.transactionReceiptUrl
+      };
+    });
+
+    res.json({ payments: enrichedPayments });
   } catch (err) {
+    console.error('Financeiro error:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
