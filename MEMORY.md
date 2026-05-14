@@ -119,6 +119,9 @@
 
 ### 📢 Automação de Mensagens
 - [x] **Estabilização de Lembretes (V2):** Resolvido bug de deslocamento de fuso horário (-1 dia) nas datas de vencimento. Implementadas ferramentas de debug (ignorar trava diária e reset de contadores) e **controle manual de delay para disparos em massa** para facilitar testes e garantir segurança contra banimento.
+- [x] **Filtragem Inteligente de Boletim:** Refatorada a aba de Boletim no Manager para exibir provas e atividades apenas quando houver submissão do aluno, eliminando a poluição visual de outras turmas.
+- [x] **Otimização Financeira (Mobile):** Cabeçalho da aba Financeiro redesenhado para ser 100% responsivo, com botões compactos e ícones inteligentes que economizam espaço em dispositivos móveis.
+- [x] **Disparo em Massa V3:** Implementada lógica de primeiro nome (`.split(' ')[0]`), envio simultâneo para Aluno e Responsável (quando contatos forem diferentes), painel de 25 emojis temáticos e suporte a anexos (Imagem/PDF) via Evolution API.
 
 ## 📋 Próximos Passos Pendentes
 

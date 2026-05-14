@@ -187,7 +187,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
         const linkedExams = (data.exams || []).filter(e => 
           String(e.subjectId).trim() === String(subject.id).trim() && 
           String(e.periodId).trim() === String(period.id).trim() &&
-          (e.status === 'published' || !!studentSubmissions[String(e.id).trim()])
+          !!studentSubmissions[String(e.id).trim()]
         );
 
         if (linkedExams.length > 0) {
@@ -596,7 +596,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                             {(() => {
                               const linkedExams = (data.exams || []).filter(e => 
                                 String(e.subjectId).trim() === String(subject.id).trim() &&
-                                (e.status === 'published' || !!studentSubmissions[String(e.id).trim()])
+                                !!studentSubmissions[String(e.id).trim()]
                               );
                               const provasCount = linkedExams.filter(e => (e as any).evaluationType !== 'activity').length;
                               const atividadesCount = linkedExams.filter(e => (e as any).evaluationType === 'activity').length;
@@ -637,7 +637,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                             const linkedExams = (data.exams || []).filter(e => 
                               String(e.subjectId).trim() === String(subject.id).trim() && 
                               String(e.periodId).trim() === String(period.id).trim() &&
-                              (e.status === 'published' || !!studentSubmissions[String(e.id).trim()])
+                              !!studentSubmissions[String(e.id).trim()]
                             );
                             const periodGrades = studentGrades[subject.id]?.[period.id] || {};
                             const validPeriodValues = Object.values(periodGrades).filter(v => v !== '');

@@ -861,40 +861,41 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Financeiro</h2>
           <p className="text-slate-500 text-sm">Gestão de mensalidades vinculadas a contratos e cursos.</p>
         </div>
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-
-          <div className="relative">
-            <button
-              onClick={() => setShowPrintCarneModal(true)}
-              className="flex-1 sm:flex-none bg-white text-indigo-600 border border-indigo-200 px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-50 transition-all shadow-sm font-bold active:scale-95"
-            >
-              <Printer size={20} /> Imprimir Carnê
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
 
           <button
-            onClick={() => setShowSupabaseModal(true)}
-            className="flex-1 sm:flex-none bg-slate-800 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-lg font-bold active:scale-95"
+            onClick={() => setShowPrintCarneModal(true)}
+            className="flex-1 sm:flex-none bg-white text-indigo-600 border border-indigo-200 px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-50 transition-all shadow-sm font-bold text-sm active:scale-95"
           >
-            <Database size={20} /> DB Supabase
+            <Printer size={18} /> <span className="hidden sm:inline">Imprimir Carnê</span><span className="sm:hidden">Carnê</span>
           </button>
 
           <button
             onClick={syncAsaasPayments}
             disabled={isSyncing}
-            className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg font-bold active:scale-95 disabled:opacity-50"
+            className="flex-1 sm:flex-none bg-emerald-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-sm font-bold text-sm active:scale-95 disabled:opacity-50"
             title="Sincronizar pagamentos com Asaas"
           >
-            <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
-            {isSyncing ? 'Sincronizando...' : 'Sincronizar Asaas'}
+            <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">{isSyncing ? 'Sincronizando...' : 'Sincronizar Asaas'}</span>
+            <span className="sm:hidden">{isSyncing ? '...' : 'Asaas'}</span>
           </button>
 
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex-1 sm:flex-none bg-indigo-600 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-lg font-bold active:scale-95"
+            className="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-sm font-bold text-sm active:scale-95"
           >
-            <Plus size={20} /> Novo Lançamento
+            <Plus size={18} /> <span className="hidden sm:inline">Novo Lançamento</span><span className="sm:hidden">Novo</span>
           </button>
+          
+          <button
+            onClick={() => setShowSupabaseModal(true)}
+            className="flex-none bg-slate-800 text-white w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-900 transition-all shadow-sm active:scale-95"
+            title="DB Supabase"
+          >
+            <Database size={18} />
+          </button>
+
         </div>
       </div>
 

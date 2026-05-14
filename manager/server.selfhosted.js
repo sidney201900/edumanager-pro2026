@@ -1094,14 +1094,24 @@ app.put('/api/notificacoes/remover-anexo/:id', async (req, res) => {
 // ============================================================
 // Disparo em Massa
 // ============================================================
-app.post('/api/enviar-massa', (req, res) => {
-  const { alunos, mensagem, delay } = req.body;
+app.post('/api/enviar-massa', upload.single('attachment'), (req, res) => {
+  let { alunos, mensagem, delay } = req.body;
+  if (typeof alunos === 'string') {
+    try { alunos = JSON.parse(alunos); } catch (e) { alunos = []; }
+  }
   if (!alunos || !Array.isArray(alunos) || alunos.length === 0) return res.status(400).json({ error: 'Nenhum aluno.' });
   res.status(200).json({ success: true, message: 'Background iniciado.' });
-  processarFilaWhatsApp(alunos, mensagem, delay || 60);
+  
+  const fileData = req.file ? {
+    buffer: req.file.buffer.toString('base64'),
+    mimetype: req.file.mimetype,
+    originalname: req.file.originalname
+  } : null;
+
+  processarFilaWhatsApp(alunos, mensagem, parseInt(delay) || 60, fileData);
 });
 
-async function processarFilaWhatsApp(alunos, mensagemTemplate, customDelay = 60) {
+async function processarFilaWhatsApp(alunos, mensagemTemplate, customDelay = 60, fileData = null) {
   const appData = await getSchoolData();
   const evoConfig = appData?.evolutionConfig;
   if (!evoConfig?.apiUrl || !evoConfig?.apiKey || !evoConfig?.instanceName) return;
@@ -1112,8 +1122,25 @@ async function processarFilaWhatsApp(alunos, mensagemTemplate, customDelay = 60)
     try {
       let cleanPhone = aluno.telefone.replace(/\D/g, '');
       if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
-      const url = `${evoConfig.apiUrl.replace(/\/$/, '')}/message/sendText/${evoConfig.instanceName}`;
-      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoConfig.apiKey }, body: JSON.stringify({ number: cleanPhone, text: msg }) });
+      
+      let url, payload;
+      if (fileData) {
+        url = `${evoConfig.apiUrl.replace(/\/$/, '')}/message/sendMedia/${evoConfig.instanceName}`;
+        payload = {
+           number: cleanPhone,
+           options: { delay: 1200, presence: "composing" },
+           mediatype: fileData.mimetype.includes('pdf') ? 'document' : 'image',
+           mimetype: fileData.mimetype,
+           fileName: fileData.originalname,
+           media: fileData.buffer,
+           caption: msg
+        };
+      } else {
+        url = `${evoConfig.apiUrl.replace(/\/$/, '')}/message/sendText/${evoConfig.instanceName}`;
+        payload = { number: cleanPhone, text: msg };
+      }
+      
+      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': evoConfig.apiKey }, body: JSON.stringify(payload) });
     } catch (error) { console.error(`[Massa] Erro ${aluno.nome}:`, error.message); }
     if (i < alunos.length - 1) {
       // Delay base informado pelo usuário + variância aleatória de 0-30s para evitar padrões robóticos

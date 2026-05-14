@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SchoolData } from '../types';
 import { useDialog } from '../DialogContext';
-import { MessageSquare, Save, Info, Settings, Send, Clock, AlertTriangle, FileText, CheckCircle, Cake, X, Power, BookOpen } from 'lucide-react';
+import { MessageSquare, Save, Info, Settings, Send, Clock, AlertTriangle, FileText, CheckCircle, Cake, X, Power, BookOpen, Smile, Paperclip } from 'lucide-react';
 
 interface MessagesProps {
   data: SchoolData;
@@ -68,7 +68,10 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
   const [messageText, setMessageText] = useState('');
   const [isSendingMass, setIsSendingMass] = useState(false);
   const [massDelay, setMassDelay] = useState('60');
+  const [massAttachment, setMassAttachment] = useState<File | null>(null);
   const [isSendingBdays, setIsSendingBdays] = useState(false);
+  const [showMassEmojis, setShowMassEmojis] = useState(false);
+  const commonEmojis = ['😀', '😂', '🥰', '😎', '🎉', '👍', '🙏', '❤️', '🔥', '🚀', '✅', '❌', '⚠️', '💡', '🎓', '🏫', '📚', '📖', '✏️', '📝', '🎒', '💻', '🧠', '🤓', '🥇'];
   
   // Modal de Edição de Modelo
   const [editingTemplate, setEditingTemplate] = useState<{
@@ -217,38 +220,50 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
       return showAlert('Erro', 'Nenhum aluno com telefone cadastrado foi selecionado.', 'error');
     }
 
-    const payloadAlunos = validStudents.map(a => {
-      let nome = a.name;
-      let telefone = a.phone;
+    const payloadAlunos = validStudents.flatMap(a => {
+      const entries = [];
       
-      if (a.birthDate) {
-        const birthDate = new Date(a.birthDate);
-        const age = Math.abs(new Date(Date.now() - birthDate.getTime()).getUTCFullYear() - 1970);
-        if (age < 18) {
-          nome = a.guardianName || a.name;
-          telefone = a.guardianPhone || a.phone;
-        }
+      // Entrada para o Aluno
+      if (a.phone) {
+        entries.push({
+          nome: a.name.split(' ')[0],
+          telefone: a.phone,
+          matricula: a.enrollmentNumber || '—'
+        });
       }
 
-      return { nome, telefone, matricula: a.enrollmentNumber || '—' };
+      // Entrada para o Responsável (apenas se for um número diferente ou se o aluno não tiver número)
+      if (a.guardianPhone && a.guardianPhone !== a.phone) {
+        entries.push({
+          nome: (a.guardianName || a.name).split(' ')[0],
+          telefone: a.guardianPhone,
+          matricula: a.enrollmentNumber || '—'
+        });
+      }
+
+      return entries;
     });
 
     setIsSendingMass(true);
     try {
+      const formData = new FormData();
+      formData.append('alunos', JSON.stringify(payloadAlunos));
+      formData.append('mensagem', normalizeLineBreaks(messageText));
+      formData.append('delay', String(parseInt(massDelay) || 60));
+      if (massAttachment) {
+        formData.append('attachment', massAttachment);
+      }
+
       const resp = await fetch('/api/enviar-massa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          alunos: payloadAlunos, 
-          mensagem: normalizeLineBreaks(messageText),
-          delay: parseInt(massDelay) || 60
-        })
+        body: formData
       });
       const resData = await resp.json();
       
       if (resp.ok) {
         setMessageText('');
         setTargetId('');
+        setMassAttachment(null);
         showAlert('Sucesso', 'Disparo iniciado no servidor! Você já pode fechar esta tela ou continuar usando o sistema.', 'success');
       } else {
         showAlert('Erro', resData.error || 'Erro ao iniciar disparo.', 'error');
@@ -342,7 +357,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
 
               <div>
                 <label className="block text-[10px] font-black text-emerald-600 uppercase mb-2 ml-1">Mensagem Personalizada</label>
-                <div className="flex flex-wrap gap-1 mb-2">
+                <div className="flex flex-wrap gap-1 mb-2 relative">
                   {['{nome}', '{matricula}'].map(v => (
                     <button 
                       key={v}
@@ -360,6 +375,37 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                       {v}
                     </button>
                   ))}
+                  
+                  <button
+                    onClick={() => setShowMassEmojis(!showMassEmojis)}
+                    className="flex items-center justify-center text-[9px] bg-emerald-100/50 text-emerald-700 px-2 py-1 rounded-md border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-all shadow-sm ml-auto"
+                    title="Inserir Emoji"
+                  >
+                    <Smile size={12} />
+                  </button>
+
+                  {showMassEmojis && (
+                    <div className="absolute right-0 top-8 z-10 bg-white border border-emerald-200 rounded-xl shadow-xl p-2 grid grid-cols-5 gap-1 w-48 animate-in fade-in zoom-in duration-200">
+                      {commonEmojis.map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => {
+                            const textarea = document.getElementById('mass-editor') as HTMLTextAreaElement;
+                            if (!textarea) return;
+                            const start = textarea.selectionStart;
+                            const end = textarea.selectionEnd;
+                            const newText = messageText.substring(0, start) + emoji + messageText.substring(end);
+                            setMessageText(newText);
+                            setShowMassEmojis(false);
+                            setTimeout(() => { textarea.focus(); textarea.setSelectionRange(start + emoji.length, start + emoji.length); }, 10);
+                          }}
+                          className="hover:bg-emerald-50 text-lg rounded flex items-center justify-center p-1 transition-colors"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <textarea 
                   id="mass-editor"
@@ -369,6 +415,34 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
                 />
+                
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="flex-1">
+                    {massAttachment ? (
+                      <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-1.5 rounded-lg border border-emerald-100">
+                        <span className="truncate max-w-[150px]">{massAttachment.name}</span>
+                        <button onClick={() => setMassAttachment(null)} className="text-emerald-500 hover:text-red-500" title="Remover anexo"><X size={12} /></button>
+                      </div>
+                    ) : (
+                      <div className="text-[9px] text-slate-400 font-medium">Nenhum anexo</div>
+                    )}
+                  </div>
+                  
+                  <label className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 text-[10px] font-black uppercase cursor-pointer hover:bg-emerald-600 hover:text-white transition-all shadow-sm">
+                    <Paperclip size={12} />
+                    <span>Anexar Arquivo</span>
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*,application/pdf"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setMassAttachment(e.target.files[0]);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="bg-white/50 p-3 rounded-xl border border-emerald-100 mb-2">
