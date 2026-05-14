@@ -60,6 +60,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                     studentId: n.aluno_id,
                     subjectId: n.disciplina_id,
                     period: n.periodo_id,
+                    examId: n.prova_id,
                     value: Number(n.valor)
                   });
                });
@@ -187,7 +188,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
         const linkedExams = (data.exams || []).filter(e => 
           String(e.subjectId).trim() === String(subject.id).trim() && 
           String(e.periodId).trim() === String(period.id).trim() &&
-          !!studentSubmissions[String(e.id).trim()]
+          !!subsMap[String(e.id).trim()]
         );
 
         if (linkedExams.length > 0) {

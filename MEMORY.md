@@ -45,21 +45,23 @@
 ## 📋 Próximos Passos
 - [ ] Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
 
-## 📅 Histórico Anterior (06/05/2026)
+- [ ] Módulo Financeiro SQL: Iniciar a migração total do financeiro para PostgreSQL (padrão `notas_boletim`).
+- [ ] Monitoramento de Produção: Validar se o servidor restabeleceu a conexão após o deploy corretivo.
+- [ ] Otimização de Build: Re-explorar o cache do Docker.
+
+## 📅 Histórico Anterior (06/05/2026 - 08/05/2026)
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
 - [x] Correção do Sino de Notificações: Botões sempre visíveis, suporte a anexo via chave `arquivo` e exibição do **Motivo da Falta** direto na lista do sino.
 - [x] **Segurança Financeira:** Implementada trava de segurança (`isCreating`) contra cliques múltiplos em formulários financeiros, resolvendo a duplicidade de cobranças no Asaas.
 - [x] **Boletim Detalhado (Manager):** Refatoração para suportar N avaliações por bimestre, com interface que diferencia Provas de Atividades.
 - [x] **Ambiente de Provas (Portal):** Implementado modo imersivo com cronômetro pulsante (alerta vermelho < 1min) e etiquetas dinâmicas por tipo de avaliação.
-- [x] **Boletim Analítico (Portal):** Nova interface de notas que mostra o extrato completo de cada avaliação realizada, separada por matéria e bimestre.
-- [x] **Sincronia Total:** Integração via `examId` garantindo que notas do portal preencham automaticamente o boletim administrativo.
-- [x] **Financeiro Inteligente:** Adicionado suporte ao tipo **"Apostila"** e grupo **"Taxas de Matrícula"** (buscadas dos cards de cursos). Implementado autocompletar inteligente que define o tipo de cobrança baseado na referência selecionada.
+- [x] **Envio em Massa V3:** Implementado suporte a anexos (PDF/Imagens), emojis e envio duplo (Aluno/Responsável).
+- [x] **Resolução de Crash:** Removida a dependência `node-fetch` que causava erro 404 no deploy de produção.
+- [x] **Financeiro Mobile:** Otimização da interface para melhor responsividade e compactação de botões.
+- [x] **Boletim:** Implementada filtragem para exibir apenas avaliações com submissões ativas.
 - [x] **Storage Explorer (MinIO):** Criada interface de gerenciamento de arquivos que permite navegar por buckets (pastas), visualizar (lightbox), baixar e excluir arquivos físicos individualmente.
 - [x] **Database Data Viewer:** Implementada a visualização de registros (linhas) diretamente no Database Explorer, com suporte a redimensionamento automático de colunas e truncamento de dados longos.
 - [x] **Controle de Refação (Retake Policy):** Adicionado botão de cadeado nos cards de Avaliações para permitir ou bloquear que alunos refaçam provas no portal (Regra 15).
-*   **Conclusão da Refação de Provas:** Implementada a sincronização do campo `allowRetake` (cadeado) com o PostgreSQL e corrigida a inicialização de novas provas.
-*   **Unificação de Estatísticas de Frequência:** Sincronizada a lógica dos cards de estatística com a lista visual no Portal, garantindo que aulas reagendadas contem como faltas/presenças e que os números batam 100%.
-*   **Garantia de Integridade:** As notas de refação agora sobrepõem corretamente os registros anteriores no banco de dados.
 - [x] **UI de Avaliações:** Padronização dos botões de edição ("Editar Prova" vs "Editar Atividade") e adição de botão de exclusão rápida direto no card.
 - [x] **Correção de Vínculo de Notas:** Garantido que o `examId` seja sempre salvo nas notas geradas pelo Portal para preenchimento automático do Boletim Escolar no Manager.
 - [x] **Fix Memory Leak:** Removido `pool.on('error')` que estava dentro da rota `PUT /api/school-data`, acumulando listeners a cada salvamento.
