@@ -215,13 +215,105 @@ app.get('/api/portal/me', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/portal/financeiro
+// GET /api/portal/financeiro (PostgreSQL como fonte primária — SQL-First)
 app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
   try {
+    const statusMap = {
+      'pago': 'paid', 'paid': 'paid', 'received': 'paid', 'confirmed': 'paid', 'received_in_cash': 'paid',
+      'atrasado': 'overdue', 'overdue': 'overdue', 'vencido': 'overdue',
+      'pendente': 'pending', 'pending': 'pending',
+      'cancelado': 'cancelled', 'cancelled': 'cancelled', 'refunded': 'cancelled', 'deleted': 'cancelled'
+    };
+
+    // 1. FONTE PRIMÁRIA: PostgreSQL (alunos_cobrancas)
+    let dbRows = [];
+    try {
+      const { rows } = await pool.query(
+        `SELECT asaas_payment_id, asaas_installment_id, installment, 
+                valor, TO_CHAR(vencimento, 'YYYY-MM-DD') as vencimento, 
+                status, TO_CHAR(data_pagamento, 'YYYY-MM-DD') as data_pagamento, 
+                link_boleto, link_carne, transaction_receipt_url
+         FROM alunos_cobrancas 
+         WHERE aluno_id = $1 
+         ORDER BY vencimento ASC`,
+        [req.user.studentId]
+      );
+      dbRows = rows || [];
+    } catch (dbErr) {
+      console.error('Financeiro: erro ao buscar do PostgreSQL -', dbErr.message);
+    }
+
+    // 2. FONTE SECUNDÁRIA: JSON (school_data.payments)
     const schoolData = await getSchoolData();
-    const payments = (schoolData.payments || []).filter((p) => p.studentId === req.user.studentId);
-    res.json({ payments });
+    const jsonPayments = (schoolData.payments || []).filter((p) => p.studentId === req.user.studentId);
+
+    const jsonMap = {};
+    for (const jp of jsonPayments) {
+      const key = jp.asaasPaymentId || jp.asaas_payment_id;
+      if (key) jsonMap[key] = jp;
+    }
+
+    // 3. CONSTRUIR LISTA FINAL: SQL como base, enriquecido com metadados do JSON
+    const seenAsaasIds = new Set();
+    const finalPayments = [];
+
+    for (const db of dbRows) {
+      const asaasId = db.asaas_payment_id;
+      seenAsaasIds.add(asaasId);
+
+      const jsonP = jsonMap[asaasId] || {};
+      const dbStatus = (db.status || '').toLowerCase().trim();
+      const normalizedStatus = statusMap[dbStatus] || 'pending';
+
+      let installmentNumber = jsonP.installmentNumber || null;
+      let totalInstallments = jsonP.totalInstallments || null;
+
+      if (!installmentNumber && db.asaas_installment_id) {
+        const siblings = dbRows.filter(r => r.asaas_installment_id === db.asaas_installment_id);
+        if (siblings.length > 1) {
+          totalInstallments = siblings.length;
+          installmentNumber = siblings.indexOf(db) + 1;
+        }
+      }
+
+      finalPayments.push({
+        id: jsonP.id || asaasId,
+        studentId: req.user.studentId,
+        asaasPaymentId: asaasId,
+        asaasPaymentUrl: jsonP.asaasPaymentUrl || null,
+        amount: Number(db.valor) || jsonP.amount || 0,
+        discount: jsonP.discount || 0,
+        dueDate: db.vencimento || jsonP.dueDate,
+        status: normalizedStatus,
+        paidDate: db.data_pagamento || jsonP.paidDate || null,
+        type: jsonP.type || 'monthly',
+        description: jsonP.description || null,
+        installmentNumber,
+        totalInstallments,
+        link_boleto: db.link_boleto || jsonP.bankSlipUrl || null,
+        transactionReceiptUrl: db.transaction_receipt_url || jsonP.transactionReceiptUrl || null,
+      });
+    }
+
+    // Adicionar pagamentos que existem APENAS no JSON
+    for (const jp of jsonPayments) {
+      const key = jp.asaasPaymentId || jp.asaas_payment_id;
+      if (key && seenAsaasIds.has(key)) continue;
+      if (!key && !jp.id) continue;
+
+      const jpStatus = (jp.status || '').toLowerCase().trim();
+      const normalizedStatus = statusMap[jpStatus] || 'pending';
+
+      finalPayments.push({
+        ...jp,
+        status: normalizedStatus,
+        amount: Number(jp.amount) || 0,
+      });
+    }
+
+    res.json({ payments: finalPayments });
   } catch (err) {
+    console.error('Financeiro error:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
@@ -230,7 +322,7 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
 app.get('/api/portal/boletos', authMiddleware, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM alunos_cobrancas WHERE aluno_id = $1 ORDER BY vencimento ASC',
+      `SELECT *, TO_CHAR(vencimento, 'YYYY-MM-DD') as vencimento, TO_CHAR(data_pagamento, 'YYYY-MM-DD') as data_pagamento FROM alunos_cobrancas WHERE aluno_id = $1 ORDER BY vencimento ASC`,
       [req.user.studentId]
     );
     res.json({ boletos: rows || [] });

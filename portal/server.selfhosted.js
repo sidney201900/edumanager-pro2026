@@ -215,52 +215,107 @@ app.get('/api/portal/me', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/portal/financeiro (Mesclagem JSON + PostgreSQL para status atualizado)
+// GET /api/portal/financeiro (PostgreSQL como fonte primária — SQL-First)
 app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
   try {
-    const schoolData = await getSchoolData();
-    const payments = (schoolData.payments || []).filter((p) => p.studentId === req.user.studentId);
-
-    // Buscar status atualizado do PostgreSQL (fonte da verdade para pagamentos)
-    let dbBoletos = [];
-    try {
-      const { rows } = await pool.query(
-        'SELECT asaas_payment_id, status, valor, data_pagamento, transaction_receipt_url FROM alunos_cobrancas WHERE aluno_id = $1',
-        [req.user.studentId]
-      );
-      dbBoletos = rows || [];
-    } catch (dbErr) {
-      console.error('Financeiro: fallback to JSON only -', dbErr.message);
-    }
-
-    // Mesclar: se o PostgreSQL tem um status mais atualizado, ele prevalece
     const statusMap = {
-      'pago': 'paid', 'paid': 'paid', 'received': 'paid', 'confirmed': 'paid',
+      'pago': 'paid', 'paid': 'paid', 'received': 'paid', 'confirmed': 'paid', 'received_in_cash': 'paid',
       'atrasado': 'overdue', 'overdue': 'overdue', 'vencido': 'overdue',
       'pendente': 'pending', 'pending': 'pending',
-      'cancelado': 'cancelled', 'cancelled': 'cancelled'
+      'cancelado': 'cancelled', 'cancelled': 'cancelled', 'refunded': 'cancelled', 'deleted': 'cancelled'
     };
 
-    const enrichedPayments = payments.map(p => {
-      const asaasId = p.asaasPaymentId || p.asaas_payment_id;
-      if (!asaasId) return p;
+    // 1. FONTE PRIMÁRIA: PostgreSQL (alunos_cobrancas) — contém TODOS os pagamentos criados
+    let dbRows = [];
+    try {
+      const { rows } = await pool.query(
+        `SELECT asaas_payment_id, asaas_installment_id, installment, 
+                valor, TO_CHAR(vencimento, 'YYYY-MM-DD') as vencimento, 
+                status, TO_CHAR(data_pagamento, 'YYYY-MM-DD') as data_pagamento, 
+                link_boleto, link_carne, transaction_receipt_url
+         FROM alunos_cobrancas 
+         WHERE aluno_id = $1 
+         ORDER BY vencimento ASC`,
+        [req.user.studentId]
+      );
+      dbRows = rows || [];
+    } catch (dbErr) {
+      console.error('Financeiro: erro ao buscar do PostgreSQL -', dbErr.message);
+    }
 
-      const dbRecord = dbBoletos.find(b => b.asaas_payment_id === asaasId);
-      if (!dbRecord) return p;
+    // 2. FONTE SECUNDÁRIA: JSON (school_data.payments) — metadados complementares
+    const schoolData = await getSchoolData();
+    const jsonPayments = (schoolData.payments || []).filter((p) => p.studentId === req.user.studentId);
 
-      const dbStatus = (dbRecord.status || '').toLowerCase().trim();
-      const normalizedStatus = statusMap[dbStatus] || p.status;
+    // Criar mapa rápido do JSON por asaasPaymentId para lookup
+    const jsonMap = {};
+    for (const jp of jsonPayments) {
+      const key = jp.asaasPaymentId || jp.asaas_payment_id;
+      if (key) jsonMap[key] = jp;
+    }
 
-      return {
-        ...p,
+    // 3. CONSTRUIR LISTA FINAL: SQL como base, enriquecido com metadados do JSON
+    const seenAsaasIds = new Set();
+    const finalPayments = [];
+
+    // 3a. Iterar sobre registros do SQL (fonte da verdade)
+    for (const db of dbRows) {
+      const asaasId = db.asaas_payment_id;
+      seenAsaasIds.add(asaasId);
+
+      const jsonP = jsonMap[asaasId] || {};
+      const dbStatus = (db.status || '').toLowerCase().trim();
+      const normalizedStatus = statusMap[dbStatus] || 'pending';
+
+      // Calcular número da parcela se disponível
+      let installmentNumber = jsonP.installmentNumber || null;
+      let totalInstallments = jsonP.totalInstallments || null;
+
+      // Se não temos info de parcela no JSON, tentar inferir do installment group
+      if (!installmentNumber && db.asaas_installment_id) {
+        const siblings = dbRows.filter(r => r.asaas_installment_id === db.asaas_installment_id);
+        if (siblings.length > 1) {
+          totalInstallments = siblings.length;
+          installmentNumber = siblings.indexOf(db) + 1;
+        }
+      }
+
+      finalPayments.push({
+        id: jsonP.id || asaasId,
+        studentId: req.user.studentId,
+        asaasPaymentId: asaasId,
+        asaasPaymentUrl: jsonP.asaasPaymentUrl || null,
+        amount: Number(db.valor) || jsonP.amount || 0,
+        discount: jsonP.discount || 0,
+        dueDate: db.vencimento || jsonP.dueDate,
         status: normalizedStatus,
-        amount: Number(dbRecord.valor) || p.amount,
-        paidDate: dbRecord.data_pagamento || p.paidDate,
-        transactionReceiptUrl: dbRecord.transaction_receipt_url || p.transactionReceiptUrl
-      };
-    });
+        paidDate: db.data_pagamento || jsonP.paidDate || null,
+        type: jsonP.type || 'monthly',
+        description: jsonP.description || null,
+        installmentNumber,
+        totalInstallments,
+        link_boleto: db.link_boleto || jsonP.bankSlipUrl || null,
+        transactionReceiptUrl: db.transaction_receipt_url || jsonP.transactionReceiptUrl || null,
+      });
+    }
 
-    res.json({ payments: enrichedPayments });
+    // 3b. Adicionar pagamentos que existem APENAS no JSON (cobranças manuais/legadas sem asaas)
+    for (const jp of jsonPayments) {
+      const key = jp.asaasPaymentId || jp.asaas_payment_id;
+      if (key && seenAsaasIds.has(key)) continue; // já processado
+      if (!key && !jp.id) continue; // registro inválido
+
+      const jpStatus = (jp.status || '').toLowerCase().trim();
+      const normalizedStatus = statusMap[jpStatus] || 'pending';
+
+      finalPayments.push({
+        ...jp,
+        status: normalizedStatus,
+        amount: Number(jp.amount) || 0,
+      });
+    }
+
+    res.json({ payments: finalPayments });
   } catch (err) {
     console.error('Financeiro error:', err);
     res.status(500).json({ error: 'Erro interno' });
@@ -271,7 +326,7 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
 app.get('/api/portal/boletos', authMiddleware, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM alunos_cobrancas WHERE aluno_id = $1 ORDER BY vencimento ASC',
+      `SELECT *, TO_CHAR(vencimento, 'YYYY-MM-DD') as vencimento, TO_CHAR(data_pagamento, 'YYYY-MM-DD') as data_pagamento FROM alunos_cobrancas WHERE aluno_id = $1 ORDER BY vencimento ASC`,
       [req.user.studentId]
     );
     res.json({ boletos: rows || [] });
