@@ -179,10 +179,8 @@ export default function Financeiro() {
     }
     
     // If we have a boleto and it is overdue or paid, use current Asaas value
-    if (boleto && (boleto as any).valor) {
-      const bValue = Number((boleto as any).valor);
-      if (status === 'overdue' || status === 'paid') {
-        return bValue;
+      if ((status === 'overdue' || status === 'paid') && (boleto as any).valor) {
+        return Number((boleto as any).valor);
       }
     }
     
@@ -346,13 +344,13 @@ export default function Financeiro() {
                         fontWeight: 600, 
                         color: normalizeStatus(payment) === 'overdue' ? 'var(--color-danger)' : 'var(--color-primary-light)' 
                       }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '1.5rem' }}>
                           <span style={{ color: normalizeStatus(payment) === 'paid' ? 'var(--color-success)' : 'inherit' }}>
                             {formatCurrency(getEffectiveValue(payment))}
                           </span>
                           {normalizeStatus(payment) === 'paid' && (
-                            <span style={{ fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 700, marginTop: -2 }}>
-                              PAGO
+                            <span style={{ fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 800, marginTop: '-2px', textTransform: 'uppercase' }}>
+                              • Pago
                             </span>
                           )}
                         </div>
