@@ -322,16 +322,17 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
     const fullDateStr = date;
     const justificationPayload = JSON.stringify({ motivo: motivo.trim(), arquivo: publicUrl });
 
-    let recordIndex = attendance.findIndex(a => a.studentId === req.user.studentId && a.date === fullDateStr);
+    const submittedAt = new Date().toISOString();
 
     if (recordIndex !== -1) {
       const existing = attendance[recordIndex];
       if (existing.type === 'presence') return res.status(400).json({ error: 'Não é possível justificar uma presença' });
-      attendance[recordIndex] = { ...existing, justification: justificationPayload };
+      attendance[recordIndex] = { ...existing, justification: justificationPayload, submittedAt };
     } else {
       const newRecord = {
         id: `att-just-${Date.now()}`, studentId: req.user.studentId, classId: student?.classId || '',
         date: fullDateStr, verified: false, type: 'absence', justification: justificationPayload,
+        submittedAt
       };
       attendance.push(newRecord);
       recordIndex = attendance.length - 1;
@@ -365,10 +366,10 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
     // Sincronização Imediata com Tabela Relacional
     try {
       await pool.query(
-        `INSERT INTO frequencias (id, aluno_id, turma_id, data, verificado, tipo, justificativa)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO UPDATE SET justificativa = EXCLUDED.justificativa, justificativa_aceita = FALSE`,
-        [attendance[recordIndex].id, req.user.studentId, student?.classId || '', fullDateStr, false, 'absence', justificationPayload]
+        `INSERT INTO frequencias (id, aluno_id, turma_id, data, verificado, tipo, justificativa, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO UPDATE SET justificativa = EXCLUDED.justificativa, justificativa_aceita = FALSE, created_at = EXCLUDED.created_at`,
+        [attendance[recordIndex].id, req.user.studentId, student?.classId || '', fullDateStr, false, 'absence', justificationPayload, submittedAt]
       );
     } catch (dbErr) {
       console.error('[Portal:Justificação] Erro ao sincronizar tabela relacional:', dbErr.message);

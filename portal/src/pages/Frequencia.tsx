@@ -448,8 +448,8 @@ export default function Frequencia() {
                   const isCancelled = lesson.status === 'cancelled';
                   const isRescheduled = lesson.status === 'rescheduled';
                   
-                  // PREREQUISITE: 'presence' type OR verified status counts as real presence
-                  const isPresent = atts.some(a => a.type === 'presence' || a.verified === true);
+                  // PREREQUISITE: 'presence' type OR verified (but NOT absence) counts as real presence
+                  const isPresent = atts.some(a => a.type === 'presence' || (a.verified === true && a.type !== 'absence'));
                   const hasJustification = atts.some(a => !!a.justification);
                   const activeJustification = atts.find(a => !!a.justification);
                   const justText = parseJustification(activeJustification?.justification);
@@ -571,7 +571,7 @@ export default function Frequencia() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           {atts.length > 0 ? (
                             atts
-                              .filter(a => a.type === 'presence' || a.verified)
+                              .filter(a => a.type === 'presence' || (a.verified === true && a.type !== 'absence'))
                               .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                               .map((a, aIdx) => {
                                 const d = new Date(a.date);
@@ -635,9 +635,16 @@ export default function Frequencia() {
                       </td>
                       <td>
                         {justText ? (
-                          <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', maxWidth: 250, display: 'block', wordBreak: 'break-word' }}>
-                            {justText}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', maxWidth: 250, display: 'block', wordBreak: 'break-word' }}>
+                              {justText}
+                            </span>
+                            {activeJustification?.submittedAt && (
+                              <span style={{ fontSize: '0.65rem', color: 'var(--color-text-secondary)', opacity: 0.8 }}>
+                                Enviada em: {new Date(activeJustification.submittedAt).toLocaleDateString('pt-BR')} às {new Date(activeJustification.submittedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span style={{ color: 'var(--color-text-secondary)' }}>—</span>
                         )}

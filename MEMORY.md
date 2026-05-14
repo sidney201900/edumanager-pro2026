@@ -41,13 +41,17 @@
 - [x] **Feedback Real de Exclusão:** Implementado `showAlert` detalhado no Financeiro e confirmação real via **Sino de Notificações** (Admin) após o processamento do Webhook.
 - [x] **Refinamento do Sino (AdminBell):** O botão "Ver Anexo" agora é exclusivo de notificações de justificativa que possuem arquivo físico, ocultando-se em notificações de sistema que usam o campo anexo para metadados JSON.
 - [x] **Blindagem de UI (Financeiro):** Corrigido potencial erro de referência no parse de erro do Asaas que causava "White Screen" em exclusões negadas.
+- [x] **Correção de Visibilidade (Frequência):** Resolvido bug onde faltas verificadas apareciam como "Presente" no Portal devido a lógica de filtro incompleta.
+- [x] **Hora Presença Inteligente:** Coluna de horário no Portal agora exibe `—` para faltas e justificativas, eliminando a confusão com horários de aula.
+- [x] **Rastreamento de Justificativas:** Implementado campo `submittedAt` para gravar o momento exato do envio da justificativa (JSON e SQL).
+- [x] **Detalhamento de Envio:** Portal agora exibe "Enviada em: DD/MM às HH:MM" na lista de frequência para transparência do aluno.
 
 ## 📋 Próximos Passos
 - [ ] Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
 
 - [ ] Módulo Financeiro SQL: Iniciar a migração total do financeiro para PostgreSQL (padrão `notas_boletim`).
-- [x] **Correção de Notas (Boletim):** Resolvido bug de visibilidade onde as notas não apareciam devido a race conditions no carregamento e mapeamento incompleto do `examId`.
-- [x] **Git Push Realizado:** Correções de deploy e visibilidade de notas enviadas ao repositório.
+- [x] **Correção de Notas (Boletim):** Resolvido `ReferenceError: subsMap is not defined` que impedia o carregamento das notas individuais.
+- [x] **Git Push Realizado:** Correções de escopo enviadas ao repositório.
 - [ ] **Monitoramento:** Validar a exibição das notas após o reinício dos containers.
 - [ ] Otimização de Build: Re-explorar o cache do Docker.
 

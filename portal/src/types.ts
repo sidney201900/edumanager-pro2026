@@ -65,6 +65,7 @@ export interface Attendance {
   type?: 'presence' | 'absence';
   justification?: string; // string (upload em base64 ou texto do motivo)
   justificationAccepted?: boolean;
+  submittedAt?: string; // ISO string
 }
 
 export interface Class {
