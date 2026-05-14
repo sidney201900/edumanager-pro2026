@@ -51,12 +51,12 @@ export default function Financeiro() {
     if (token) fetchData();
   }, [token]);
   const normalizeStatus = (payment: Payment) => {
-    const s = payment.status?.toLowerCase();
-    if (['paid', 'received', 'confirmed', 'pago'].includes(s)) return 'paid';
+    const s = (payment.status || (payment as any).situacao || '').toLowerCase().trim();
+    if (['paid', 'received', 'confirmed', 'pago', 'recebido', 'confirmado', 'quitado'].includes(s)) return 'paid';
     if (['cancelled', 'cancelado'].includes(s)) return 'cancelled';
     
     // Check if explicitly overdue in database
-    if (['overdue', 'atrasado', 'atrasada', 'vencido'].includes(s)) return 'overdue';
+    if (['overdue', 'atrasado', 'atrasada', 'vencido', 'vencida'].includes(s)) return 'overdue';
     
     return 'pending';
   };
