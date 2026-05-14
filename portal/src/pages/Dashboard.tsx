@@ -70,7 +70,6 @@ export default function Dashboard() {
 
     // Synchronized Frequency Calculation (Matches Frequencia.tsx & Manager)
     let presencesCount = 0;
-    let validLessonsCount = 0;
 
     if (data?.lessons && data?.attendance) {
       const deduplicatedLessons = data.lessons.filter((lesson, index, self) =>
@@ -79,11 +78,10 @@ export default function Dashboard() {
         ))
       );
 
+      const totalCourseLessons = deduplicatedLessons.filter(l => l.status !== 'cancelled').length;
+
       deduplicatedLessons.forEach(lesson => {
         if (lesson.status === 'cancelled') return;
-
-        // Mesma lógica de status da página de Frequência
-        const { isCompleted } = getLessonTimeStatus(lesson, now);
 
         // Construir janela de tempo EXATAMENTE como o Manager faz
         const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
@@ -98,17 +96,14 @@ export default function Dashboard() {
           return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
         });
 
-        // Só entra no cálculo se estiver concluída OU tiver um registro (biometria/falta/justificativa)
-        if (att || isCompleted) {
-          validLessonsCount++;
-          // Mesma lógica de presença da página de Frequência (exclui type: 'absence')
-          const isPresent = att && (att.type === 'presence' || (att.verified === true && att.type !== 'absence'));
-          if (isPresent) presencesCount++;
-        }
+        // Mesma lógica de presença da página de Frequência (exclui type: 'absence')
+        const isPresent = att && (att.type === 'presence' || (att.verified === true && att.type !== 'absence'));
+        if (isPresent) presencesCount++;
       });
     }
-    const frequencyPercent = validLessonsCount > 0 ? Math.round((presencesCount / validLessonsCount) * 100) : 0;
 
+    const validLessonsCount = data?.lessons?.filter((l, i, s) => l.status !== 'cancelled' && i === s.findIndex(t => t.date === l.date && t.startTime === l.startTime)).length || 0;
+    const frequencyPercent = validLessonsCount > 0 ? Math.round((presencesCount / validLessonsCount) * 100) : 0;
   const nextDue = pendingPayments
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];
 

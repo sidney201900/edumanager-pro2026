@@ -195,8 +195,7 @@ export default function Frequencia() {
       if (record.type === 'absence') {
         if (record.justificationAccepted) justified++;
         else absences++;
-      } else if (record.type === 'presence' || (!record.type && !(record as any).isVirtual)) {
-        // No portal, só contamos como presença nas estatísticas se a aula terminou ou se já foi marcada
+      } else if (record.type === 'presence' || (record.verified === true && record.type !== 'absence') || (!record.type && !(record as any).isVirtual)) {
         presences++;
       }
     } else if (isCompleted) {
