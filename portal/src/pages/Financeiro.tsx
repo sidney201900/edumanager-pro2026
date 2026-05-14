@@ -51,12 +51,12 @@ export default function Financeiro() {
     if (token) fetchData();
   }, [token]);
   const normalizeStatus = (payment: Payment) => {
-    const s = (payment.status || (payment as any).situacao || '').toLowerCase().trim();
-    if (['paid', 'received', 'confirmed', 'pago', 'recebido', 'confirmado', 'quitado'].includes(s)) return 'paid';
+    const s = payment.status?.toLowerCase();
+    if (['paid', 'received', 'confirmed', 'pago'].includes(s)) return 'paid';
     if (['cancelled', 'cancelado'].includes(s)) return 'cancelled';
     
     // Check if explicitly overdue in database
-    if (['overdue', 'atrasado', 'atrasada', 'vencido', 'vencida'].includes(s)) return 'overdue';
+    if (['overdue', 'atrasado', 'atrasada', 'vencido'].includes(s)) return 'overdue';
     
     return 'pending';
   };
@@ -150,7 +150,44 @@ export default function Financeiro() {
   const getEffectiveValue = (payment: Payment) => {
     const baseAmount = payment.amount || 0;
     const discount = payment.discount || 0;
-    return baseAmount - discount;
+    const netAmount = baseAmount - discount;
+    const status = normalizeStatus(payment);
+
+    // Try to find matching boleto from Supabase sync 
+    const asaasId = payment.asaasPaymentId || (payment as any).asaas_payment_id;
+    let boleto = null;
+    
+    if (asaasId) {
+      boleto = boletos.find(b => (b as any).asaas_payment_id === asaasId);
+    }
+    
+    if (!boleto) {
+      // Fallback: Match by due date and base amount (allowing for interest/fines)
+      boleto = boletos.find(b => {
+        const bVenc = (b as any).vencimento;
+        const bVal = Number((b as any).valor);
+        
+        // Exact date match
+        if (bVenc === payment.dueDate) {
+          // If value is exactly base or exactly net
+          if (Math.abs(bVal - baseAmount) < 1 || Math.abs(bVal - netAmount) < 1) return true;
+          // If it's overdue, the boleto value will be HIGHER than baseAmount
+          if (status === 'overdue' && bVal > netAmount) return true;
+        }
+        return false;
+      });
+    }
+    
+    // If we have a boleto and it is overdue or paid, use current Asaas value
+    if (boleto && (boleto as any).valor) {
+      const bValue = Number((boleto as any).valor);
+      if (status === 'overdue' || status === 'paid') {
+        return bValue;
+      }
+    }
+    
+    // Default: use the discounted base value (net amount)
+    return netAmount;
   };
 
   const totalPending = payments
@@ -270,10 +307,7 @@ export default function Financeiro() {
                   <th>Vencimento</th>
                   <th>Valor</th>
                   <th>Desconto</th>
-                  <th>
-                    {filter === 'paid' ? 'Valor Pago' : 
-                     filter === 'all' ? 'Valor / A Pagar' : 'A Pagar'}
-                  </th>
+                  <th>A Pagar</th>
                   <th>Status</th>
                   <th>Ação</th>
                 </tr>
@@ -309,16 +343,7 @@ export default function Financeiro() {
                         fontWeight: 600, 
                         color: normalizeStatus(payment) === 'overdue' ? 'var(--color-danger)' : 'var(--color-primary-light)' 
                       }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '1.5rem' }}>
-                          <span style={{ color: normalizeStatus(payment) === 'paid' ? 'var(--color-success)' : 'inherit' }}>
-                            {formatCurrency(getEffectiveValue(payment))}
-                          </span>
-                          {normalizeStatus(payment) === 'paid' && (
-                            <span style={{ fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 800, marginTop: '-2px', textTransform: 'uppercase' }}>
-                              • Pago
-                            </span>
-                          )}
-                        </div>
+                        {formatCurrency(getEffectiveValue(payment))}
                       </td>
                       <td data-label="Status">{getStatusBadge(payment)}</td>
                       <td>
