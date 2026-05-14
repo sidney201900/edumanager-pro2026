@@ -307,7 +307,10 @@ export default function Financeiro() {
                   <th>Vencimento</th>
                   <th>Valor</th>
                   <th>Desconto</th>
-                  <th>A Pagar</th>
+                  <th>
+                    {filter === 'paid' ? 'Valor Pago' : 
+                     filter === 'all' ? 'Valor / A Pagar' : 'A Pagar'}
+                  </th>
                   <th>Status</th>
                   <th>Ação</th>
                 </tr>
@@ -343,7 +346,16 @@ export default function Financeiro() {
                         fontWeight: 600, 
                         color: normalizeStatus(payment) === 'overdue' ? 'var(--color-danger)' : 'var(--color-primary-light)' 
                       }}>
-                        {formatCurrency(getEffectiveValue(payment))}
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ color: normalizeStatus(payment) === 'paid' ? 'var(--color-success)' : 'inherit' }}>
+                            {formatCurrency(getEffectiveValue(payment))}
+                          </span>
+                          {normalizeStatus(payment) === 'paid' && (
+                            <span style={{ fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 700, marginTop: -2 }}>
+                              PAGO
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td data-label="Status">{getStatusBadge(payment)}</td>
                       <td>
