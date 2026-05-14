@@ -163,11 +163,11 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
       console.error('Error fetching notas:', e);
     }
     
+    let subsMap: Record<string, {acertos: number, erros: number}> = {};
     try {
       const res = await fetch(`/api/student-submissions/${student.id}?t=${new Date().getTime()}`);
       if (res.ok) {
         const { submissions } = await res.json();
-        const subsMap: Record<string, {acertos: number, erros: number}> = {};
         (submissions || []).forEach((s: any) => {
           // Normalização agressiva para garantir o vínculo
           const pId = String(s.prova_id || '').trim();

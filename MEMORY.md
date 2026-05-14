@@ -46,7 +46,9 @@
 - [ ] Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
 
 - [ ] Módulo Financeiro SQL: Iniciar a migração total do financeiro para PostgreSQL (padrão `notas_boletim`).
-- [ ] Monitoramento de Produção: Validar se o servidor restabeleceu a conexão após o deploy corretivo.
+- [x] **Correção de Notas (Boletim):** Resolvido bug de visibilidade onde as notas não apareciam devido a race conditions no carregamento e mapeamento incompleto do `examId`.
+- [x] **Git Push Realizado:** Correções de deploy e visibilidade de notas enviadas ao repositório.
+- [ ] **Monitoramento:** Validar a exibição das notas após o reinício dos containers.
 - [ ] Otimização de Build: Re-explorar o cache do Docker.
 
 ## 📅 Histórico Anterior (06/05/2026 - 08/05/2026)
