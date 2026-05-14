@@ -179,9 +179,8 @@ export default function Financeiro() {
     }
     
     // If we have a boleto and it is overdue or paid, use current Asaas value
-      if ((status === 'overdue' || status === 'paid') && (boleto as any).valor) {
-        return Number((boleto as any).valor);
-      }
+    if (boleto && (status === 'overdue' || status === 'paid') && (boleto as any).valor) {
+      return Number((boleto as any).valor);
     }
     
     // Default: use the discounted base value (net amount)
