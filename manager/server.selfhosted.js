@@ -14,7 +14,7 @@ import express from 'express';
 import cors from 'cors';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
-import fetch from 'node-fetch';
+// fetch nativo do Node 22 será utilizado automaticamente
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
