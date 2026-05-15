@@ -278,16 +278,24 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         }
       }
 
-      // [Bugfix Crítico]: O webhook do Asaas sobrescreveu o JSON e o banco com o valor LÍQUIDO.
-      // Ou seja, jsonP.amount e db.valor estão iguais (ex: 150), mas o correto é 170.
-      // Se detectarmos essa corrupção (amountOriginal == db.valor) e houver desconto, restauramos o valor bruto.
+      // [Bugfix Crítico]: Recuperar valor bruto se o Asaas/Webhook salvou apenas o líquido
       let amountOriginal = jsonP.amount !== undefined ? Number(jsonP.amount) : (Number(db.amount_original) || Number(db.valor) || 0);
       const discount = jsonP.discount !== undefined ? Number(jsonP.discount) : (Number(db.discount) || 0);
+      const isPaid = ['paid', 'pago', 'received', 'confirmed'].includes(normalizedStatus);
 
-      // Aplica a recuperação matemática INDEPENDENTE de onde veio (SQL ou JSON)
-      if (amountOriginal > 0 && amountOriginal === Number(db.valor) && discount > 0) {
-        amountOriginal += discount;
+      // Se está pago e o valor que temos parece ser o líquido (igual ao do banco que o webhook sobrescreve)
+      // e temos um desconto registrado, restauramos o bruto para o display.
+      if (isPaid && discount > 0 && amountOriginal > 0 && (amountOriginal === Number(db.valor) || amountOriginal < (Number(db.valor) + discount))) {
+        // Se amountOriginal já é o bruto (maior que db.valor), o GREATEST ou a lógica preserva.
+        // Se for igual, somamos o desconto.
+        if (amountOriginal === Number(db.valor)) {
+           amountOriginal += discount;
+        }
       }
+      
+      // Garantir que sempre usamos o maior valor conhecido como bruto
+      const dbAmountOrig = Number(db.amount_original || 0);
+      if (dbAmountOrig > amountOriginal) amountOriginal = dbAmountOrig;
 
       finalPayments.push({
         id: jsonP.id || asaasId,
@@ -338,7 +346,32 @@ app.get('/api/portal/boletos', authMiddleware, async (req, res) => {
       `SELECT *, TO_CHAR(vencimento, 'YYYY-MM-DD') as vencimento, TO_CHAR(data_pagamento, 'YYYY-MM-DD') as data_pagamento FROM alunos_cobrancas WHERE aluno_id = $1 ORDER BY vencimento ASC`,
       [req.user.studentId]
     );
-    res.json({ boletos: rows || [] });
+
+    // [Bugfix Crítico]: Recuperar valor bruto original se o banco estiver com o valor líquido
+    const boletos = (rows || []).map(b => {
+      let valor = Number(b.valor);
+      const discount = Number(b.discount || 0);
+      const amountOriginal = Number(b.amount_original || 0);
+      const status = (b.status || '').toLowerCase();
+      const isPaid = ['paid', 'pago', 'received', 'confirmed', 'recebido'].includes(status);
+
+      // Prioridade 1: amount_original explícito
+      if (amountOriginal > valor) {
+        valor = amountOriginal;
+      } 
+      // Prioridade 2: Recomposição matemática se estiver pago e valor == líquido
+      else if (isPaid && discount > 0 && valor > 0) {
+        // Se o valor no banco é exatamente o que o webhook salvaria (líquido), recompomos
+        valor += discount;
+      }
+
+      return {
+        ...b,
+        valor: valor
+      };
+    });
+
+    res.json({ boletos });
   } catch (err) {
     console.error('Boletos error:', err);
     res.json({ boletos: [] });

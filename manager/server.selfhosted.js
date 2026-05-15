@@ -1572,8 +1572,15 @@ async function syncPaymentsWithAsaasAPI() {
           changed = true;
         }
 
-        // SEMPRE atualiza o valor e a data para garantir fidelidade ao Asaas
-        if (appData.payments[pIdx].amount !== valorNum) {
+        // [Bugfix Crítico]: Não sobrescrever o valor BRUTO com o valor LÍQUIDO (descontado) do Asaas
+        const currentAmount = Number(appData.payments[pIdx].amount || 0);
+        const currentDiscount = Number(appData.payments[pIdx].discount || 0);
+        
+        // Se o valor vindo do Asaas for menor que o atual E a diferença bater com o desconto, ignoramos o update do valor
+        // para preservar o valor bruto original no display do portal/gerenciador.
+        const isNetValueOverwrite = valorNum < currentAmount && Math.abs((currentAmount - currentDiscount) - valorNum) < 0.01;
+
+        if (appData.payments[pIdx].amount !== valorNum && !isNetValueOverwrite) {
           appData.payments[pIdx].amount = valorNum;
           changed = true;
         }

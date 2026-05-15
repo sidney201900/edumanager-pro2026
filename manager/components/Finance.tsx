@@ -1180,8 +1180,26 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                       </td>
                       <td className="px-4 py-5 text-slate-600 text-sm">{new Date(payment.dueDate + 'T12:00:00Z').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
                       <td className="px-4 py-5">
-                        <div className="font-black text-slate-900 text-sm">R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                        {!!payment.discount && payment.discount > 0 && <div className="text-[10px] text-emerald-600 font-bold">- R$ {payment.discount.toFixed(2)}</div>}
+                        <div className="font-black text-slate-900 text-sm">
+                          R$ {(() => {
+                            const amt = Number(payment.amount);
+                            const disc = Number(payment.discount || 0);
+                            const status = (payment.status || '').toLowerCase();
+                            const isPaid = status === 'paid' || status === 'pago' || status === 'received' || status === 'confirmed';
+                            
+                            // Se está pago e temos desconto, e o valor original é maior ou não existe, tentamos recuperar o bruto
+                            // No manager, as cobranças do SQL (filteredPayments) costumam ter amount_original
+                            const amtOrig = (payment as any).amount_original ? Number((payment as any).amount_original) : 0;
+                            
+                            if (isPaid && disc > 0) {
+                              if (amtOrig > amt) return amtOrig.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                              // Se não tem amtOrig mas o valor atual é suspeito de ser líquido (não implementado aqui para evitar falso positivo, 
+                              // mas o sync de backend já deve ter protegido o amount_original agora)
+                            }
+                            return amt.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                          })()}
+                        </div>
+                        {!!payment.discount && payment.discount > 0 && <div className="text-[10px] text-emerald-600 font-bold">- R$ {payment.discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>}
                       </td>
                       <td className="px-4 py-5">{getStatusBadge(payment)}</td>
                       <td className="px-4 py-5">

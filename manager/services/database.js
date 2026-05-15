@@ -572,7 +572,7 @@ export async function syncJsonToRelationalTables() {
             total_installments = COALESCE(EXCLUDED.total_installments, alunos_cobrancas.total_installments),
             contract_id = COALESCE(EXCLUDED.contract_id, alunos_cobrancas.contract_id),
             asaas_payment_url = COALESCE(EXCLUDED.asaas_payment_url, alunos_cobrancas.asaas_payment_url),
-            amount_original = COALESCE(EXCLUDED.amount_original, alunos_cobrancas.amount_original),
+            amount_original = GREATEST(COALESCE(alunos_cobrancas.amount_original, 0), EXCLUDED.amount_original),
             data_pagamento = COALESCE(EXCLUDED.data_pagamento, alunos_cobrancas.data_pagamento)`,
           [
             p.studentId, 
