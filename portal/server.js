@@ -288,13 +288,10 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         }
       }
 
-      let amountOriginal = Number(db.amount_original) || Number(jsonP.amount) || Number(db.valor) || 0;
-      const discount = Number(db.discount) || (jsonP.amount ? Number(jsonP.discount || 0) : 0);
-
-      // [Bugfix]: Recupera o valor bruto corrompido pelo webhook antigo
-      if (amountOriginal === Number(db.valor) && discount > 0) {
-        amountOriginal += discount;
-      }
+      // [ATENÇÃO]: Priorizando o JSON (jsonP) sobre o banco (db) para igualar o comportamento do Manager.
+      // O Manager lê exclusivamente de school_data.payments, garantindo os valores corretos.
+      let amountOriginal = jsonP.amount !== undefined ? Number(jsonP.amount) : (Number(db.amount_original) || Number(db.valor) || 0);
+      const discount = jsonP.discount !== undefined ? Number(jsonP.discount) : (Number(db.discount) || 0);
 
       finalPayments.push({
         id: jsonP.id || asaasId,

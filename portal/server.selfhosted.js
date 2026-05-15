@@ -278,20 +278,10 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         }
       }
 
-      // amount_original = valor bruto (ex: 170), db.valor = valor líquido Asaas (ex: 150)
-      let amountOriginal = Number(db.amount_original) || Number(jsonP.amount) || Number(db.valor) || 0;
-      const discount = Number(db.discount) || (jsonP.amount ? Number(jsonP.discount || 0) : 0);
-
-      // [Bugfix]: Se o amountOriginal for igual ao valor líquido (db.valor) e houver desconto,
-      // significa que o webhook antigo sobrescreveu o valor bruto pelo líquido no JSON.
-      // Neste caso, o valor bruto real é o líquido + desconto.
-      if (amountOriginal === Number(db.valor) && discount > 0) {
-        console.log(`[BUGFIX] Recovering amount for ${asaasId}: amountOriginal=${amountOriginal}, db.valor=${db.valor}, discount=${discount}. New amount: ${amountOriginal + discount}`);
-        amountOriginal += discount;
-      } else if (asaasId === 'pay_iipssljwa9df3fsq' || asaasId === 'pay_krkf6cinlekjvw3l') {
-        // Log para debug se a condição falhar para os pagamentos conhecidos
-        console.log(`[DEBUG_FAIL] Bugfix failed for ${asaasId}: amountOriginal=${amountOriginal}, db.valor=${db.valor}, discount=${discount}`);
-      }
+      // [ATENÇÃO]: Priorizando o JSON (jsonP) sobre o banco (db) para igualar o comportamento do Manager.
+      // O Manager lê exclusivamente de school_data.payments, garantindo os valores corretos.
+      let amountOriginal = jsonP.amount !== undefined ? Number(jsonP.amount) : (Number(db.amount_original) || Number(db.valor) || 0);
+      const discount = jsonP.discount !== undefined ? Number(jsonP.discount) : (Number(db.discount) || 0);
 
       finalPayments.push({
         id: jsonP.id || asaasId,

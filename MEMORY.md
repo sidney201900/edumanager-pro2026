@@ -137,4 +137,4 @@
 2. **Otimização de Build:** Re-explorar o cache do Docker.
 3. **Financeiro:** Implementar visualização de extrato detalhado.
 
-**Nota Técnica:** O arquivo `server.js` deve ser mantido como espelho ou ignorado conforme orientação do usuário, com foco total no `server.selfhosted.js`.
+140: **Nota Técnica:** O arquivo `server.js` é OBSOLETO e mantido apenas para contexto histórico. **NUNCA DEVE SER EDITADO OU ALTERADO**. Todo o foco de backend deve ser estritamente no `server.selfhosted.js`.
