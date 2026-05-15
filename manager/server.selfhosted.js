@@ -1620,6 +1620,32 @@ async function inicializarAgendamento() {
           ALTER TABLE alunos_cobrancas ADD COLUMN last_overdue_warning_at TIMESTAMP WITH TIME ZONE;
         END IF;
 
+        -- ===== FASE 1: Colunas ricas para migração financeira SQL-First =====
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='description') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN description TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='type') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN type TEXT DEFAULT 'monthly';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='discount') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN discount NUMERIC(10,2) DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='installment_number') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN installment_number INTEGER;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='total_installments') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN total_installments INTEGER;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='contract_id') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN contract_id TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='asaas_payment_url') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN asaas_payment_url TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='alunos_cobrancas' AND column_name='amount_original') THEN
+          ALTER TABLE alunos_cobrancas ADD COLUMN amount_original NUMERIC(10,2);
+        END IF;
+
         -- Garantir índice de unicidade para o UPSERT funcionar
         IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'alunos_cobrancas' AND indexname = 'idx_asaas_payment_id_unique') THEN
           CREATE UNIQUE INDEX idx_asaas_payment_id_unique ON alunos_cobrancas(asaas_payment_id);

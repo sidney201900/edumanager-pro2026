@@ -540,24 +540,40 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 8. Sincronizar Cobranças (Financeiro)
+    // 8. Sincronizar Cobranças (Financeiro) — com campos ricos para migração SQL-First
     if (data.payments && Array.isArray(data.payments)) {
       for (const p of data.payments) {
         if (!p.asaasPaymentId || !p.studentId) continue;
         
+        // Normalizar status para o padrão SQL (maiúsculas)
+        const rawStatus = (p.status || 'pending').toLowerCase();
+        const statusMap = { 'paid': 'PAGO', 'received': 'PAGO', 'confirmed': 'PAGO', 'overdue': 'ATRASADO', 'cancelled': 'CANCELADO' };
+        const sqlStatus = statusMap[rawStatus] || 'PENDENTE';
+
         await client.query(
           `INSERT INTO alunos_cobrancas (
             aluno_id, asaas_payment_id, asaas_installment_id, installment, 
-            valor, vencimento, link_boleto, status
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            valor, vencimento, link_boleto, status,
+            description, type, discount, installment_number, total_installments,
+            contract_id, asaas_payment_url, amount_original, data_pagamento
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
           ON CONFLICT (asaas_payment_id) DO UPDATE SET 
             aluno_id = EXCLUDED.aluno_id,
-            asaas_installment_id = EXCLUDED.asaas_installment_id,
-            installment = EXCLUDED.installment,
+            asaas_installment_id = COALESCE(EXCLUDED.asaas_installment_id, alunos_cobrancas.asaas_installment_id),
+            installment = COALESCE(EXCLUDED.installment, alunos_cobrancas.installment),
             valor = EXCLUDED.valor,
             vencimento = EXCLUDED.vencimento,
-            link_boleto = EXCLUDED.link_boleto,
-            status = EXCLUDED.status`,
+            link_boleto = COALESCE(EXCLUDED.link_boleto, alunos_cobrancas.link_boleto),
+            status = CASE WHEN alunos_cobrancas.status = 'PAGO' THEN alunos_cobrancas.status ELSE EXCLUDED.status END,
+            description = COALESCE(EXCLUDED.description, alunos_cobrancas.description),
+            type = COALESCE(EXCLUDED.type, alunos_cobrancas.type),
+            discount = COALESCE(EXCLUDED.discount, alunos_cobrancas.discount),
+            installment_number = COALESCE(EXCLUDED.installment_number, alunos_cobrancas.installment_number),
+            total_installments = COALESCE(EXCLUDED.total_installments, alunos_cobrancas.total_installments),
+            contract_id = COALESCE(EXCLUDED.contract_id, alunos_cobrancas.contract_id),
+            asaas_payment_url = COALESCE(EXCLUDED.asaas_payment_url, alunos_cobrancas.asaas_payment_url),
+            amount_original = COALESCE(EXCLUDED.amount_original, alunos_cobrancas.amount_original),
+            data_pagamento = COALESCE(EXCLUDED.data_pagamento, alunos_cobrancas.data_pagamento)`,
           [
             p.studentId, 
             p.asaasPaymentId, 
@@ -566,7 +582,16 @@ export async function syncJsonToRelationalTables() {
             p.amount || 0, 
             p.dueDate, 
             p.bankSlipUrl || p.link || null, 
-            (p.status || 'PENDENTE').toUpperCase()
+            sqlStatus,
+            p.description || null,
+            p.type || 'monthly',
+            p.discount || 0,
+            p.installmentNumber || null,
+            p.totalInstallments || null,
+            p.contractId || null,
+            p.asaasPaymentUrl || null,
+            p.amount || null,
+            p.paidDate || null
           ]
         ).catch(err => console.warn(`[Sync:Finance] Erro no boleto ${p.asaasPaymentId}:`, err.message));
       }

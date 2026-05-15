@@ -232,7 +232,9 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         `SELECT asaas_payment_id, asaas_installment_id, installment, 
                 valor, TO_CHAR(vencimento, 'YYYY-MM-DD') as vencimento, 
                 status, TO_CHAR(data_pagamento, 'YYYY-MM-DD') as data_pagamento, 
-                link_boleto, link_carne, transaction_receipt_url
+                link_boleto, link_carne, transaction_receipt_url,
+                description, type, discount, installment_number, total_installments,
+                contract_id, asaas_payment_url, amount_original
          FROM alunos_cobrancas 
          WHERE aluno_id = $1 
          ORDER BY vencimento ASC`,
@@ -243,7 +245,7 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
       console.error('Financeiro: erro ao buscar do PostgreSQL -', dbErr.message);
     }
 
-    // 2. FONTE SECUNDÁRIA: JSON (school_data.payments) — metadados complementares
+    // 2. FONTE SECUNDÁRIA: JSON (school_data.payments) — fallback para dados que ainda não migraram
     const schoolData = await getSchoolData();
     const jsonPayments = (schoolData.payments || []).filter((p) => p.studentId === req.user.studentId);
 
@@ -254,7 +256,7 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
       if (key) jsonMap[key] = jp;
     }
 
-    // 3. CONSTRUIR LISTA FINAL: SQL como base, enriquecido com metadados do JSON
+    // 3. CONSTRUIR LISTA FINAL: SQL como base, enriquecido com JSON quando SQL não tem o campo
     const seenAsaasIds = new Set();
     const finalPayments = [];
 
@@ -267,11 +269,10 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
       const dbStatus = (db.status || '').toLowerCase().trim();
       const normalizedStatus = statusMap[dbStatus] || 'pending';
 
-      // Calcular número da parcela se disponível
-      let installmentNumber = jsonP.installmentNumber || null;
-      let totalInstallments = jsonP.totalInstallments || null;
+      // Parcela: SQL tem prioridade, depois JSON, depois inferência por grupo
+      let installmentNumber = db.installment_number || jsonP.installmentNumber || null;
+      let totalInstallments = db.total_installments || jsonP.totalInstallments || null;
 
-      // Se não temos info de parcela no JSON, tentar inferir do installment group
       if (!installmentNumber && db.asaas_installment_id) {
         const siblings = dbRows.filter(r => r.asaas_installment_id === db.asaas_installment_id);
         if (siblings.length > 1) {
@@ -280,20 +281,22 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         }
       }
 
+      // amount_original = valor bruto (ex: 170), db.valor = valor líquido Asaas (ex: 150)
+      const amountOriginal = Number(db.amount_original) || jsonP.amount || Number(db.valor) || 0;
+      const discount = Number(db.discount) || (jsonP.amount ? (jsonP.discount || 0) : 0);
+
       finalPayments.push({
         id: jsonP.id || asaasId,
         studentId: req.user.studentId,
         asaasPaymentId: asaasId,
-        asaasPaymentUrl: jsonP.asaasPaymentUrl || null,
-        // jsonP.amount = valor BRUTO (ex: 170), db.valor = valor LÍQUIDO do Asaas (ex: 150)
-        // Se o JSON tem o bruto, usa ele + desconto separado. Se não, usa SQL (já líquido) sem desconto.
-        amount: jsonP.amount || Number(db.valor) || 0,
-        discount: jsonP.amount ? (jsonP.discount || 0) : 0,
+        asaasPaymentUrl: db.asaas_payment_url || jsonP.asaasPaymentUrl || null,
+        amount: amountOriginal,
+        discount: discount,
         dueDate: db.vencimento || jsonP.dueDate,
         status: normalizedStatus,
         paidDate: db.data_pagamento || jsonP.paidDate || null,
-        type: jsonP.type || 'monthly',
-        description: jsonP.description || null,
+        type: db.type || jsonP.type || 'monthly',
+        description: db.description || jsonP.description || null,
         installmentNumber,
         totalInstallments,
         link_boleto: db.link_boleto || jsonP.bankSlipUrl || null,
