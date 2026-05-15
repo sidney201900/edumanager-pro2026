@@ -747,9 +747,33 @@ app.post('/api/webhook_asaas', async (req, res) => {
       case 'PAYMENT_CONFIRMED':
         updateData = {
           status: 'PAGO',
-          valor: payload.payment.value,
+          valor_pago: payload.payment.value,
           data_pagamento: payload.payment.confirmedDate || payload.payment.paymentDate || new Date().toISOString().split('T')[0]
         };
+        
+        // [Bugfix Crítico]: Recuperar o valor BRUTO caso o Asaas mande o líquido
+        try {
+          const cobRes = await pool.query('SELECT valor, discount, amount_original FROM alunos_cobrancas WHERE asaas_payment_id = $1', [asaasPaymentId]);
+          if (cobRes.rows.length > 0) {
+            const cob = cobRes.rows[0];
+            const currentAmount = Number(cob.valor || 0);
+            const discount = Number(cob.discount || 0);
+            const amountOriginal = Number(cob.amount_original || 0);
+            const receivedValue = Number(payload.payment.value);
+
+            // Se o valor recebido for menor que o bruto registrado e a diferença bater com o desconto, 
+            // mantemos o bruto no campo 'valor'.
+            if (receivedValue < currentAmount && Math.abs((currentAmount - discount) - receivedValue) < 0.01) {
+              // Já está correto (bruto > recebido), não mexemos no 'valor'
+            } else if (receivedValue === currentAmount && discount > 0) {
+              // Se o 'valor' no banco já era o líquido, restauramos para o bruto
+              updateData.valor = receivedValue + discount;
+            } else if (amountOriginal > receivedValue) {
+               updateData.valor = amountOriginal;
+            }
+          }
+        } catch (e) { console.error('[Webhook:Recovery] Erro:', e.message); }
+
         if (payload.payment.transactionReceiptUrl) {
           updateData.transaction_receipt_url = payload.payment.transactionReceiptUrl;
         }

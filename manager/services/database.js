@@ -107,9 +107,9 @@ export async function insertCobrancas(cobrancas) {
     for (const c of cobrancas) {
       await client.query(
         `INSERT INTO alunos_cobrancas 
-         (aluno_id, asaas_customer_id, asaas_payment_id, asaas_installment_id, installment, valor, vencimento, link_boleto)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [c.aluno_id, c.asaas_customer_id, c.asaas_payment_id, c.asaas_installment_id || c.installment, c.installment, c.valor, c.vencimento, c.link_boleto]
+         (aluno_id, asaas_customer_id, asaas_payment_id, asaas_installment_id, installment, valor, vencimento, link_boleto, amount_original)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [c.aluno_id, c.asaas_customer_id, c.asaas_payment_id, c.asaas_installment_id || c.installment, c.installment, c.valor, c.vencimento, c.link_boleto, c.valor]
       );
     }
     await client.query('COMMIT');
@@ -410,7 +410,10 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // 3. Sincronizar Períodos (Bimestres)
+    // 0. Garantir esquema atualizado
+    await client.query('ALTER TABLE alunos_cobrancas ADD COLUMN IF NOT EXISTS valor_pago NUMERIC(10,2) DEFAULT 0');
+    
+    // 1. Sincronizar Perfil da Escola (Configurações)
     if (data.periods && Array.isArray(data.periods)) {
       const periodIds = data.periods.map(p => p.id).filter(Boolean);
       if (periodIds.length > 0) {
@@ -549,19 +552,33 @@ export async function syncJsonToRelationalTables() {
         const rawStatus = (p.status || 'pending').toLowerCase();
         const statusMap = { 'paid': 'PAGO', 'received': 'PAGO', 'confirmed': 'PAGO', 'overdue': 'ATRASADO', 'cancelled': 'CANCELADO' };
         const sqlStatus = statusMap[rawStatus] || 'PENDENTE';
+        const isPaid = sqlStatus === 'PAGO';
+        const amount = Number(p.amount || 0);
+        const discount = Number(p.discount || 0);
+        
+        // Se está pago, o 'amount' do JSON geralmente é o líquido.
+        // O valor principal (valor) deve ser o BRUTO.
+        let valorBruto = amount;
+        let valorPago = 0;
+
+        if (isPaid) {
+          valorPago = amount;
+          // Se o amount vindo do JSON for o líquido (igual ou menor que o bruto esperado), restauramos o bruto
+          valorBruto = amount + discount;
+        }
 
         await client.query(
           `INSERT INTO alunos_cobrancas (
             aluno_id, asaas_payment_id, asaas_installment_id, installment, 
             valor, vencimento, link_boleto, status,
             description, type, discount, installment_number, total_installments,
-            contract_id, asaas_payment_url, amount_original, data_pagamento
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            contract_id, asaas_payment_url, amount_original, data_pagamento, valor_pago
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
           ON CONFLICT (asaas_payment_id) DO UPDATE SET 
             aluno_id = EXCLUDED.aluno_id,
             asaas_installment_id = COALESCE(EXCLUDED.asaas_installment_id, alunos_cobrancas.asaas_installment_id),
             installment = COALESCE(EXCLUDED.installment, alunos_cobrancas.installment),
-            valor = EXCLUDED.valor,
+            valor = GREATEST(alunos_cobrancas.valor, EXCLUDED.valor),
             vencimento = EXCLUDED.vencimento,
             link_boleto = COALESCE(EXCLUDED.link_boleto, alunos_cobrancas.link_boleto),
             status = CASE WHEN alunos_cobrancas.status = 'PAGO' THEN alunos_cobrancas.status ELSE EXCLUDED.status END,
@@ -573,25 +590,27 @@ export async function syncJsonToRelationalTables() {
             contract_id = COALESCE(EXCLUDED.contract_id, alunos_cobrancas.contract_id),
             asaas_payment_url = COALESCE(EXCLUDED.asaas_payment_url, alunos_cobrancas.asaas_payment_url),
             amount_original = GREATEST(COALESCE(alunos_cobrancas.amount_original, 0), EXCLUDED.amount_original),
-            data_pagamento = COALESCE(EXCLUDED.data_pagamento, alunos_cobrancas.data_pagamento)`,
+            data_pagamento = COALESCE(EXCLUDED.data_pagamento, alunos_cobrancas.data_pagamento),
+            valor_pago = EXCLUDED.valor_pago`,
           [
             p.studentId, 
             p.asaasPaymentId, 
             p.asaasInstallmentId || p.installmentId || null, 
             p.installment || null,
-            p.amount || 0, 
+            valorBruto, 
             p.dueDate, 
             p.bankSlipUrl || p.link || null, 
             sqlStatus,
             p.description || null,
             p.type || 'monthly',
-            p.discount || 0,
+            discount,
             p.installmentNumber || null,
             p.totalInstallments || null,
             p.contractId || null,
             p.asaasPaymentUrl || null,
-            p.amount || null,
-            p.paidDate || null
+            valorBruto,
+            p.paidDate || null,
+            valorPago
           ]
         ).catch(err => console.warn(`[Sync:Finance] Erro no boleto ${p.asaasPaymentId}:`, err.message));
       }

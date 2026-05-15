@@ -279,31 +279,32 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
       }
 
       // [Bugfix Crítico]: Recuperar valor bruto se o Asaas/Webhook salvou apenas o líquido
-      let amountOriginal = jsonP.amount !== undefined ? Number(jsonP.amount) : (Number(db.amount_original) || Number(db.valor) || 0);
       const discount = jsonP.discount !== undefined ? Number(jsonP.discount) : (Number(db.discount) || 0);
       const isPaid = ['paid', 'pago', 'received', 'confirmed'].includes(normalizedStatus);
-
-      // Se está pago e o valor que temos parece ser o líquido (igual ao do banco que o webhook sobrescreve)
-      // e temos um desconto registrado, restauramos o bruto para o display.
-      if (isPaid && discount > 0 && amountOriginal > 0 && (amountOriginal === Number(db.valor) || amountOriginal < (Number(db.valor) + discount))) {
-        // Se amountOriginal já é o bruto (maior que db.valor), o GREATEST ou a lógica preserva.
-        // Se for igual, somamos o desconto.
-        if (amountOriginal === Number(db.valor)) {
-           amountOriginal += discount;
-        }
-      }
+      const valorPagoNoSQL = Number(db.valor_pago || 0);
       
-      // Garantir que sempre usamos o maior valor conhecido como bruto
-      const dbAmountOrig = Number(db.amount_original || 0);
-      if (dbAmountOrig > amountOriginal) amountOriginal = dbAmountOrig;
+      // Tentamos pegar o maior valor disponível como o Bruto
+      let amountBruto = Number(db.amount_original) || Number(jsonP.amount) || Number(db.valor) || 0;
+
+      // Se está pago e o amountBruto parece ser o líquido (igual ao pago), recomponha
+      if (isPaid && discount > 0 && amountBruto > 0 && (amountBruto === valorPagoNoSQL || (valorPagoNoSQL === 0 && amountBruto === Number(db.valor)))) {
+         // Se o SQL tem o valor_pago correto, e o amountBruto é igual a ele, some o desconto
+         if (amountBruto === valorPagoNoSQL) {
+           amountBruto += discount;
+         } else if (valorPagoNoSQL === 0 && amountBruto === Number(db.valor)) {
+           // Fallback para quando valor_pago ainda não foi preenchido (primeira vez)
+           amountBruto += discount;
+         }
+      }
 
       finalPayments.push({
         id: jsonP.id || asaasId,
         studentId: req.user.studentId,
         asaasPaymentId: asaasId,
         asaasPaymentUrl: db.asaas_payment_url || jsonP.asaasPaymentUrl || null,
-        amount: amountOriginal,
+        amount: amountBruto,
         discount: discount,
+        valor_pago: valorPagoNoSQL || (isPaid ? Number(db.valor) : 0),
         dueDate: db.vencimento || jsonP.dueDate,
         status: normalizedStatus,
         paidDate: db.data_pagamento || jsonP.paidDate || null,
@@ -347,27 +348,26 @@ app.get('/api/portal/boletos', authMiddleware, async (req, res) => {
       [req.user.studentId]
     );
 
-    // [Bugfix Crítico]: Recuperar valor bruto original se o banco estiver com o valor líquido
+    // [Bugfix Crítico]: Recuperar valor bruto original e valor efetivamente pago
     const boletos = (rows || []).map(b => {
-      let valor = Number(b.valor);
+      const valorOriginal = Number(b.amount_original || b.valor || 0);
       const discount = Number(b.discount || 0);
-      const amountOriginal = Number(b.amount_original || 0);
+      const valorPago = Number(b.valor_pago || 0);
       const status = (b.status || '').toLowerCase();
       const isPaid = ['paid', 'pago', 'received', 'confirmed', 'recebido'].includes(status);
 
-      // Prioridade 1: amount_original explícito
-      if (amountOriginal > valor) {
-        valor = amountOriginal;
-      } 
-      // Prioridade 2: Recomposição matemática se estiver pago e valor == líquido
-      else if (isPaid && discount > 0 && valor > 0) {
-        // Se o valor no banco é exatamente o que o webhook salvaria (líquido), recompomos
-        valor += discount;
+      // O valor principal exibido deve ser sempre o BRUTO original
+      let valorExibido = valorOriginal;
+      
+      // Se por algum motivo o valorOriginal ainda for o líquido, tentamos recompor
+      if (valorOriginal > 0 && isPaid && valorPago > 0 && valorOriginal === valorPago && discount > 0) {
+        valorExibido = valorOriginal + discount;
       }
 
       return {
         ...b,
-        valor: valor
+        valor: valorExibido,
+        valor_pago: valorPago
       };
     });
 

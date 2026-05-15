@@ -1186,20 +1186,25 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                             const disc = Number(payment.discount || 0);
                             const status = (payment.status || '').toLowerCase();
                             const isPaid = status === 'paid' || status === 'pago' || status === 'received' || status === 'confirmed';
-                            
-                            // Se está pago e temos desconto, e o valor original é maior ou não existe, tentamos recuperar o bruto
-                            // No manager, as cobranças do SQL (filteredPayments) costumam ter amount_original
                             const amtOrig = (payment as any).amount_original ? Number((payment as any).amount_original) : 0;
+                            const valorPago = (payment as any).valor_pago ? Number((payment as any).valor_pago) : 0;
                             
-                            if (isPaid && disc > 0) {
-                              if (amtOrig > amt) return amtOrig.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-                              // Se não tem amtOrig mas o valor atual é suspeito de ser líquido (não implementado aqui para evitar falso positivo, 
-                              // mas o sync de backend já deve ter protegido o amount_original agora)
+                            let bruto = amt;
+                            if (amtOrig > bruto) bruto = amtOrig;
+                            // Se está pago e o bruto atual parece ser o líquido, recompomos
+                            if (isPaid && disc > 0 && bruto > 0 && (bruto === valorPago || (valorPago === 0 && bruto === amt))) {
+                               bruto += disc;
                             }
-                            return amt.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                            
+                            return bruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                           })()}
                         </div>
                         {!!payment.discount && payment.discount > 0 && <div className="text-[10px] text-emerald-600 font-bold">- R$ {payment.discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>}
+                        {(payment as any).valor_pago > 0 && (
+                          <div className="text-[10px] text-blue-600 font-black mt-1 bg-blue-50 px-1 rounded inline-block">
+                            PAGO: R$ {Number((payment as any).valor_pago).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-5">{getStatusBadge(payment)}</td>
                       <td className="px-4 py-5">
