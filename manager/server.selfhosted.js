@@ -892,6 +892,39 @@ app.delete('/api/admin/cobrancas/:id', async (req, res) => {
   }
 });
 
+// Fase 2: Escrita dupla — Manager pode atualizar campos ricos diretamente no SQL
+app.put('/api/admin/cobrancas/:id', async (req, res) => {
+  try {
+    const { valor, vencimento, description, type, discount, installment_number, total_installments, amount_original } = req.body;
+    
+    const updates = [];
+    const values = [];
+    let paramIdx = 1;
+
+    if (valor !== undefined) { updates.push(`valor = $${paramIdx++}`); values.push(valor); }
+    if (vencimento !== undefined) { updates.push(`vencimento = $${paramIdx++}`); values.push(vencimento); }
+    if (description !== undefined) { updates.push(`description = $${paramIdx++}`); values.push(description); }
+    if (type !== undefined) { updates.push(`type = $${paramIdx++}`); values.push(type); }
+    if (discount !== undefined) { updates.push(`discount = $${paramIdx++}`); values.push(discount); }
+    if (installment_number !== undefined) { updates.push(`installment_number = $${paramIdx++}`); values.push(installment_number); }
+    if (total_installments !== undefined) { updates.push(`total_installments = $${paramIdx++}`); values.push(total_installments); }
+    if (amount_original !== undefined) { updates.push(`amount_original = $${paramIdx++}`); values.push(amount_original); }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+
+    values.push(req.params.id);
+    await pool.query(
+      `UPDATE alunos_cobrancas SET ${updates.join(', ')} WHERE asaas_payment_id = $${paramIdx}`,
+      values
+    );
+    
+    res.json({ success: true });
+  } catch(e) {
+    console.error('[Admin:Cobrancas:PUT] Erro:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Webhook Evolution
 app.post('/api/webhooks/evolution', (req, res) => {
   try {

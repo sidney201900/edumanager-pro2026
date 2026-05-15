@@ -742,15 +742,26 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
     setIsEditing(true);
     try {
       const targetId = paymentToEdit.asaasPaymentId || paymentToEdit.id;
+      const newValor = parseFloat(editValue.replace(',', '.'));
+      
+      // 1. Atualizar no Asaas
       const response = await fetch(`/api/cobrancas/${targetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ valor: parseFloat(editValue.replace(',', '.')), vencimento: editDate })
+        body: JSON.stringify({ valor: newValor, vencimento: editDate })
       });
       const result = await response.json();
       if (response.ok) {
+        // 2. Escrita dupla: Atualizar no SQL (Fase 2)
+        fetch(`/api/admin/cobrancas/${targetId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ valor: newValor, vencimento: editDate, amount_original: newValor })
+        }).catch(err => console.warn('[Fase2:SQL] Erro ao sincronizar edição:', err));
+
+        // 3. Atualizar no JSON (manter compatibilidade)
         updateData({
-          payments: data.payments.map(p => p.id === paymentToEdit.id ? { ...p, amount: parseFloat(editValue.replace(',', '.')), dueDate: editDate } : p)
+          payments: data.payments.map(p => p.id === paymentToEdit.id ? { ...p, amount: newValor, dueDate: editDate } : p)
         });
         showAlert('Sucesso', 'Cobrança atualizada!', 'success');
         setPaymentToEdit(null);

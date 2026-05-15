@@ -206,7 +206,7 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
     }
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!contractToGenerate) return;
     
     const contract = contractToGenerate;
@@ -242,7 +242,13 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       });
     }
 
+    // 1. Salvar no JSON (manter compatibilidade)
     updateData({ payments: [...data.payments, ...newPayments] });
+
+    // 2. Fase 2: Salvar no SQL via sincronização no próximo boot
+    // Nota: Parcelas de contrato sem Asaas serão migradas pelo syncJsonToRelationalTables no próximo restart.
+    // A Fase 3 eliminará essa dependência quando o Manager ler direto do SQL.
+
     closeModal();
   };
 
