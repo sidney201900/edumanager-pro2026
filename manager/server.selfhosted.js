@@ -802,10 +802,16 @@ app.post('/api/webhook_asaas', async (req, res) => {
         break;
 
       case 'PAYMENT_UPDATED':
+        updateData = {
+          valor: payload.payment.value,
+          vencimento: payload.payment.dueDate,
+          link_boleto: payload.payment.bankSlipUrl || payload.payment.link || null
+        };
+        
         // Alerta no Sino (Admin)
         createAdminNotification(
           '📝 Cobrança Alterada',
-          `A cobrança de ${targetName} foi atualizada no Asaas.`,
+          `A cobrança de ${targetName} foi atualizada no Asaas para R$ ${Number(payload.payment.value).toFixed(2)}.`,
           { type: 'finance', status: 'updated', paymentId: asaasPaymentId }
         );
         if (payload.event === 'PAYMENT_UPDATED') sendEvolutionMessage(asaasPaymentId, 'PAYMENT_UPDATED');
@@ -866,6 +872,7 @@ app.post('/api/webhook_asaas', async (req, res) => {
           ...p, 
           status: newStatus,
           amount: shouldUpdateAmount ? updateData.valor : p.amount,
+          valor_pago: updateData.valor_pago || p.valor_pago || 0,
           dueDate: updateData.vencimento || p.dueDate,
           paidDate: updateData.data_pagamento || p.paidDate
         };
@@ -1578,40 +1585,49 @@ async function syncPaymentsWithAsaasAPI() {
 
       const valorNum = Number(payment.value);
 
-      // A. Atualiza SQL (Silencioso)
+      // A. Atualiza SQL (Prioridade Máxima)
+      const receivedValue = (internalStatus === 'paid') ? valorNum : 0;
       await pool.query(`
-        INSERT INTO alunos_cobrancas (asaas_payment_id, valor, vencimento, status, data_pagamento)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (asaas_payment_id) DO UPDATE SET status = EXCLUDED.status, data_pagamento = EXCLUDED.data_pagamento
-      `, [payment.id, valorNum, payment.dueDate, internalStatus, payment.confirmedDate || payment.paymentDate]).catch(() => {});
+        INSERT INTO alunos_cobrancas (asaas_payment_id, valor, vencimento, status, data_pagamento, valor_pago, amount_original)
+        VALUES ($1, $2, $3, $4, $5, $6, $2)
+        ON CONFLICT (asaas_payment_id) DO UPDATE SET 
+          status = EXCLUDED.status, 
+          data_pagamento = EXCLUDED.data_pagamento,
+          valor_pago = GREATEST(alunos_cobrancas.valor_pago, EXCLUDED.valor_pago),
+          valor = GREATEST(alunos_cobrancas.valor, EXCLUDED.valor)
+      `, [payment.id, valorNum, payment.dueDate, internalStatus, payment.confirmedDate || payment.paymentDate, receivedValue]).catch(() => {});
 
       // B. Atualiza JSON
       const pIdx = appData.payments.findIndex(p => p.asaasPaymentId === payment.id);
       if (pIdx !== -1) {
         const newStatus = jsonStatusMap[internalStatus];
+        const p = appData.payments[pIdx];
         let changed = false;
 
-        if (appData.payments[pIdx].status !== newStatus) {
-          appData.payments[pIdx].status = newStatus;
+        if (p.status !== newStatus) {
+          p.status = newStatus;
           changed = true;
         }
 
         // [Bugfix Crítico]: Não sobrescrever o valor BRUTO com o valor LÍQUIDO (descontado) do Asaas
-        const currentAmount = Number(appData.payments[pIdx].amount || 0);
-        const currentDiscount = Number(appData.payments[pIdx].discount || 0);
-        
-        // Se o valor vindo do Asaas for menor que o atual E a diferença bater com o desconto, ignoramos o update do valor
-        // para preservar o valor bruto original no display do portal/gerenciador.
+        const currentAmount = Number(p.amount || 0);
+        const currentDiscount = Number(p.discount || 0);
         const isNetValueOverwrite = valorNum < currentAmount && Math.abs((currentAmount - currentDiscount) - valorNum) < 0.01;
 
-        if (appData.payments[pIdx].amount !== valorNum && !isNetValueOverwrite) {
-          appData.payments[pIdx].amount = valorNum;
+        if (p.amount !== valorNum && !isNetValueOverwrite) {
+          p.amount = valorNum;
+          changed = true;
+        }
+
+        // Adicionar valor_pago ao JSON para o Manager ler
+        if (receivedValue > 0 && Number(p.valor_pago || 0) !== receivedValue) {
+          p.valor_pago = receivedValue;
           changed = true;
         }
 
         const newPaidDate = payment.confirmedDate || payment.paymentDate;
-        if (newPaidDate && appData.payments[pIdx].paidDate !== newPaidDate) {
-          appData.payments[pIdx].paidDate = newPaidDate;
+        if (newPaidDate && p.paidDate !== newPaidDate) {
+          p.paidDate = newPaidDate;
           changed = true;
         }
 
@@ -1648,9 +1664,19 @@ async function syncRelationalToJsonPayments() {
                           statusStr === 'atrasado' ? 'overdue' :
                           statusStr === 'cancelado' ? 'cancelled' : 'pending';
 
-        if (p.status !== newStatus) {
+        const hasChanges = p.status !== newStatus || 
+                           Number(p.valor_pago || 0) !== Number(match.valor_pago || 0) ||
+                           Number(p.amount || 0) !== Math.max(Number(match.amount_original || 0), Number(match.valor || 0));
+
+        if (hasChanges) {
           updatedCount++;
-          return { ...p, status: newStatus, paidDate: match.data_pagamento || p.paidDate };
+          return { 
+            ...p, 
+            status: newStatus, 
+            paidDate: match.data_pagamento || p.paidDate,
+            valor_pago: Number(match.valor_pago || 0),
+            amount: Math.max(Number(match.amount_original || 0), Number(match.valor || 0))
+          };
         }
       }
       return p;

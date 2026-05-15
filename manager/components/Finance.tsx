@@ -387,6 +387,10 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
         payments: sorted,
         studentId: sorted[0].studentId,
         totalAmount: sorted.reduce((sum, p) => sum + Number(p.amount), 0),
+        totalReceived: sorted.reduce((sum, p) => {
+           const isPaid = ['paid', 'pago', 'received', 'confirmed'].includes((p.status || '').toLowerCase());
+           return sum + (isPaid ? (Number((p as any).valor_pago) || (Number(p.amount) - (Number(p.discount) || 0))) : 0);
+        }, 0),
         totalInstallments: sorted[0].totalInstallments || sorted.length,
         description: sorted[0].description?.split(' (')[0] || 'Parcelamento',
         dueDate: sorted[0].dueDate
@@ -1055,6 +1059,9 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                         </td>
                         <td className="px-6 py-5">
                           <div className="font-black text-slate-900">R$ {group.totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                          {group.totalReceived > 0 && (
+                             <div className="text-[10px] text-blue-600 font-black">PAGO: R$ {group.totalReceived.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                          )}
                           <div className="text-[10px] text-slate-500 font-medium">Total do Carnê</div>
                         </td>
                         <td className="px-6 py-5">
@@ -1402,7 +1409,22 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                         {p.installmentNumber && <div className="text-[9px] text-slate-400">{p.installmentNumber}/{p.totalInstallments}</div>}
                       </td>
                       <td className="px-4 py-3">{new Date(p.dueDate + 'T12:00:00Z').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
-                      <td className="px-4 py-3">R$ {p.amount.toFixed(2)}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-slate-700">
+                          R$ {(() => {
+                            const isPaid = ['paid', 'pago', 'received', 'confirmed'].includes((p.status || '').toLowerCase());
+                            const valorPago = (p as any).valor_pago ? Number((p as any).valor_pago) : 0;
+                            const bruto = Math.max(Number(p.amount), Number((p as any).amount_original || 0));
+                            
+                            if (isPaid && valorPago > 0) return valorPago.toFixed(2);
+                            if (isPaid && p.discount > 0) return (bruto - p.discount).toFixed(2);
+                            return bruto.toFixed(2);
+                          })()}
+                        </div>
+                        {['paid', 'pago', 'received', 'confirmed'].includes((p.status || '').toLowerCase()) && (p as any).valor_pago > 0 && (
+                           <div className="text-[9px] text-indigo-500 font-bold">Líquido Recebido</div>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{getStatusBadge(p)}</td>
                       <td className="px-4 py-3 text-right flex justify-end gap-2">
                         {p.asaasPaymentId && (

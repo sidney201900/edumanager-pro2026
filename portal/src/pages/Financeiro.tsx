@@ -152,56 +152,28 @@ export default function Financeiro() {
     return (boleto as any)?.link_boleto || null;
   };
 
-  const getEffectiveValue = (payment: Payment) => {
-    const baseAmount = payment.amount || 0;
-    const discount = payment.discount || 0;
-    const netAmount = baseAmount - discount;
+  const getDisplayValue = (payment: Payment) => {
     const status = normalizeStatus(payment);
+    const isPaid = status === 'paid';
+    const valorPago = (payment as any).valor_pago ? Number((payment as any).valor_pago) : 0;
+    
+    // Se está pago e temos o valor real no banco, mostramos ele SEM CÁLCULOS
+    if (isPaid && valorPago > 0) return valorPago;
+    
+    // Se está pago mas o banco ainda não sincronizou o valor_pago (fallback)
+    if (isPaid) return payment.amount - (payment.discount || 0);
 
-    // Try to find matching boleto from Supabase sync 
-    const asaasId = payment.asaasPaymentId || (payment as any).asaas_payment_id;
-    let boleto = null;
-    
-    if (asaasId) {
-      boleto = boletos.find(b => (b as any).asaas_payment_id === asaasId);
-    }
-    
-    if (!boleto) {
-      // Fallback: Match by due date and base amount (allowing for interest/fines)
-      boleto = boletos.find(b => {
-        const bVenc = (b as any).vencimento;
-        const bVal = Number((b as any).valor);
-        
-        // Exact date match
-        if (bVenc === payment.dueDate) {
-          // If value is exactly base or exactly net
-          if (Math.abs(bVal - baseAmount) < 1 || Math.abs(bVal - netAmount) < 1) return true;
-          // If it's overdue, the boleto value will be HIGHER than baseAmount
-          if (status === 'overdue' && bVal > netAmount) return true;
-        }
-        return false;
-      });
-    }
-    
-    // If we have a boleto and it is overdue or paid, use current Asaas value
-    if (boleto && (boleto as any).valor) {
-      const bValue = Number((boleto as any).valor);
-      if (status === 'overdue' || status === 'paid') {
-        return bValue;
-      }
-    }
-    
-    // Default: use the discounted base value (net amount)
-    return netAmount;
+    // Se está pendente ou atrasado, mostramos o que falta pagar (Líquido esperado)
+    return payment.amount - (payment.discount || 0);
   };
 
   const totalPending = payments
     .filter(p => isPending(p))
-    .reduce((s, p) => s + getEffectiveValue(p), 0);
+    .reduce((s, p) => s + getDisplayValue(p), 0);
 
   const totalPaid = payments
     .filter(p => isPaid(p))
-    .reduce((s, p) => s + getEffectiveValue(p), 0);
+    .reduce((s, p) => s + getDisplayValue(p), 0);
 
   const filters: { key: FilterType; label: string }[] = [
     { key: 'all', label: 'Todos' },
@@ -348,7 +320,7 @@ export default function Financeiro() {
                         fontWeight: 600, 
                         color: normalizeStatus(payment) === 'overdue' ? 'var(--color-danger)' : 'var(--color-primary-light)' 
                       }}>
-                        {formatCurrency(getEffectiveValue(payment))}
+                        {formatCurrency(getDisplayValue(payment))}
                       </td>
                       <td data-label="Status">{getStatusBadge(payment)}</td>
                       <td>
@@ -415,7 +387,7 @@ export default function Financeiro() {
                </div>
                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--color-text-secondary)' }}>Valor Pago:</span>
-                  <span style={{ fontWeight: 600 }}>{formatCurrency(receiptPayment.amount - (receiptPayment.discount || 0))}</span>
+                  <span style={{ fontWeight: 600 }}>{formatCurrency(getEffectiveValue(receiptPayment))}</span>
                </div>
                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--color-text-secondary)' }}>Data de Vencimento:</span>

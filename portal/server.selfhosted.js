@@ -283,18 +283,22 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
       const isPaid = ['paid', 'pago', 'received', 'confirmed'].includes(normalizedStatus);
       const valorPagoNoSQL = Number(db.valor_pago || 0);
       
-      // Tentamos pegar o maior valor disponível como o Bruto
-      let amountBruto = Number(db.amount_original) || Number(jsonP.amount) || Number(db.valor) || 0;
+      // [NOVA LÓGICA]: Pegar o MAIOR valor entre todas as fontes para garantir que seja o BRUTO
+      let amountBruto = Math.max(
+        Number(db.amount_original || 0), 
+        Number(db.valor || 0), 
+        Number(jsonP.amount || 0)
+      );
 
-      // Se está pago e o amountBruto parece ser o líquido (igual ao pago), recomponha
-      if (isPaid && discount > 0 && amountBruto > 0 && (amountBruto === valorPagoNoSQL || (valorPagoNoSQL === 0 && amountBruto === Number(db.valor)))) {
-         // Se o SQL tem o valor_pago correto, e o amountBruto é igual a ele, some o desconto
-         if (amountBruto === valorPagoNoSQL) {
-           amountBruto += discount;
-         } else if (valorPagoNoSQL === 0 && amountBruto === Number(db.valor)) {
-           // Fallback para quando valor_pago ainda não foi preenchido (primeira vez)
-           amountBruto += discount;
-         }
+      // Se o valor bruto encontrado é igual ao que foi pago, e existe desconto,
+      // então o que encontramos era na verdade o valor líquido. Recuperamos o bruto somando o desconto.
+      if (isPaid && discount > 0 && amountBruto > 0) {
+        if (valorPagoNoSQL > 0 && amountBruto <= valorPagoNoSQL) {
+           amountBruto = valorPagoNoSQL + discount;
+        } else if (amountBruto < (amountBruto + discount) && amountBruto === (jsonP.amount || 0)) {
+           // Se veio do JSON e parece ser o líquido
+           amountBruto = Number(jsonP.amount) + discount;
+        }
       }
 
       finalPayments.push({
@@ -304,7 +308,7 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         asaasPaymentUrl: db.asaas_payment_url || jsonP.asaasPaymentUrl || null,
         amount: amountBruto,
         discount: discount,
-        valor_pago: valorPagoNoSQL || (isPaid ? Number(db.valor) : 0),
+        valor_pago: valorPagoNoSQL > 0 ? valorPagoNoSQL : (isPaid ? (amountBruto - discount) : 0),
         dueDate: db.vencimento || jsonP.dueDate,
         status: normalizedStatus,
         paidDate: db.data_pagamento || jsonP.paidDate || null,
