@@ -229,12 +229,9 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
     let dbRows = [];
     try {
       const { rows } = await pool.query(
-        `SELECT asaas_payment_id, asaas_installment_id, installment, 
-                valor, TO_CHAR(vencimento, 'YYYY-MM-DD') as vencimento, 
-                status, TO_CHAR(data_pagamento, 'YYYY-MM-DD') as data_pagamento, 
-                link_boleto, link_carne, transaction_receipt_url,
-                description, type, discount, installment_number, total_installments,
-                contract_id, asaas_payment_url, amount_original
+        `SELECT *, 
+                TO_CHAR(vencimento, 'YYYY-MM-DD') as vencimento, 
+                TO_CHAR(data_pagamento, 'YYYY-MM-DD') as data_pagamento
          FROM alunos_cobrancas 
          WHERE aluno_id = $1 
          ORDER BY vencimento ASC`,
