@@ -286,7 +286,11 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
       // significa que o webhook antigo sobrescreveu o valor bruto pelo líquido no JSON.
       // Neste caso, o valor bruto real é o líquido + desconto.
       if (amountOriginal === Number(db.valor) && discount > 0) {
+        console.log(`[BUGFIX] Recovering amount for ${asaasId}: amountOriginal=${amountOriginal}, db.valor=${db.valor}, discount=${discount}. New amount: ${amountOriginal + discount}`);
         amountOriginal += discount;
+      } else if (asaasId === 'pay_iipssljwa9df3fsq' || asaasId === 'pay_krkf6cinlekjvw3l') {
+        // Log para debug se a condição falhar para os pagamentos conhecidos
+        console.log(`[DEBUG_FAIL] Bugfix failed for ${asaasId}: amountOriginal=${amountOriginal}, db.valor=${db.valor}, discount=${discount}`);
       }
 
       finalPayments.push({
