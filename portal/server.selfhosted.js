@@ -285,8 +285,10 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         studentId: req.user.studentId,
         asaasPaymentId: asaasId,
         asaasPaymentUrl: jsonP.asaasPaymentUrl || null,
-        amount: Number(db.valor) || jsonP.amount || 0,
-        discount: jsonP.discount || 0,
+        // jsonP.amount = valor BRUTO (ex: 170), db.valor = valor LÍQUIDO do Asaas (ex: 150)
+        // Se o JSON tem o bruto, usa ele + desconto separado. Se não, usa SQL (já líquido) sem desconto.
+        amount: jsonP.amount || Number(db.valor) || 0,
+        discount: jsonP.amount ? (jsonP.discount || 0) : 0,
         dueDate: db.vencimento || jsonP.dueDate,
         status: normalizedStatus,
         paidDate: db.data_pagamento || jsonP.paidDate || null,

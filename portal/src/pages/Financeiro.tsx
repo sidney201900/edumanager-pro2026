@@ -96,9 +96,11 @@ export default function Financeiro() {
   };
 
   const getReceiptLink = (payment: Payment): string | null => {
-    if ((payment as any).transactionReceiptUrl) return (payment as any).transactionReceiptUrl;
-    if ((payment as any).transaction_receipt_url) return (payment as any).transaction_receipt_url;
+    // 1. Verificar campo direto no pagamento (vem do SQL ou JSON)
+    const directUrl = (payment as any).transactionReceiptUrl || (payment as any).transaction_receipt_url;
+    if (directUrl && typeof directUrl === 'string' && directUrl.startsWith('http')) return directUrl;
     
+    // 2. Cross-reference com boletos (tabela SQL separada)
     const asaasId = payment.asaasPaymentId || (payment as any).asaas_payment_id;
     
     let boleto = null;
@@ -113,8 +115,10 @@ export default function Financeiro() {
        );
     }
     
-    if (!boleto) return null;
-    return (boleto as any).link_recibo || (boleto as any).transaction_receipt_url || null;
+    const boletoUrl = (boleto as any)?.transaction_receipt_url || (boleto as any)?.link_recibo;
+    if (boletoUrl && typeof boletoUrl === 'string' && boletoUrl.startsWith('http')) return boletoUrl;
+    
+    return null;
   };
 
   const handleOpenReceipt = (payment: Payment) => {
@@ -122,6 +126,7 @@ export default function Financeiro() {
     if (receiptUrl) {
       window.open(receiptUrl, '_blank', 'noopener,noreferrer');
     } else {
+      // Fallback: abrir modal local com dados do pagamento
       setReceiptPayment(payment);
     }
   };
@@ -244,10 +249,10 @@ export default function Financeiro() {
         </div>
         <div className="glass-card" style={{ padding: '1.25rem' }}>
           <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontWeight: 500, marginBottom: '0.5rem' }}>
-            TOTAL DE PARCELAS
+            PARCELAS RESTANTES
           </p>
-          <p style={{ fontSize: '1.375rem', fontWeight: 700 }}>
-            {payments.length}
+          <p style={{ fontSize: '1.375rem', fontWeight: 700, color: payments.filter(p => isPending(p)).length > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
+            {payments.filter(p => isPending(p)).length}
           </p>
         </div>
       </div>
@@ -307,7 +312,7 @@ export default function Financeiro() {
                   <th>Vencimento</th>
                   <th>Valor</th>
                   <th>Desconto</th>
-                  <th>A Pagar</th>
+                  <th>{filter === 'paid' ? 'Pago' : 'A Pagar'}</th>
                   <th>Status</th>
                   <th>Ação</th>
                 </tr>

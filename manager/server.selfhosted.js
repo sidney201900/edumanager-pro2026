@@ -645,12 +645,12 @@ async function sendEvolutionMessage(asaasPaymentId, eventType, fallbackValorArg 
         const pdfArrayBuffer = doc.output('arraybuffer');
         const pdfBuffer = Buffer.from(pdfArrayBuffer);
         
-        // Upload para o MinIO (Pasta recibos)
+        // Upload para o MinIO (Pasta recibos) — apenas para envio via WhatsApp
         const minioFileName = `recibos/recibo_${asaasPaymentId}.pdf`;
         const minioUrl = await uploadReceiptToStorage(minioFileName, pdfBuffer);
         
-        // Atualiza o link no banco de dados para apontar para o seu MinIO
-        await updateCobranca(asaasPaymentId, { transaction_receipt_url: minioUrl });
+        // NÃO sobrescrever transaction_receipt_url — o link do Asaas (público) é salvo pelo webhook
+        // O MinIO é usado apenas para o envio do PDF via WhatsApp
 
         base64Pdf = pdfBuffer.toString('base64');
         fileName = `Recibo-${targetName.replace(/\s+/g, '')}.pdf`;
