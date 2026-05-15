@@ -275,13 +275,21 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         }
       }
 
+      let amountOriginal = jsonP.amount || Number(db.valor) || 0;
+      const discount = jsonP.amount ? (jsonP.discount || 0) : 0;
+
+      // [Bugfix]: Recupera o valor bruto corrompido pelo webhook antigo
+      if (amountOriginal === Number(db.valor) && discount > 0) {
+        amountOriginal += discount;
+      }
+
       finalPayments.push({
         id: jsonP.id || asaasId,
         studentId: req.user.studentId,
         asaasPaymentId: asaasId,
         asaasPaymentUrl: jsonP.asaasPaymentUrl || null,
-        amount: jsonP.amount || Number(db.valor) || 0,
-        discount: jsonP.amount ? (jsonP.discount || 0) : 0,
+        amount: amountOriginal,
+        discount: discount,
         dueDate: db.vencimento || jsonP.dueDate,
         status: normalizedStatus,
         paidDate: db.data_pagamento || jsonP.paidDate || null,

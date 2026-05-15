@@ -834,16 +834,20 @@ app.post('/api/webhook_asaas', async (req, res) => {
                           statusStr === 'atrasado' ? 'overdue' :
                           statusStr === 'cancelado' ? 'cancelled' : 'pending';
         
+        // Se for um evento de atualização de pagamento, atualiza o valor.
+        // Se for só confirmação de recebimento, preserva o 'amount' bruto original para não causar double-discount.
+        const shouldUpdateAmount = payload.event === 'PAYMENT_UPDATED' && updateData.valor;
+        
         appData.payments[pIdx] = { 
           ...p, 
           status: newStatus,
-          amount: updateData.valor || p.amount,
+          amount: shouldUpdateAmount ? updateData.valor : p.amount,
           dueDate: updateData.vencimento || p.dueDate,
           paidDate: updateData.data_pagamento || p.paidDate
         };
         appData.lastUpdated = new Date().toISOString();
         await saveSchoolData(appData);
-        console.log(`[Webhook:Sync] JSON atualizado para boleto ${asaasPaymentId}`);
+        console.log(`[Webhook:Sync] JSON atualizado para boleto ${asaasPaymentId} (Amount: ${shouldUpdateAmount ? 'Atualizado' : 'Preservado'})`);
       }
     } catch (syncErr) {
       console.error('[Webhook:Sync] Erro ao sincronizar JSON:', syncErr.message);

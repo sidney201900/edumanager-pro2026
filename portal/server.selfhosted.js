@@ -279,8 +279,15 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
       }
 
       // amount_original = valor bruto (ex: 170), db.valor = valor líquido Asaas (ex: 150)
-      const amountOriginal = Number(db.amount_original) || jsonP.amount || Number(db.valor) || 0;
+      let amountOriginal = Number(db.amount_original) || jsonP.amount || Number(db.valor) || 0;
       const discount = Number(db.discount) || (jsonP.amount ? (jsonP.discount || 0) : 0);
+
+      // [Bugfix]: Se o amountOriginal for igual ao valor líquido (db.valor) e houver desconto,
+      // significa que o webhook antigo sobrescreveu o valor bruto pelo líquido no JSON.
+      // Neste caso, o valor bruto real é o líquido + desconto.
+      if (amountOriginal === Number(db.valor) && discount > 0) {
+        amountOriginal += discount;
+      }
 
       finalPayments.push({
         id: jsonP.id || asaasId,
