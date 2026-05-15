@@ -9,6 +9,19 @@
  * TODAS AS ROTAS mantêm a mesma assinatura e resposta.
  * O frontend NÃO percebe a diferença.
  * ============================================================
+/**
+ * ============================================================
+ * ⚠️ ATENÇÃO: ARQUIVO OBSOLETO (MANTIDO POR HISTÓRICO) ⚠️
+ * ============================================================
+ * Este arquivo (`server.js` original) NÃO é mais utilizado em 
+ * produção ou desenvolvimento. O sistema agora utiliza o 
+ * arquivo `server.selfhosted.js` como fonte única da verdade.
+ * 
+ * Durante o deploy via Docker, este arquivo é ignorado e
+ * substituído pelo `server.selfhosted.js`.
+ * 
+ * Não faça alterações de lógica neste arquivo.
+ * ============================================================
  */
 import express from 'express';
 import cors from 'cors';
