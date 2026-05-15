@@ -275,8 +275,8 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         }
       }
 
-      let amountOriginal = jsonP.amount || Number(db.valor) || 0;
-      const discount = jsonP.amount ? (jsonP.discount || 0) : 0;
+      let amountOriginal = Number(jsonP.amount) || Number(db.valor) || 0;
+      const discount = jsonP.amount ? Number(jsonP.discount || 0) : 0;
 
       // [Bugfix]: Recupera o valor bruto corrompido pelo webhook antigo
       if (amountOriginal === Number(db.valor) && discount > 0) {
