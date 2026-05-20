@@ -130,6 +130,7 @@
 - [x] **Filtragem Inteligente de Boletim:** Refatorada a aba de Boletim no Manager para exibir provas e atividades apenas quando houver submissão do aluno, eliminando a poluição visual de outras turmas.
 - [x] **Otimização Financeira (Mobile):** Cabeçalho da aba Financeiro redesenhado para ser 100% responsivo, com botões compactos e ícones inteligentes que economizam espaço em dispositivos móveis.
 - [x] **Disparo em Massa V3:** Implementada lógica de primeiro nome (`.split(' ')[0]`), envio simultâneo para Aluno e Responsável (quando contatos forem diferentes), painel de 25 emojis temáticos e suporte a anexos (Imagem/PDF) via Evolution API.
+- [x] **Mensagens de Aniversário Automáticas:** Implementada rotina de agendamento automático diário de felicitações de aniversário via cron job (`server.selfhosted.js`) integrada ao painel de configurações na interface (`Messages.tsx`). O envio é feito apenas ao telefone cadastrado do aluno (s.phone), ignorando os responsáveis e pulando alunos sem número registrado.
 
 ## 📋 Próximos Passos Pendentes
 
@@ -137,4 +138,7 @@
 2. **Otimização de Build:** Re-explorar o cache do Docker.
 3. **Financeiro:** Implementar visualização de extrato detalhado.
 
-140: **Nota Técnica:** O arquivo `server.js` é OBSOLETO e mantido apenas para contexto histórico. **NUNCA DEVE SER EDITADO OU ALTERADO**. Todo o foco de backend deve ser estritamente no `server.selfhosted.js`.
+**Nota Técnica:** O arquivo `server.js` é OBSOLETO e mantido apenas para contexto histórico. **NUNCA DEVE SER EDITADO OU ALTERADO**. Todo o foco de backend deve ser estritamente no `server.selfhosted.js`.
+
+**Acesso ao Banco de Dados (MCP):** Configurado e testado o acesso MCP ao PostgreSQL da VPS (`150.230.87.131`) através do `mcp_config.json`. A porta `5432` foi liberada com sucesso nas Security Lists do console da Oracle Cloud e no firewall interno (`ufw`). A conexão está totalmente operacional e as tabelas/volumetria de linhas foram documentadas.
+

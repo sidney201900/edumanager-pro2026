@@ -48,7 +48,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
   const pendingPayments = useMemo(() => data.payments.filter(p => p.status === 'pending').length, [data.payments]);
   const revenue = useMemo(() => data.payments
     .filter(p => p.status === 'paid')
-    .reduce((sum, p) => sum + p.amount, 0), [data.payments]);
+    .reduce((sum, p) => sum + (Number((p as any).valor_pago) || (Number(p.amount) - (Number(p.discount) || 0))), 0), [data.payments]);
 
   // Advanced Stats
   const newStudentsThisMonth = useMemo(() => {
@@ -102,7 +102,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         const pDate = new Date(p.paidDate || p.dueDate);
         return pDate.getMonth() === d.getMonth() && pDate.getFullYear() === d.getFullYear() && p.status === 'paid';
       });
-      const monthRevenue = monthPayments.reduce((sum, p) => sum + p.amount, 0);
+      const monthRevenue = monthPayments.reduce((sum, p) => sum + (Number((p as any).valor_pago) || (Number(p.amount) - (Number(p.discount) || 0))), 0);
       history.push({ name: monthName, revenue: monthRevenue });
     }
     return history;
@@ -122,7 +122,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       ...data.payments.filter(p => p.status === 'paid').slice(-3).map(p => ({ 
         type: 'payment', 
         title: 'Pagamento Recebido', 
-        desc: `R$ ${p.amount.toLocaleString()}`, 
+        desc: `R$ ${(Number((p as any).valor_pago) || (Number(p.amount) - (Number(p.discount) || 0))).toLocaleString()}`, 
         date: p.paidDate || p.dueDate,
         icon: CheckCircle2,
         color: 'bg-emerald-100 text-emerald-600'

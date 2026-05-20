@@ -56,6 +56,7 @@ const sentCache = new Set();
 const lockCache = new Set();
 let activeCronJob = null; // Referência global para o agendamento preventivo
 let activeCronJobOverdue = null; // Referência global para o agendamento de inadimplência
+let activeCronJobBirthday = null; // Referência global para o agendamento de aniversário
 
 // === Funções Auxiliares de Notificação ===
 async function createAdminNotification(titulo, mensagem, metadata = {}) {
@@ -1478,20 +1479,159 @@ async function executarRotinaCobrancas(tipo = 'ambos') {
 }
 
 // ============================================================
+// Rotina Automática de Aniversários
+// ============================================================
+async function executarRotinaAniversarios() {
+  try {
+    const appData = await getSchoolData();
+    if (!appData) return 0;
+
+    const evoConfig = appData.evolutionConfig;
+    if (!evoConfig?.apiUrl || !evoConfig?.apiKey || !evoConfig?.instanceName) {
+      console.log('[Cron:Aniversário] ⚠️ Evolution API não configurada.');
+      return 0;
+    }
+
+    const templates = appData.messageTemplates || {};
+    const templateMsg = templates.felizAniversario || "Olá {nome}, a equipe da {escola} passa para te desejar um Feliz Aniversário! Muita saúde, paz e conquistas neste novo ciclo! 🎂🎈";
+    const escolaNome = appData.profile?.name || '';
+    
+    // Busca alunos de forma híbrida (JSON e SQL)
+    const { rows: sqlStudents } = await pool.query(`
+      SELECT id, nome as name, email, telefone as phone, data_nascimento, status, nome_responsavel as "guardianName", telefone_responsavel as "guardianPhone"
+      FROM alunos
+      WHERE status = 'active'
+    `);
+
+    const jsonStudents = appData.students || [];
+    const studentMap = new Map();
+
+    // Adiciona alunos do JSON
+    for (const s of jsonStudents) {
+      if (s.status === 'active' && s.id) {
+        studentMap.set(String(s.id), {
+          id: String(s.id),
+          name: s.name,
+          phone: s.phone,
+          guardianPhone: s.guardianPhone,
+          guardianName: s.guardianName,
+          birthDate: s.birthDate
+        });
+      }
+    }
+
+    // Sobrescreve/adiciona do SQL
+    for (const s of sqlStudents) {
+      if (s.id) {
+        let birthDateStr = null;
+        if (s.data_nascimento) {
+          const d = new Date(s.data_nascimento);
+          if (!isNaN(d.getTime())) {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            birthDateStr = `${year}-${month}-${day}`;
+          }
+        }
+        const existing = studentMap.get(String(s.id)) || {};
+        studentMap.set(String(s.id), {
+          id: String(s.id),
+          name: s.name || existing.name,
+          phone: s.phone || existing.phone,
+          guardianPhone: s.guardianPhone || existing.guardianPhone,
+          guardianName: s.guardianName || existing.guardianName,
+          birthDate: birthDateStr || existing.birthDate
+        });
+      }
+    }
+
+    // Filtra aniversariantes do dia
+    const today = new Date();
+    const todayDay = today.getDate();
+    const todayMonth = today.getMonth() + 1;
+
+    const aniversariantes = [];
+    for (const s of studentMap.values()) {
+      if (!s.birthDate) continue;
+      const parts = s.birthDate.split('-');
+      if (parts.length === 3) {
+        const bdayDay = parseInt(parts[2]);
+        const bdayMonth = parseInt(parts[1]);
+        if (bdayDay === todayDay && bdayMonth === todayMonth) {
+          aniversariantes.push(s);
+        }
+      }
+    }
+
+    if (aniversariantes.length === 0) {
+      console.log('[Cron:Aniversário] ℹ️ Nenhum aniversariante hoje.');
+      return 0;
+    }
+
+    console.log(`[Cron:Aniversário] 🎉 Encontrados ${aniversariantes.length} aniversariante(s) hoje.`);
+
+    let enviadas = 0;
+    for (let i = 0; i < aniversariantes.length; i++) {
+      const s = aniversariantes[i];
+      const nomePrimeiro = s.name.split(' ')[0];
+      const msg = templateMsg
+        .replace(/{nome}/g, nomePrimeiro)
+        .replace(/{escola}/g, escolaNome);
+
+      if (!s.phone) continue;
+
+      let cleanPhone = s.phone.replace(/\D/g, '');
+      if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
+
+      try {
+        const url = `${evoConfig.apiUrl.replace(/\/$/, '')}/message/sendText/${evoConfig.instanceName}`;
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': evoConfig.apiKey
+          },
+          body: JSON.stringify({ number: cleanPhone, text: msg })
+        });
+        if (resp.ok) {
+          enviadas++;
+        } else {
+          console.error(`[Cron:Aniversário] Falha ao enviar para ${cleanPhone}: status ${resp.status}`);
+        }
+      } catch (err) {
+        console.error(`[Cron:Aniversário] Erro ao enviar para ${cleanPhone}:`, err.message);
+      }
+
+      if (i < aniversariantes.length - 1) {
+        await new Promise(r => setTimeout(r, 30000));
+      }
+    }
+
+    return enviadas;
+  } catch (error) {
+    console.error('[Cron:Aniversário] Erro na rotina de aniversário:', error.message);
+    return 0;
+  }
+}
+
+// ============================================================
 // AGENDADOR AUTOMÁTICO (node-cron) — Suporte a múltiplos tipos
 // ============================================================
 function agendarRotina(tipo, hora, minuto) {
-  const isPreventivo = tipo === 'preventivo';
-  const label = isPreventivo ? 'Preventivo' : 'Inadimplência';
+  const label = tipo === 'preventivo' ? 'Preventivo' : tipo === 'atrasado' ? 'Inadimplência' : 'Aniversário';
 
   // Cancela job anterior do mesmo tipo
-  if (isPreventivo && activeCronJob) {
+  if (tipo === 'preventivo' && activeCronJob) {
     activeCronJob.stop();
     activeCronJob = null;
     console.log(`[Cron:${label}] ⏹ Rotina anterior cancelada.`);
-  } else if (!isPreventivo && activeCronJobOverdue) {
+  } else if (tipo === 'atrasado' && activeCronJobOverdue) {
     activeCronJobOverdue.stop();
     activeCronJobOverdue = null;
+    console.log(`[Cron:${label}] ⏹ Rotina anterior cancelada.`);
+  } else if (tipo === 'aniversario' && activeCronJobBirthday) {
+    activeCronJobBirthday.stop();
+    activeCronJobBirthday = null;
     console.log(`[Cron:${label}] ⏹ Rotina anterior cancelada.`);
   }
 
@@ -1502,21 +1642,27 @@ function agendarRotina(tipo, hora, minuto) {
     return;
   }
 
-  const cronTipo = isPreventivo ? 'preventivo' : 'atrasado';
   const cronExpression = `${m} ${h} * * *`;
   const job = cron.schedule(cronExpression, async () => {
     console.log(`[Cron:${label}] ⏰ Rotina automática iniciada às ${new Date().toLocaleTimeString('pt-BR')}`);
     try {
-      const resultado = await executarRotinaCobrancas(cronTipo);
-      const count = isPreventivo ? resultado.enviadasAviso : resultado.enviadasAtraso;
-      console.log(`[Cron:${label}] ✅ Concluído: ${count} mensagens processadas.`);
+      if (tipo === 'aniversario') {
+        const count = await executarRotinaAniversarios();
+        console.log(`[Cron:${label}] ✅ Concluído: ${count} mensagens processadas.`);
+      } else {
+        const cronTipo = tipo === 'preventivo' ? 'preventivo' : 'atrasado';
+        const resultado = await executarRotinaCobrancas(cronTipo);
+        const count = tipo === 'preventivo' ? resultado.enviadasAviso : resultado.enviadasAtraso;
+        console.log(`[Cron:${label}] ✅ Concluído: ${count} mensagens processadas.`);
+      }
     } catch (error) {
       console.error(`[Cron:${label}] ❌ Erro na rotina automática:`, error.message);
     }
   }, { timezone: 'America/Sao_Paulo' });
 
-  if (isPreventivo) activeCronJob = job;
-  else activeCronJobOverdue = job;
+  if (tipo === 'preventivo') activeCronJob = job;
+  else if (tipo === 'atrasado') activeCronJobOverdue = job;
+  else if (tipo === 'aniversario') activeCronJobBirthday = job;
 
   console.log(`[Cron:${label}] ✅ Rotina agendada para ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} (America/Sao_Paulo)`);
 }
@@ -1796,6 +1942,14 @@ async function inicializarAgendamento() {
     } else {
       console.log('[Cron:Inadimplência] ℹ Agendamento desativado.');
     }
+
+    // Aniversário
+    if (rules.autoScheduleBirthdayEnabled && rules.autoScheduleBirthdayTime) {
+      const [h, m] = rules.autoScheduleBirthdayTime.split(':');
+      agendarRotina('aniversario', h, m);
+    } else {
+      console.log('[Cron:Aniversário] ℹ Agendamento desativado.');
+    }
   } catch (e) {
     console.error('[Cron] Erro ao inicializar agendamento:', e.message);
   }
@@ -1853,25 +2007,28 @@ async function startServer() {
     }
   });
 
-  // API para gerenciar o agendamento (suporte a preventivo e atrasado)
+  // API para gerenciar o agendamento (suporte a preventivo, atrasado e aniversário)
   app.get('/api/cron/status', (req, res) => {
     res.json({ 
       preventive: !!activeCronJob, 
-      overdue: !!activeCronJobOverdue 
+      overdue: !!activeCronJobOverdue,
+      birthday: !!activeCronJobBirthday
     });
   });
 
   app.post('/api/cron/schedule', async (req, res) => {
     try {
       const { enabled, time, tipo } = req.body;
-      const isOverdue = tipo === 'atrasado';
       const appData = await getSchoolData();
       if (!appData.messageTemplates) appData.messageTemplates = {};
       if (!appData.messageTemplates.automationRules) appData.messageTemplates.automationRules = {};
       
-      if (isOverdue) {
+      if (tipo === 'atrasado') {
         appData.messageTemplates.automationRules.autoScheduleOverdueEnabled = !!enabled;
         appData.messageTemplates.automationRules.autoScheduleOverdueTime = time || '09:00';
+      } else if (tipo === 'aniversario') {
+        appData.messageTemplates.automationRules.autoScheduleBirthdayEnabled = !!enabled;
+        appData.messageTemplates.automationRules.autoScheduleBirthdayTime = time || '09:00';
       } else {
         appData.messageTemplates.automationRules.autoScheduleEnabled = !!enabled;
         appData.messageTemplates.automationRules.autoScheduleTime = time || '09:00';
@@ -1882,10 +2039,12 @@ async function startServer() {
 
       if (enabled && time) {
         const [h, m] = time.split(':');
-        agendarRotina(isOverdue ? 'atrasado' : 'preventivo', h, m);
+        agendarRotina(tipo, h, m);
       } else {
-        if (isOverdue) {
+        if (tipo === 'atrasado') {
           if (activeCronJobOverdue) { activeCronJobOverdue.stop(); activeCronJobOverdue = null; }
+        } else if (tipo === 'aniversario') {
+          if (activeCronJobBirthday) { activeCronJobBirthday.stop(); activeCronJobBirthday = null; }
         } else {
           if (activeCronJob) { activeCronJob.stop(); activeCronJob = null; }
         }
@@ -1894,7 +2053,8 @@ async function startServer() {
       res.json({ 
         success: true, 
         preventive: !!activeCronJob, 
-        overdue: !!activeCronJobOverdue 
+        overdue: !!activeCronJobOverdue,
+        birthday: !!activeCronJobBirthday
       });
     } catch (error) {
       console.error('[Cron] Erro ao salvar agendamento:', error);

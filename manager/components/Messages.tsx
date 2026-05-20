@@ -55,10 +55,17 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
   const [isSavingScheduleOverdue, setIsSavingScheduleOverdue] = useState(false);
   const [cronOverdueActive, setCronOverdueActive] = useState(false);
 
+  // Estado do Agendamento Automático - Aniversário
+  const [scheduleBirthdayEnabled, setScheduleBirthdayEnabled] = useState(!!initRules.autoScheduleBirthdayEnabled);
+  const [scheduleBirthdayTime, setScheduleBirthdayTime] = useState(initRules.autoScheduleBirthdayTime || '09:00');
+  const [isSavingScheduleBirthday, setIsSavingScheduleBirthday] = useState(false);
+  const [cronBirthdayActive, setCronBirthdayActive] = useState(false);
+
   useEffect(() => {
     fetch('/api/cron/status').then(r => r.json()).then(d => {
       setCronActive(d.preventive);
       setCronOverdueActive(d.overdue);
+      setCronBirthdayActive(d.birthday);
     }).catch(() => {});
   }, []);
 
@@ -105,7 +112,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
         try {
           const payloadAlunos = birthdayStudents.map(s => {
             const nome = s.name.split(' ')[0];
-            const telefone = s.phone || s.guardianPhone;
+            const telefone = s.phone;
             return { nome, telefone };
           }).filter(a => a.telefone);
 
@@ -754,6 +761,104 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
             >
               {isSendingBdays ? 'Enviando...' : 'Parabenizar Todos'}
             </button>
+
+            {/* Agendamento Automático - Aniversário */}
+            <div className="mt-4 pt-4 border-t border-pink-200">
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-[10px] font-black text-pink-700 uppercase tracking-widest flex items-center gap-1.5">
+                  <Power size={13} /> Rotina Automática
+                </label>
+                <button
+                  onClick={async () => {
+                    const newEnabled = !scheduleBirthdayEnabled;
+                    setScheduleBirthdayEnabled(newEnabled);
+                    setIsSavingScheduleBirthday(true);
+                    try {
+                      const resp = await fetch('/api/cron/schedule', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enabled: newEnabled, time: scheduleBirthdayTime, tipo: 'aniversario' })
+                      });
+                      const d = await resp.json();
+                      setCronBirthdayActive(d.birthday);
+                      
+                      // Persistir no estado global
+                      const newRules = { ...templates.automationRules, autoScheduleBirthdayEnabled: newEnabled, autoScheduleBirthdayTime: scheduleBirthdayTime };
+                      setTemplates(prev => ({ ...prev, automationRules: newRules }));
+                      updateData({ messageTemplates: { ...templates, automationRules: newRules } });
+
+                      showAlert('Sucesso', newEnabled ? `Rotina de aniversário ativada para ${scheduleBirthdayTime}!` : 'Rotina automática desativada.', 'success');
+                    } catch {
+                      showAlert('Erro', 'Erro ao salvar agendamento.', 'error');
+                      setScheduleBirthdayEnabled(!newEnabled);
+                    } finally {
+                      setIsSavingScheduleBirthday(false);
+                    }
+                  }}
+                  disabled={isSavingScheduleBirthday}
+                  className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
+                    scheduleBirthdayEnabled ? 'bg-pink-600' : 'bg-slate-300'
+                  }`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${
+                    scheduleBirthdayEnabled ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {scheduleBirthdayEnabled && (
+                <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300 mb-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-pink-500 uppercase tracking-widest mb-1.5 ml-1">Horário do Disparo</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="time"
+                        value={scheduleBirthdayTime}
+                        onChange={(e) => setScheduleBirthdayTime(e.target.value)}
+                        className="flex-1 px-4 py-2.5 border border-pink-200 rounded-xl text-sm font-bold text-center bg-white focus:ring-2 focus:ring-pink-500 focus:outline-none shadow-sm"
+                      />
+                      <button
+                        onClick={async () => {
+                          setIsSavingScheduleBirthday(true);
+                          try {
+                            const resp = await fetch('/api/cron/schedule', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ enabled: true, time: scheduleBirthdayTime, tipo: 'aniversario' })
+                            });
+                            const d = await resp.json();
+                            setCronBirthdayActive(d.birthday);
+
+                            // Persistir no estado global
+                            const newRules = { ...templates.automationRules, autoScheduleBirthdayEnabled: true, autoScheduleBirthdayTime: scheduleBirthdayTime };
+                            setTemplates(prev => ({ ...prev, automationRules: newRules }));
+                            updateData({ messageTemplates: { ...templates, automationRules: newRules } });
+
+                            showAlert('Sucesso', `Horário atualizado para ${scheduleBirthdayTime}!`, 'success');
+                          } catch {
+                            showAlert('Erro', 'Erro ao atualizar horário.', 'error');
+                          } finally {
+                            setIsSavingScheduleBirthday(false);
+                          }
+                        }}
+                        disabled={isSavingScheduleBirthday}
+                        className="px-4 py-2.5 bg-pink-600 text-white rounded-xl font-black text-xs hover:bg-pink-700 transition-all active:scale-95 shadow-md"
+                      >
+                        {isSavingScheduleBirthday ? '...' : 'Salvar'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className={`flex items-center gap-2 text-[10px] font-bold px-3 py-2 rounded-lg ${
+                    cronBirthdayActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${
+                      cronBirthdayActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                    }`} />
+                    {cronBirthdayActive ? `Ativo — Próximo disparo às ${scheduleBirthdayTime}` : 'Inativo'}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="pt-4 border-t border-pink-100">
               <label className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3">Próximos do Mês</label>
