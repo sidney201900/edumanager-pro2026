@@ -752,25 +752,19 @@ app.post('/api/webhook_asaas', async (req, res) => {
           data_pagamento: payload.payment.confirmedDate || payload.payment.paymentDate || new Date().toISOString().split('T')[0]
         };
         
-        // [Bugfix Crítico]: Recuperar o valor BRUTO caso o Asaas mande o líquido
+        // Preservar o valor original da parcela — não inflar com desconto
         try {
           const cobRes = await pool.query('SELECT valor, discount, amount_original FROM alunos_cobrancas WHERE asaas_payment_id = $1', [asaasPaymentId]);
           if (cobRes.rows.length > 0) {
             const cob = cobRes.rows[0];
-            const currentAmount = Number(cob.valor || 0);
+            const storedValor = Number(cob.valor || 0);
             const discount = Number(cob.discount || 0);
-            const amountOriginal = Number(cob.amount_original || 0);
             const receivedValue = Number(payload.payment.value);
 
-            // Se o valor recebido for menor que o bruto registrado e a diferença bater com o desconto, 
-            // mantemos o bruto no campo 'valor'.
-            if (receivedValue < currentAmount && Math.abs((currentAmount - discount) - receivedValue) < 0.01) {
-              // Já está correto (bruto > recebido), não mexemos no 'valor'
-            } else if (receivedValue === currentAmount && discount > 0) {
-              // Se o 'valor' no banco já era o líquido, restauramos para o bruto
-              updateData.valor = receivedValue + discount;
-            } else if (amountOriginal > receivedValue) {
-               updateData.valor = amountOriginal;
+            // Se o Asaas enviou o valor líquido (menor que o registrado), 
+            // registramos como valor_pago e preservamos o valor da parcela
+            if (receivedValue < storedValor) {
+              updateData.valor_pago = receivedValue;
             }
           }
         } catch (e) { console.error('[Webhook:Recovery] Erro:', e.message); }
@@ -1739,8 +1733,8 @@ async function syncPaymentsWithAsaasAPI() {
         ON CONFLICT (asaas_payment_id) DO UPDATE SET 
           status = EXCLUDED.status, 
           data_pagamento = EXCLUDED.data_pagamento,
-          valor_pago = GREATEST(alunos_cobrancas.valor_pago, EXCLUDED.valor_pago),
-          valor = GREATEST(alunos_cobrancas.valor, EXCLUDED.valor)
+          valor_pago = CASE WHEN EXCLUDED.valor_pago > 0 THEN EXCLUDED.valor_pago ELSE alunos_cobrancas.valor_pago END,
+          valor = COALESCE(NULLIF(EXCLUDED.valor, 0), alunos_cobrancas.valor)
       `, [payment.id, valorNum, payment.dueDate, internalStatus, payment.confirmedDate || payment.paymentDate, receivedValue]).catch(() => {});
 
       // B. Atualiza JSON
@@ -1812,7 +1806,7 @@ async function syncRelationalToJsonPayments() {
 
         const hasChanges = p.status !== newStatus || 
                            Number(p.valor_pago || 0) !== Number(match.valor_pago || 0) ||
-                           Number(p.amount || 0) !== Math.max(Number(match.amount_original || 0), Number(match.valor || 0));
+                           Number(p.amount || 0) !== Number(match.valor || 0);
 
         if (hasChanges) {
           updatedCount++;
@@ -1821,7 +1815,7 @@ async function syncRelationalToJsonPayments() {
             status: newStatus, 
             paidDate: match.data_pagamento || p.paidDate,
             valor_pago: Number(match.valor_pago || 0),
-            amount: Math.max(Number(match.amount_original || 0), Number(match.valor || 0))
+            amount: Number(match.valor || p.amount || 0)
           };
         }
       }

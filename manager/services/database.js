@@ -556,15 +556,14 @@ export async function syncJsonToRelationalTables() {
         const amount = Number(p.amount || 0);
         const discount = Number(p.discount || 0);
         
-        // Se está pago, o 'amount' do JSON geralmente é o líquido.
-        // O valor principal (valor) deve ser o BRUTO.
+        // O valor da parcela (face value) é sempre o amount do JSON (ex: 170)
+        // O desconto é condicional e NÃO altera o valor base da parcela
         let valorBruto = amount;
         let valorPago = 0;
 
         if (isPaid) {
-          valorPago = amount;
-          // Se o amount vindo do JSON for o líquido (igual ou menor que o bruto esperado), restauramos o bruto
-          valorBruto = amount + discount;
+          // Usar valor_pago explícito do JSON se disponível, senão calcular (amount - discount)
+          valorPago = Number(p.valor_pago || 0) || (amount - discount);
         }
 
         await client.query(
@@ -578,7 +577,7 @@ export async function syncJsonToRelationalTables() {
             aluno_id = EXCLUDED.aluno_id,
             asaas_installment_id = COALESCE(EXCLUDED.asaas_installment_id, alunos_cobrancas.asaas_installment_id),
             installment = COALESCE(EXCLUDED.installment, alunos_cobrancas.installment),
-            valor = GREATEST(alunos_cobrancas.valor, EXCLUDED.valor),
+            valor = EXCLUDED.valor,
             vencimento = EXCLUDED.vencimento,
             link_boleto = COALESCE(EXCLUDED.link_boleto, alunos_cobrancas.link_boleto),
             status = CASE WHEN alunos_cobrancas.status = 'PAGO' THEN alunos_cobrancas.status ELSE EXCLUDED.status END,
@@ -589,7 +588,7 @@ export async function syncJsonToRelationalTables() {
             total_installments = COALESCE(EXCLUDED.total_installments, alunos_cobrancas.total_installments),
             contract_id = COALESCE(EXCLUDED.contract_id, alunos_cobrancas.contract_id),
             asaas_payment_url = COALESCE(EXCLUDED.asaas_payment_url, alunos_cobrancas.asaas_payment_url),
-            amount_original = GREATEST(COALESCE(alunos_cobrancas.amount_original, 0), EXCLUDED.amount_original),
+            amount_original = COALESCE(EXCLUDED.amount_original, alunos_cobrancas.amount_original),
             data_pagamento = COALESCE(EXCLUDED.data_pagamento, alunos_cobrancas.data_pagamento),
             valor_pago = EXCLUDED.valor_pago`,
           [
