@@ -321,6 +321,11 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
       l.id === lesson.id ? { ...l, date: replacementDate, startTime: replacementStartTime, endTime: replacementEndTime, status: 'rescheduled', type: l.type, cancelReason: undefined } : l
     );
 
+    // Remove qualquer registro de falta (absence) gerado automaticamente para esta aula (Regra 21)
+    const updatedAttendance = (data.attendance || []).filter(
+      a => !(a.lessonId === lesson.id && a.type === 'absence')
+    );
+
     const oldDateStr = new Date(lesson.date + 'T12:00:00Z').toLocaleDateString('pt-BR');
     const newDateStr = new Date(replacementDate + 'T12:00:00Z').toLocaleDateString('pt-BR');
 
@@ -330,8 +335,8 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
     const newNotifs = notifyLessonAction('Aula Reagendada', notifMsg, waMsg);
     const updatedNotifications = [...(data.notifications || []), ...newNotifs];
 
-    updateData({ lessons: updatedLessons, notifications: updatedNotifications });
-    await dbService.saveData({ ...data, lessons: updatedLessons, notifications: updatedNotifications });
+    updateData({ lessons: updatedLessons, notifications: updatedNotifications, attendance: updatedAttendance });
+    await dbService.saveData({ ...data, lessons: updatedLessons, notifications: updatedNotifications, attendance: updatedAttendance });
 
     setTimeout(() => {
       setShowLessonDetail(null);

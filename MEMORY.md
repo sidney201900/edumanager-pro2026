@@ -50,6 +50,7 @@
 - [x] **Parser Global de NUMERIC (Postgres):** Configurado o driver `pg` nos servidores do Manager e do Portal para converter automaticamente `NUMERIC`/`DECIMAL` (OID 1700) para `Number`, cumprindo as regras 19 e 32 do `GEMINI.md`.
 - [x] **Resolução de Condição de Corrida:** Implementado `await` no update duplo de cobranças do SQL na edição de cobranças do Manager (`Finance.tsx`), assegurando consistência na re-busca de dados.
 - [x] **Ordem de Exclusão e Notificação (Regra 34):** Removida a exclusão local imediata no endpoint `/api/excluir_cobranca`. A remoção local é delegada ao webhook do Asaas, permitindo que a mensagem de WhatsApp acesse os dados necessários antes da deleção.
+- [x] **Limpeza de Faltas no Reagendamento:** Ajustada a função `handleRescheduleLesson` no `LessonSchedule.tsx` para filtrar e deletar automaticamente do banco de dados/estado todas as faltas geradas de forma automática para uma aula que estava no passado e foi reagendada para o futuro.
 - [x] **Validação de Build e Git Push:** Confirmada compilação bem-sucedida do frontend/backend e efetuado o push para a branch remota `main` sob autorização do usuário.
 
 ## 📋 Próximos Passos
