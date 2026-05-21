@@ -103,7 +103,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
   };
 
   const checkInstallmentsForStudent = (studentId: string) => {
-    const studentPayments = data.payments.filter(p => p.studentId === studentId && (p.asaasInstallmentId || p.installmentId || p.installment));
+    const studentPayments = currentPayments.filter(p => p.studentId === studentId && (p.asaasInstallmentId || p.installmentId || p.installment));
     const grouped = {} as Record<string, any>;
     studentPayments.forEach(p => {
       const iid = p.asaasInstallmentId || p.installmentId || (typeof p.installment === 'object' ? p.installment.id : p.installment);
@@ -173,10 +173,62 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
     }
   };
 
-  const dataPaymentsRef = React.useRef(data.payments);
+  const [postgresPayments, setPostgresPayments] = useState<any[]>([]);
+  const [loadedFromDb, setLoadedFromDb] = useState(false);
+
+  const fetchPostgresPayments = async () => {
+    try {
+      const resp = await fetch('/api/admin/cobrancas');
+      if (resp.ok) {
+        const records = await resp.json();
+        const normalized = (records || []).map((r: any) => {
+          const statusStr = (r.status || 'pending').toLowerCase();
+          const normalizedStatus = statusStr === 'pago' || statusStr === 'paid' || statusStr === 'received' || statusStr === 'confirmed' ? 'paid' : 
+                                   statusStr === 'atrasado' || statusStr === 'overdue' || statusStr === 'vencido' ? 'overdue' : 
+                                   statusStr === 'cancelado' || statusStr === 'cancelled' || statusStr === 'refunded' ? 'cancelled' : 'pending';
+          return {
+            id: r.local_id || r.asaas_payment_id || String(r.id),
+            studentId: r.aluno_id,
+            asaasPaymentId: r.asaas_payment_id || null,
+            asaasInstallmentId: r.asaas_installment_id || null,
+            installmentId: r.asaas_installment_id || null,
+            installment: r.installment || null,
+            amount: Number(r.valor),
+            discount: Number(r.discount || 0),
+            valor_pago: Number(r.valor_pago || 0),
+            dueDate: r.vencimento ? (r.vencimento.includes('T') ? r.vencimento.split('T')[0] : r.vencimento) : '',
+            status: normalizedStatus,
+            paidDate: r.data_pagamento ? (r.data_pagamento.includes('T') ? r.data_pagamento.split('T')[0] : r.data_pagamento) : null,
+            type: r.type || 'monthly',
+            description: r.description || null,
+            installmentNumber: r.installment_number || null,
+            totalInstallments: r.total_installments || null,
+            bankSlipUrl: r.link_boleto || null,
+            transactionReceiptUrl: r.transaction_receipt_url || null,
+            // retrocompatibilidade
+            asaas_payment_id: r.asaas_payment_id || null,
+            asaas_installment_id: r.asaas_installment_id || null,
+            local_id: r.local_id || null,
+            valor: Number(r.valor),
+            vencimento: r.vencimento ? (r.vencimento.includes('T') ? r.vencimento.split('T')[0] : r.vencimento) : '',
+            status_original: r.status
+          };
+        });
+        setPostgresPayments(normalized);
+        setLoadedFromDb(true);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar cobranças do Postgres:', e);
+    }
+  };
+
   React.useEffect(() => {
-    dataPaymentsRef.current = data.payments;
+    fetchPostgresPayments();
   }, [data.payments]);
+
+  const currentPayments = useMemo(() => {
+    return loadedFromDb ? postgresPayments : data.payments;
+  }, [loadedFromDb, postgresPayments, data.payments]);
 
   const syncAsaasPayments = async () => {
     if (isSyncing) return;
@@ -327,21 +379,21 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
   };
 
   const paymentIndexMap = useMemo(() => {
-    return new Map(data.payments.map((p, i) => [p.id, i]));
-  }, [data.payments]);
+    return new Map(currentPayments.map((p, i) => [p.id, i]));
+  }, [currentPayments]);
 
   const maxIndexMap = useMemo(() => {
     const map = new Map<string, number>();
-    data.payments.forEach(p => {
+    currentPayments.forEach(p => {
       const key = p.installmentId || p.id;
       const currentIndex = paymentIndexMap.get(p.id) || 0;
       const maxSoFar = map.get(key) || -1;
       if (currentIndex > maxSoFar) map.set(key, currentIndex);
     });
     return map;
-  }, [data.payments, paymentIndexMap]);
+  }, [currentPayments, paymentIndexMap]);
 
-  const filteredPayments = data.payments
+  const filteredPayments = currentPayments
     .filter(p => {
       const statusMatch = filterStatus === 'all' || p.status === filterStatus;
       const studentMatch = filterStudent === 'all' || p.studentId === filterStudent;
@@ -757,11 +809,18 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
       const result = await response.json();
       if (response.ok) {
         // 2. Escrita dupla: Atualizar no SQL (Fase 2)
-        fetch(`/api/admin/cobrancas/${targetId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ valor: newValor, vencimento: editDate, amount_original: newValor })
-        }).catch(err => console.warn('[Fase2:SQL] Erro ao sincronizar edição:', err));
+        try {
+          const sqlResp = await fetch(`/api/admin/cobrancas/${targetId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ valor: newValor, vencimento: editDate, amount_original: newValor })
+          });
+          if (!sqlResp.ok) {
+            console.warn('[Fase2:SQL] Erro ao sincronizar edição no SQL');
+          }
+        } catch (err) {
+          console.warn('[Fase2:SQL] Erro ao sincronizar edição:', err);
+        }
 
         // 3. Atualizar no JSON (manter compatibilidade)
         updateData({
@@ -1427,7 +1486,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
-                  {data.payments.filter(p => p.studentId === selectedStudentHistory.id).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).map(p => (
+                  {currentPayments.filter(p => p.studentId === selectedStudentHistory.id).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).map(p => (
                     <tr key={p.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3">
                         <div className="font-bold text-slate-700">{p.description || (p.type === 'monthly' ? 'Mensalidade' : 'Taxa')}</div>

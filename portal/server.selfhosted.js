@@ -14,6 +14,10 @@ import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import pg from 'pg';
+
+// Registrar parser global para tipo NUMERIC (OID 1700) para retornar como Number
+pg.types.setTypeParser(1700, (val) => val === null ? null : parseFloat(val));
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';

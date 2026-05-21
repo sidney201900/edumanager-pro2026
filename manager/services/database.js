@@ -6,6 +6,9 @@
  */
 import pg from 'pg';
 
+// Registrar parser global para tipo NUMERIC (OID 1700) para retornar como Number
+pg.types.setTypeParser(1700, (val) => val === null ? null : parseFloat(val));
+
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://edumanager:EduManager2026!Seguro@postgres:5432/edumanager';
 
 const pool = new pg.Pool({
