@@ -1247,19 +1247,18 @@ app.post('/api/excluir_cobranca', async (req, res) => {
     if (!isSinglePayment) {
       const asaasTargetId = formatInstallmentId(id);
       const resp = await fetch(`${ASAAS_BASE_URL}/v3/installments/${asaasTargetId}`, { method: 'DELETE', headers: { 'access_token': process.env.ASAAS_API_KEY } });
-      if (resp.ok) {
-        addLog('Asaas', 'Exclusão Parcelamento OK', { id: asaasTargetId });
-      }
-      await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_installment_id = $1', [asaasTargetId]);
+      if (!resp.ok) { const e = await resp.json().catch(() => ({})); return res.status(400).json({ error: e.errors?.[0]?.description || 'Falha Asaas' }); }
+      addLog('Asaas', 'Exclusão Parcelamento OK', { id: asaasTargetId });
+      // Deletar localmente apenas via webhook para não apagar antes de enviar o WhatsApp (Regra 34)
     } else {
       const resp = await fetch(`${ASAAS_BASE_URL}/v3/payments/${id}`, { method: 'DELETE', headers: { 'access_token': process.env.ASAAS_API_KEY } });
       if (!resp.ok) { const e = await resp.json().catch(() => ({})); return res.status(400).json({ error: e.errors?.[0]?.description || 'Falha Asaas' }); }
       
       addLog('Asaas', 'Exclusão Cobrança OK', { id });
-      await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = $1', [id]);
+      // Deletar localmente apenas via webhook para não apagar antes de enviar o WhatsApp (Regra 34)
     }
 
-    return res.status(200).json({ message: 'Excluído no Asaas e na base local' });
+    return res.status(200).json({ message: 'Exclusão solicitada ao Asaas. A remoção local ocorrerá via Webhook.' });
   } catch (error) {
     console.error('[Exclusão] Erro:', error);
     return res.status(500).json({ error: 'Erro interno.' });

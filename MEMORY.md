@@ -49,6 +49,7 @@
 - [x] **Migração do Módulo Financeiro para SQL (Fase 1 e 2):** Aba financeiro do Manager migrada para ler diretamente a tabela PostgreSQL `alunos_cobrancas` (via `currentPayments`).
 - [x] **Parser Global de NUMERIC (Postgres):** Configurado o driver `pg` nos servidores do Manager e do Portal para converter automaticamente `NUMERIC`/`DECIMAL` (OID 1700) para `Number`, cumprindo as regras 19 e 32 do `GEMINI.md`.
 - [x] **Resolução de Condição de Corrida:** Implementado `await` no update duplo de cobranças do SQL na edição de cobranças do Manager (`Finance.tsx`), assegurando consistência na re-busca de dados.
+- [x] **Ordem de Exclusão e Notificação (Regra 34):** Removida a exclusão local imediata no endpoint `/api/excluir_cobranca`. A remoção local é delegada ao webhook do Asaas, permitindo que a mensagem de WhatsApp acesse os dados necessários antes da deleção.
 - [x] **Validação de Build e Git Push:** Confirmada compilação bem-sucedida do frontend/backend e efetuado o push para a branch remota `main` sob autorização do usuário.
 
 ## 📋 Próximos Passos
