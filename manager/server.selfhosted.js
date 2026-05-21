@@ -906,7 +906,7 @@ app.delete('/api/admin/cobrancas', async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids)) return res.status(400).end();
-    await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = ANY($1)', [ids]);
+    await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = ANY($1) OR local_id = ANY($1)', [ids]);
     res.json({ success: true });
   } catch(e) {
      res.status(500).json({error: e.message});
@@ -915,7 +915,7 @@ app.delete('/api/admin/cobrancas', async (req, res) => {
 
 app.delete('/api/admin/cobrancas/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = $1 OR local_id = $1', [req.params.id]);
     res.json({ success: true });
   } catch(e) {
     res.status(500).json({error: e.message});
@@ -941,10 +941,10 @@ app.put('/api/admin/cobrancas/:id', async (req, res) => {
     if (amount_original !== undefined) { updates.push(`amount_original = $${paramIdx++}`); values.push(amount_original); }
 
     if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
-
+ 
     values.push(req.params.id);
     await pool.query(
-      `UPDATE alunos_cobrancas SET ${updates.join(', ')} WHERE asaas_payment_id = $${paramIdx}`,
+      `UPDATE alunos_cobrancas SET ${updates.join(', ')} WHERE asaas_payment_id = $${paramIdx} OR local_id = $${paramIdx}`,
       values
     );
     
@@ -1234,6 +1234,13 @@ app.post('/api/excluir_cobranca', async (req, res) => {
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: 'ID não fornecido' });
 
+    const isManual = id.startsWith('pay-');
+
+    if (isManual) {
+      await pool.query('DELETE FROM alunos_cobrancas WHERE local_id = $1', [id]);
+      return res.status(200).json({ message: 'Excluído na base local' });
+    }
+
     const parcelas = await getCobrancasByOrQuery(id);
     let isSinglePayment = id.startsWith('pay_');
 
@@ -1243,11 +1250,13 @@ app.post('/api/excluir_cobranca', async (req, res) => {
       if (resp.ok) {
         addLog('Asaas', 'Exclusão Parcelamento OK', { id: asaasTargetId });
       }
+      await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_installment_id = $1', [asaasTargetId]);
     } else {
       const resp = await fetch(`${ASAAS_BASE_URL}/v3/payments/${id}`, { method: 'DELETE', headers: { 'access_token': process.env.ASAAS_API_KEY } });
       if (!resp.ok) { const e = await resp.json().catch(() => ({})); return res.status(400).json({ error: e.errors?.[0]?.description || 'Falha Asaas' }); }
       
       addLog('Asaas', 'Exclusão Cobrança OK', { id });
+      await pool.query('DELETE FROM alunos_cobrancas WHERE asaas_payment_id = $1', [id]);
     }
 
     return res.status(200).json({ message: 'Excluído no Asaas e na base local' });
@@ -1309,17 +1318,24 @@ app.put('/api/cobrancas/:id', async (req, res) => {
       if (parcelas.length > 0 && parcelas[0].asaas_payment_id) targetAsaasId = parcelas[0].asaas_payment_id;
     }
 
-    const aResp = await fetch(`${ASAAS_BASE_URL}/v3/payments/${targetAsaasId}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'access_token': process.env.ASAAS_API_KEY },
-      body: JSON.stringify({ value: valor, dueDate: vencimento })
-    });
-    if (!aResp.ok) { const err = await aResp.json().catch(() => ({})); return res.status(400).json({ error: err.errors?.[0]?.description || 'Erro Asaas' }); }
+    const isAsaasPayment = targetAsaasId && targetAsaasId.startsWith('pay_');
 
-    const queryField = isUUID(id) ? 'id' : 'asaas_payment_id';
+    if (isAsaasPayment) {
+      const aResp = await fetch(`${ASAAS_BASE_URL}/v3/payments/${targetAsaasId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'access_token': process.env.ASAAS_API_KEY },
+        body: JSON.stringify({ value: valor, dueDate: vencimento })
+      });
+      if (!aResp.ok) { const err = await aResp.json().catch(() => ({})); return res.status(400).json({ error: err.errors?.[0]?.description || 'Erro Asaas' }); }
+    }
+
+    const queryField = isUUID(id) ? 'id' : (id.startsWith('pay_') ? 'asaas_payment_id' : 'local_id');
     await updateCobrancaByField(queryField, id, { valor, vencimento });
 
     res.json({ message: 'Editado com sucesso' });
-  } catch (e) { res.status(500).json({ error: 'Erro interno.' }); }
+  } catch (e) { 
+    console.error('[cobrancas:PUT] Erro:', e);
+    res.status(500).json({ error: 'Erro interno.' }); 
+  }
 });
 
 app.get('/api/alunos/:id/carne', async (req, res) => {
@@ -1797,7 +1813,11 @@ async function syncRelationalToJsonPayments() {
     if (!appData || !appData.payments) return;
 
     const updatedPayments = appData.payments.map(p => {
-      const match = cloudPayments.find(cp => cp.asaas_payment_id === p.asaasPaymentId);
+      const match = cloudPayments.find(cp => {
+        if (p.asaasPaymentId && cp.asaas_payment_id === p.asaasPaymentId) return true;
+        if (p.id && cp.local_id === p.id) return true;
+        return false;
+      });
       if (match) {
         const statusStr = (match.status || '').toLowerCase();
         const newStatus = statusStr === 'pago' ? 'paid' :

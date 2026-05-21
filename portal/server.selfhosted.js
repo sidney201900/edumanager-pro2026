@@ -248,28 +248,33 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
 
     // Criar mapa rápido do JSON por asaasPaymentId para lookup
     const jsonMap = {};
+    const jsonLocalMap = {}; // Novo mapa por ID local do JSON
     for (const jp of jsonPayments) {
       const key = jp.asaasPaymentId || jp.asaas_payment_id;
       if (key) jsonMap[key] = jp;
+      if (jp.id) jsonLocalMap[jp.id] = jp;
     }
-
+ 
     // 3. CONSTRUIR LISTA FINAL: SQL como base, enriquecido com JSON quando SQL não tem o campo
     const seenAsaasIds = new Set();
+    const seenLocalIds = new Set(); // Evitar duplicar itens adicionados por local_id
     const finalPayments = [];
-
+ 
     // 3a. Iterar sobre registros do SQL (fonte da verdade)
     for (const db of dbRows) {
       const asaasId = db.asaas_payment_id;
-      seenAsaasIds.add(asaasId);
-
-      const jsonP = jsonMap[asaasId] || {};
+      const localId = db.local_id;
+      if (asaasId) seenAsaasIds.add(asaasId);
+      if (localId) seenLocalIds.add(localId);
+ 
+      const jsonP = (asaasId ? jsonMap[asaasId] : null) || (localId ? jsonLocalMap[localId] : null) || {};
       const dbStatus = (db.status || '').toLowerCase().trim();
       const normalizedStatus = statusMap[dbStatus] || 'pending';
-
+ 
       // Parcela: SQL tem prioridade, depois JSON, depois inferência por grupo
       let installmentNumber = db.installment_number || jsonP.installmentNumber || null;
       let totalInstallments = db.total_installments || jsonP.totalInstallments || null;
-
+ 
       if (!installmentNumber && db.asaas_installment_id) {
         const siblings = dbRows.filter(r => r.asaas_installment_id === db.asaas_installment_id);
         if (siblings.length > 1) {
@@ -277,7 +282,7 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
           installmentNumber = siblings.indexOf(db) + 1;
         }
       }
-
+ 
       // [Bugfix Crítico]: Recuperar valor bruto se o Asaas/Webhook salvou apenas o líquido
       const discount = jsonP.discount !== undefined ? Number(jsonP.discount) : (Number(db.discount) || 0);
       const isPaid = ['paid', 'pago', 'received', 'confirmed'].includes(normalizedStatus);
@@ -289,7 +294,7 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         Number(db.valor || 0), 
         Number(jsonP.amount || 0)
       );
-
+ 
       // Se o valor bruto encontrado é igual ao que foi pago, e existe desconto,
       // então o que encontramos era na verdade o valor líquido. Recuperamos o bruto somando o desconto.
       if (isPaid && discount > 0 && amountBruto > 0) {
@@ -300,11 +305,11 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
            amountBruto = Number(jsonP.amount) + discount;
         }
       }
-
+ 
       finalPayments.push({
-        id: jsonP.id || asaasId,
+        id: localId || jsonP.id || asaasId,
         studentId: req.user.studentId,
-        asaasPaymentId: asaasId,
+        asaasPaymentId: asaasId || null,
         asaasPaymentUrl: db.asaas_payment_url || jsonP.asaasPaymentUrl || null,
         amount: amountBruto,
         discount: discount,
@@ -320,16 +325,17 @@ app.get('/api/portal/financeiro', authMiddleware, async (req, res) => {
         transactionReceiptUrl: db.transaction_receipt_url || jsonP.transactionReceiptUrl || null,
       });
     }
-
+ 
     // 3b. Adicionar pagamentos que existem APENAS no JSON (cobranças manuais/legadas sem asaas)
     for (const jp of jsonPayments) {
       const key = jp.asaasPaymentId || jp.asaas_payment_id;
       if (key && seenAsaasIds.has(key)) continue; // já processado
+      if (jp.id && seenLocalIds.has(jp.id)) continue; // já processado via local_id
       if (!key && !jp.id) continue; // registro inválido
-
+ 
       const jpStatus = (jp.status || '').toLowerCase().trim();
       const normalizedStatus = statusMap[jpStatus] || 'pending';
-
+ 
       finalPayments.push({
         ...jp,
         status: normalizedStatus,

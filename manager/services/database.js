@@ -412,6 +412,8 @@ export async function syncJsonToRelationalTables() {
 
     // 0. Garantir esquema atualizado
     await client.query('ALTER TABLE alunos_cobrancas ADD COLUMN IF NOT EXISTS valor_pago NUMERIC(10,2) DEFAULT 0');
+    await client.query('ALTER TABLE alunos_cobrancas ADD COLUMN IF NOT EXISTS local_id VARCHAR(255)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_cobrancas_local_id ON alunos_cobrancas(local_id)');
     
     // 1. Sincronizar Perfil da Escola (Configurações)
     if (data.periods && Array.isArray(data.periods)) {
@@ -546,7 +548,7 @@ export async function syncJsonToRelationalTables() {
     // 8. Sincronizar Cobranças (Financeiro) — com campos ricos para migração SQL-First
     if (data.payments && Array.isArray(data.payments)) {
       for (const p of data.payments) {
-        if (!p.asaasPaymentId || !p.studentId) continue;
+        if (!p.studentId || !p.id) continue;
         
         // Normalizar status para o padrão SQL (maiúsculas)
         const rawStatus = (p.status || 'pending').toLowerCase();
@@ -566,52 +568,120 @@ export async function syncJsonToRelationalTables() {
           valorPago = Number(p.valor_pago || 0) || (amount - discount);
         }
 
-        await client.query(
-          `INSERT INTO alunos_cobrancas (
-            aluno_id, asaas_payment_id, asaas_installment_id, installment, 
-            valor, vencimento, link_boleto, status,
-            description, type, discount, installment_number, total_installments,
-            contract_id, asaas_payment_url, amount_original, data_pagamento, valor_pago
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-          ON CONFLICT (asaas_payment_id) DO UPDATE SET 
-            aluno_id = EXCLUDED.aluno_id,
-            asaas_installment_id = COALESCE(EXCLUDED.asaas_installment_id, alunos_cobrancas.asaas_installment_id),
-            installment = COALESCE(EXCLUDED.installment, alunos_cobrancas.installment),
-            valor = EXCLUDED.valor,
-            vencimento = EXCLUDED.vencimento,
-            link_boleto = COALESCE(EXCLUDED.link_boleto, alunos_cobrancas.link_boleto),
-            status = CASE WHEN alunos_cobrancas.status = 'PAGO' THEN alunos_cobrancas.status ELSE EXCLUDED.status END,
-            description = COALESCE(EXCLUDED.description, alunos_cobrancas.description),
-            type = COALESCE(EXCLUDED.type, alunos_cobrancas.type),
-            discount = COALESCE(EXCLUDED.discount, alunos_cobrancas.discount),
-            installment_number = COALESCE(EXCLUDED.installment_number, alunos_cobrancas.installment_number),
-            total_installments = COALESCE(EXCLUDED.total_installments, alunos_cobrancas.total_installments),
-            contract_id = COALESCE(EXCLUDED.contract_id, alunos_cobrancas.contract_id),
-            asaas_payment_url = COALESCE(EXCLUDED.asaas_payment_url, alunos_cobrancas.asaas_payment_url),
-            amount_original = COALESCE(EXCLUDED.amount_original, alunos_cobrancas.amount_original),
-            data_pagamento = COALESCE(EXCLUDED.data_pagamento, alunos_cobrancas.data_pagamento),
-            valor_pago = EXCLUDED.valor_pago`,
-          [
-            p.studentId, 
-            p.asaasPaymentId, 
-            p.asaasInstallmentId || p.installmentId || null, 
-            p.installment || null,
-            valorBruto, 
-            p.dueDate, 
-            p.bankSlipUrl || p.link || null, 
-            sqlStatus,
-            p.description || null,
-            p.type || 'monthly',
-            discount,
-            p.installmentNumber || null,
-            p.totalInstallments || null,
-            p.contractId || null,
-            p.asaasPaymentUrl || null,
-            valorBruto,
-            p.paidDate || null,
-            valorPago
-          ]
-        ).catch(err => console.warn(`[Sync:Finance] Erro no boleto ${p.asaasPaymentId}:`, err.message));
+        if (p.asaasPaymentId) {
+          // Cobrança vinculada ao Asaas (usa ON CONFLICT em asaas_payment_id)
+          await client.query(
+            `INSERT INTO alunos_cobrancas (
+              local_id, aluno_id, asaas_payment_id, asaas_installment_id, installment, 
+              valor, vencimento, link_boleto, status,
+              description, type, discount, installment_number, total_installments,
+              contract_id, asaas_payment_url, amount_original, data_pagamento, valor_pago
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            ON CONFLICT (asaas_payment_id) DO UPDATE SET 
+              local_id = COALESCE(EXCLUDED.local_id, alunos_cobrancas.local_id),
+              aluno_id = EXCLUDED.aluno_id,
+              asaas_installment_id = COALESCE(EXCLUDED.asaas_installment_id, alunos_cobrancas.asaas_installment_id),
+              installment = COALESCE(EXCLUDED.installment, alunos_cobrancas.installment),
+              valor = EXCLUDED.valor,
+              vencimento = EXCLUDED.vencimento,
+              link_boleto = COALESCE(EXCLUDED.link_boleto, alunos_cobrancas.link_boleto),
+              status = CASE WHEN alunos_cobrancas.status = 'PAGO' THEN alunos_cobrancas.status ELSE EXCLUDED.status END,
+              description = COALESCE(EXCLUDED.description, alunos_cobrancas.description),
+              type = COALESCE(EXCLUDED.type, alunos_cobrancas.type),
+              discount = COALESCE(EXCLUDED.discount, alunos_cobrancas.discount),
+              installment_number = COALESCE(EXCLUDED.installment_number, alunos_cobrancas.installment_number),
+              total_installments = COALESCE(EXCLUDED.total_installments, alunos_cobrancas.total_installments),
+              contract_id = COALESCE(EXCLUDED.contract_id, alunos_cobrancas.contract_id),
+              asaas_payment_url = COALESCE(EXCLUDED.asaas_payment_url, alunos_cobrancas.asaas_payment_url),
+              amount_original = COALESCE(EXCLUDED.amount_original, alunos_cobrancas.amount_original),
+              data_pagamento = COALESCE(EXCLUDED.data_pagamento, alunos_cobrancas.data_pagamento),
+              valor_pago = EXCLUDED.valor_pago`,
+            [
+              p.id,
+              p.studentId, 
+              p.asaasPaymentId, 
+              p.asaasInstallmentId || p.installmentId || null, 
+              p.installment || null,
+              valorBruto, 
+              p.dueDate, 
+              p.bankSlipUrl || p.link || null, 
+              sqlStatus,
+              p.description || null,
+              p.type || 'monthly',
+              discount,
+              p.installmentNumber || null,
+              p.totalInstallments || null,
+              p.contractId || null,
+              p.asaasPaymentUrl || null,
+              valorBruto,
+              p.paidDate || null,
+              valorPago
+            ]
+          ).catch(err => console.warn(`[Sync:Finance] Erro no boleto Asaas ${p.asaasPaymentId}:`, err.message));
+        } else {
+          // Cobrança manual (sem asaasPaymentId)
+          // Verificamos por local_id para evitar duplicação
+          const existing = await client.query('SELECT id FROM alunos_cobrancas WHERE local_id = $1', [p.id]);
+          if (existing.rows.length > 0) {
+            await client.query(
+              `UPDATE alunos_cobrancas SET
+                aluno_id = $1,
+                valor = $2,
+                vencimento = $3,
+                status = $4,
+                description = $5,
+                type = $6,
+                discount = $7,
+                installment_number = $8,
+                total_installments = $9,
+                contract_id = $10,
+                amount_original = $11,
+                data_pagamento = $12,
+                valor_pago = $13
+              WHERE local_id = $14`,
+              [
+                p.studentId,
+                valorBruto,
+                p.dueDate,
+                sqlStatus,
+                p.description || null,
+                p.type || 'monthly',
+                discount,
+                p.installmentNumber || null,
+                p.totalInstallments || null,
+                p.contractId || null,
+                valorBruto,
+                p.paidDate || null,
+                valorPago,
+                p.id
+              ]
+            ).catch(err => console.warn(`[Sync:Finance] Erro ao atualizar boleto manual ${p.id}:`, err.message));
+          } else {
+            await client.query(
+              `INSERT INTO alunos_cobrancas (
+                local_id, aluno_id, valor, vencimento, status,
+                description, type, discount, installment_number, total_installments,
+                contract_id, amount_original, data_pagamento, valor_pago
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+              [
+                p.id,
+                p.studentId,
+                valorBruto,
+                p.dueDate,
+                sqlStatus,
+                p.description || null,
+                p.type || 'monthly',
+                discount,
+                p.installmentNumber || null,
+                p.totalInstallments || null,
+                p.contractId || null,
+                valorBruto,
+                p.paidDate || null,
+                valorPago
+              ]
+            ).catch(err => console.warn(`[Sync:Finance] Erro ao inserir boleto manual ${p.id}:`, err.message));
+          }
+        }
       }
     }
 

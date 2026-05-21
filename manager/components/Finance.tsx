@@ -1112,10 +1112,33 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                               {new Date(payment.dueDate + 'T12:00:00Z').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                             </td>
                             <td className="px-4 py-4">
-                              <div className="font-bold text-slate-700 text-sm">R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                              {!!payment.discount && payment.discount > 0 && (
-                                <div className="text-[10px] text-emerald-600 font-bold">- R$ {payment.discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                              )}
+                              {(() => {
+                                const isPaid = ['paid', 'pago', 'received', 'confirmed'].includes((payment.status || '').toLowerCase());
+                                const valorPago = Number((payment as any).valor_pago || 0);
+                                const discount = Number(payment.discount || 0);
+
+                                if (isPaid) {
+                                  const displayValue = valorPago > 0 ? valorPago : (payment.amount - discount);
+                                  return (
+                                    <div className="font-bold text-slate-700 text-sm">
+                                      R$ {displayValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <>
+                                      <div className="font-bold text-slate-700 text-sm">
+                                        R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                      </div>
+                                      {discount > 0 && (
+                                        <div className="text-[10px] text-emerald-600 font-bold">
+                                          - R$ {discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                }
+                              })()}
                             </td>
                             <td className="px-4 py-4">{getStatusBadge(payment)}</td>
                             <td className="px-4 py-4">
@@ -1187,31 +1210,33 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
                       </td>
                       <td className="px-4 py-5 text-slate-600 text-sm">{new Date(payment.dueDate + 'T12:00:00Z').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
                       <td className="px-4 py-5">
-                        <div className="font-black text-slate-900 text-sm">
-                          R$ {(() => {
-                            const amt = Number(payment.amount);
-                            const disc = Number(payment.discount || 0);
-                            const status = (payment.status || '').toLowerCase();
-                            const isPaid = status === 'paid' || status === 'pago' || status === 'received' || status === 'confirmed';
-                            const amtOrig = (payment as any).amount_original ? Number((payment as any).amount_original) : 0;
-                            const valorPago = (payment as any).valor_pago ? Number((payment as any).valor_pago) : 0;
-                            
-                            let bruto = amt;
-                            if (amtOrig > bruto) bruto = amtOrig;
-                            // Se está pago e o bruto atual parece ser o líquido, recompomos
-                            if (isPaid && disc > 0 && bruto > 0 && (bruto === valorPago || (valorPago === 0 && bruto === amt))) {
-                               bruto += disc;
-                            }
-                            
-                            return bruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-                          })()}
-                        </div>
-                        {!!payment.discount && payment.discount > 0 && <div className="text-[10px] text-emerald-600 font-bold">- R$ {payment.discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>}
-                        {(payment as any).valor_pago > 0 && (
-                          <div className="text-[10px] text-blue-600 font-black mt-1 bg-blue-50 px-1 rounded inline-block">
-                            PAGO: R$ {Number((payment as any).valor_pago).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </div>
-                        )}
+                        {(() => {
+                          const isPaid = ['paid', 'pago', 'received', 'confirmed'].includes((payment.status || '').toLowerCase());
+                          const valorPago = Number((payment as any).valor_pago || 0);
+                          const discount = Number(payment.discount || 0);
+
+                          if (isPaid) {
+                            const displayValue = valorPago > 0 ? valorPago : (payment.amount - discount);
+                            return (
+                              <div className="font-black text-slate-900 text-sm">
+                                R$ {displayValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <>
+                                <div className="font-black text-slate-900 text-sm">
+                                  R$ {payment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </div>
+                                {discount > 0 && (
+                                  <div className="text-[10px] text-emerald-600 font-bold">
+                                    - R$ {discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          }
+                        })()}
                       </td>
                       <td className="px-4 py-5">{getStatusBadge(payment)}</td>
                       <td className="px-4 py-5">
