@@ -46,14 +46,15 @@
 - [x] **Rastreamento de Justificativas:** Implementado campo `submittedAt` para gravar o momento exato do envio da justificativa (JSON e SQL).
 - [x] **Detalhamento de Envio:** Portal agora exibe "Enviada em: DD/MM às HH:MM" na lista de frequência para transparência do aluno.
 
-## 📋 Próximos Passos
-- [ ] Iniciar a migração do módulo Financeiro para 100% SQL seguindo o padrão do Boletim.
+- [x] **Migração do Módulo Financeiro para SQL (Fase 1 e 2):** Aba financeiro do Manager migrada para ler diretamente a tabela PostgreSQL `alunos_cobrancas` (via `currentPayments`).
+- [x] **Parser Global de NUMERIC (Postgres):** Configurado o driver `pg` nos servidores do Manager e do Portal para converter automaticamente `NUMERIC`/`DECIMAL` (OID 1700) para `Number`, cumprindo as regras 19 e 32 do `GEMINI.md`.
+- [x] **Resolução de Condição de Corrida:** Implementado `await` no update duplo de cobranças do SQL na edição de cobranças do Manager (`Finance.tsx`), assegurando consistência na re-busca de dados.
+- [x] **Validação de Build e Git Push:** Confirmada compilação bem-sucedida do frontend/backend e efetuado o push para a branch remota `main` sob autorização do usuário.
 
-- [ ] Módulo Financeiro SQL: Iniciar a migração total do financeiro para PostgreSQL (padrão `notas_boletim`).
-- [x] **Correção de Notas (Boletim):** Resolvido `ReferenceError: subsMap is not defined` que impedia o carregamento das notas individuais.
-- [x] **Git Push Realizado:** Correções de escopo enviadas ao repositório.
-- [ ] **Monitoramento:** Validar a exibição das notas após o reinício dos containers.
+## 📋 Próximos Passos
+- [ ] Módulo Financeiro SQL: Concluir as fases avançadas de migração (ex: extratos consolidados e conciliação em lote baseados 100% em queries SQL).
 - [ ] Otimização de Build: Re-explorar o cache do Docker.
+- [ ] Monitoramento: Validar a exibição das notas após o reinício dos containers.
 
 ## 📅 Histórico Anterior (06/05/2026 - 08/05/2026)
 - [x] Estabilização de CI/CD: Transição para `runs-on: self-hosted` (ARM64 nativo) eliminando lentidão e crashes do QEMU.
