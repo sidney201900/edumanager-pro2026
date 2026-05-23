@@ -410,12 +410,16 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                       const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
                       const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
 
-                      const matchedRecord = studentActualRecords.find(a => {
+                      const matchingRecords = studentActualRecords.filter(a => {
                         if ((a as any).lessonId === lesson.id) return true;
                         if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
                         const recordTime = new Date(a.date);
                         return recordTime >= lessonStart && recordTime <= lessonEnd;
                       });
+
+                      const matchedRecord = matchingRecords.find(a => a.type === 'presence' || !a.type) ||
+                                            matchingRecords.find(a => a.type === 'absence' && a.justificationAccepted) ||
+                                            matchingRecords[0];
 
                     if (matchedRecord) {
                       if (matchedRecord.type === 'absence') {
@@ -524,12 +528,16 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                   const lessonStart = new Date(lesson.date + 'T' + (lesson.startTime || '00:00') + ':00');
                   const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
                   // Regra Estrita: Comparação exata com o horário da aula (sem 30 min de tolerância)
-                  let record = actualRecords.find(a => {
+                  const matchingRecords = actualRecords.filter(a => {
                     if ((a as any).lessonId === lesson.id) return true;
                     if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
                     const recordTime = new Date(a.date);
                     return recordTime >= lessonStart && recordTime <= lessonEnd;
                   });
+
+                  let record = matchingRecords.find(a => a.type === 'presence' || !a.type) ||
+                               matchingRecords.find(a => a.type === 'absence' && a.justificationAccepted) ||
+                               matchingRecords[0];
 
                   if (!record && now >= lessonStart) {
                     const isFinished = now > lessonEnd;

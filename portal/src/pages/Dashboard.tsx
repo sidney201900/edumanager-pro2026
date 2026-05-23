@@ -88,13 +88,17 @@ export default function Dashboard() {
         const lessonEnd = new Date(lesson.date + 'T' + (lesson.endTime || '23:59') + ':00');
         const presenceStartWindow = new Date(lessonStart.getTime() - 30 * 60 * 1000);
 
-        const att = data.attendance.find(a => {
+        const matchingAtts = data.attendance.filter(a => {
           if (!a.date || typeof a.date !== 'string') return false;
           if ((a as any).lessonId === lesson.id) return true;
           if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
           const recordTime = new Date(a.date);
           return recordTime >= presenceStartWindow && recordTime <= lessonEnd;
         });
+
+        const att = matchingAtts.find(a => a.type === 'presence' || (a.verified === true && a.type !== 'absence')) ||
+                    matchingAtts.find(a => a.type === 'absence' && a.justificationAccepted) ||
+                    matchingAtts[0];
 
         // Mesma lógica de presença da página de Frequência (exclui type: 'absence')
         const isPresent = att && (att.type === 'presence' || (att.verified === true && att.type !== 'absence'));

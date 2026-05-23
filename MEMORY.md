@@ -51,6 +51,7 @@
 - [x] **Resolução de Condição de Corrida:** Implementado `await` no update duplo de cobranças do SQL na edição de cobranças do Manager (`Finance.tsx`), assegurando consistência na re-busca de dados.
 - [x] **Ordem de Exclusão e Notificação (Regra 34):** Removida a exclusão local imediata no endpoint `/api/excluir_cobranca`. A remoção local é delegada ao webhook do Asaas, permitindo que a mensagem de WhatsApp acesse os dados necessários antes da deleção.
 - [x] **Limpeza de Faltas no Reagendamento:** Ajustada a função `handleRescheduleLesson` no `LessonSchedule.tsx` para filtrar e deletar automaticamente do banco de dados/estado todas as faltas geradas de forma automática para uma aula que estava no passado e foi reagendada para o futuro.
+- [x] **Correção das Presenças por Biometria:** Resolvido o bug onde as presenças por biometria apareciam como faltas. Corrigido o fuso horário de comparação do fim da aula no servidor (`processAutoAbsences`), adicionada a rotina de auto-limpeza de faltas duplicadas auto-geradas ao salvar ou confirmar presenças, priorizado a exibição de presenças sobre faltas nas interfaces (Manager e Portal), e garantida a gravação do ID da aula (`aula_id`) na sincronização relacional das frequências.
 - [x] **Validação de Build e Git Push:** Confirmada compilação bem-sucedida do frontend/backend e efetuado o push para a branch remota `main` sob autorização do usuário.
 
 ## 📋 Próximos Passos

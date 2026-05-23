@@ -149,8 +149,8 @@ export default function Frequencia() {
     const lessonStartMs = parseLessonDateTime(lesson.date, lesson.startTime || '00:00', 0);
     const lessonEndMs = parseLessonDateTime(lesson.date, lesson.endTime || '23:59', 23);
 
-    // Buscar registro com a MESMA lógica do Manager (find, não filter)
-    let record = attendance.find(a => {
+    // Buscar registros com a lógica priorizando presença
+    const matchingRecords = attendance.filter(a => {
       if (!a.date || typeof a.date !== 'string') return false;
       // 1. Match por lessonId (se existir)
       if ((a as any).lessonId === lesson.id) return true;
@@ -161,14 +161,19 @@ export default function Frequencia() {
       return recordTimeMs >= lessonStartMs && recordTimeMs <= lessonEndMs;
     });
 
+    let record = matchingRecords.find(a => a.type === 'presence' || (a.verified === true && a.type !== 'absence')) ||
+                 matchingRecords.find(a => a.type === 'absence' && a.justificationAccepted) ||
+                 matchingRecords[0];
+
     // Se não encontrou registro real, verificar se precisa de justificativa associada
     if (!record) {
-      record = attendance.find(a => {
+      const matchingJustifications = attendance.filter(a => {
         if (!a.date || typeof a.date !== 'string' || !a.justification) return false;
         if (a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`) return true;
         const recordTimeMs = new Date(a.date).getTime();
         return recordTimeMs >= lessonStartMs && recordTimeMs <= lessonEndMs;
-      }) || undefined;
+      });
+      record = matchingJustifications[0];
     }
 
     const { isInProgress, isCompleted } = getLessonTimeStatus(lesson, now);
