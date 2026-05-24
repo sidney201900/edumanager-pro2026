@@ -1,14 +1,9 @@
-import React, { useState } from 'react';
-import { SchoolData, Employee, EmployeeCategory } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Employee, EmployeeCategory } from '../types';
 import { Plus, Edit2, Trash2, X, Search, Users, Briefcase, Calendar, Phone, Mail, FileText, Settings2 } from 'lucide-react';
 import { useDialog } from '../DialogContext';
 
-interface EmployeesProps {
-  data: SchoolData;
-  updateData: (newData: Partial<SchoolData>) => void;
-}
-
-const Employees: React.FC<EmployeesProps> = ({ data, updateData }) => {
+const Employees: React.FC = () => {
   const { showAlert, showConfirm } = useDialog();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -28,8 +23,49 @@ const Employees: React.FC<EmployeesProps> = ({ data, updateData }) => {
 
   const [categoryFormData, setCategoryFormData] = useState({ name: '' });
 
-  const employees = data.employees || [];
-  const categories = data.employeeCategories || [];
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [categories, setCategories] = useState<EmployeeCategory[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  const loadData = async () => {
+    try {
+      setIsLoadingData(true);
+      const [empRes, catRes] = await Promise.all([
+        fetch('/api/funcionarios'),
+        fetch('/api/categorias_funcionarios')
+      ]);
+      const empData = await empRes.json();
+      const catData = await catRes.json();
+      
+      // Mapeamento caso a API retorne os nomes das colunas diferentes do TS
+      const mappedEmployees = (empData.funcionarios || []).map((e: any) => ({
+        id: e.id,
+        name: e.nome,
+        cpf: e.cpf,
+        email: e.email,
+        phone: e.telefone,
+        admissionDate: e.data_admissao ? e.data_admissao.substring(0, 10) : '',
+        categoryId: e.categoria_id
+      }));
+
+      const mappedCategories = (catData.categorias || []).map((c: any) => ({
+        id: c.id,
+        name: c.nome
+      }));
+
+      setEmployees(mappedEmployees);
+      setCategories(mappedCategories);
+    } catch (err) {
+      console.error('Erro ao buscar funcionários/categorias:', err);
+      showAlert('Erro', 'Não foi possível carregar a lista do servidor.', 'error');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const filteredEmployees = employees.filter(emp =>
     (emp.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
@@ -77,15 +113,20 @@ const Employees: React.FC<EmployeesProps> = ({ data, updateData }) => {
     showConfirm(
       'Remover Funcionário',
       `Tem certeza que deseja remover ${emp.name}?`,
-      () => {
-        const updatedEmployees = employees.filter(e => e.id !== emp.id);
-        updateData({ employees: updatedEmployees });
-        showAlert('Sucesso', 'Funcionário removido com sucesso.', 'success');
+      async () => {
+        try {
+          const res = await fetch(`/api/funcionarios/${emp.id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Falha ao excluir');
+          await loadData();
+          showAlert('Sucesso', 'Funcionário removido com sucesso.', 'success');
+        } catch (error) {
+          showAlert('Erro', 'Ocorreu um erro ao excluir o funcionário.', 'error');
+        }
       }
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.categoryId) {
@@ -93,41 +134,66 @@ const Employees: React.FC<EmployeesProps> = ({ data, updateData }) => {
       return;
     }
 
-    if (editingEmployee) {
-      const updatedEmployees = employees.map(emp =>
-        emp.id === editingEmployee.id ? { ...formData, id: emp.id } : emp
-      );
-      updateData({ employees: updatedEmployees });
-      showAlert('Sucesso', 'Funcionário atualizado com sucesso.', 'success');
-    } else {
-      const newEmployee: Employee = {
-        ...formData,
-        id: crypto.randomUUID()
-      };
-      updateData({ employees: [...employees, newEmployee] });
-      showAlert('Sucesso', 'Funcionário cadastrado com sucesso.', 'success');
+    const payload = {
+      nome: formData.name,
+      cpf: formData.cpf,
+      email: formData.email,
+      telefone: formData.phone,
+      data_admissao: formData.admissionDate,
+      categoria_id: formData.categoryId
+    };
+
+    try {
+      if (editingEmployee) {
+        const res = await fetch(`/api/funcionarios/${editingEmployee.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Failed to update');
+        showAlert('Sucesso', 'Funcionário atualizado com sucesso.', 'success');
+      } else {
+        const res = await fetch('/api/funcionarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, id: crypto.randomUUID() })
+        });
+        if (!res.ok) throw new Error('Failed to create');
+        showAlert('Sucesso', 'Funcionário cadastrado com sucesso.', 'success');
+      }
+      await loadData();
+      closeModal();
+    } catch (err) {
+      showAlert('Erro', 'Ocorreu um problema de comunicação com a API.', 'error');
     }
-    closeModal();
   };
 
-  const handleCategorySubmit = (e: React.FormEvent) => {
+  const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!categoryFormData.name.trim()) return;
 
-    if (editingCategory) {
-      const updatedCategories = categories.map(cat =>
-        cat.id === editingCategory.id ? { ...cat, name: categoryFormData.name } : cat
-      );
-      updateData({ employeeCategories: updatedCategories });
-    } else {
-      const newCategory: EmployeeCategory = {
-        id: crypto.randomUUID(),
-        name: categoryFormData.name
-      };
-      updateData({ employeeCategories: [...categories, newCategory] });
+    try {
+      if (editingCategory) {
+        const res = await fetch(`/api/categorias_funcionarios/${editingCategory.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nome: categoryFormData.name })
+        });
+        if (!res.ok) throw new Error('Failed to update');
+      } else {
+        const res = await fetch('/api/categorias_funcionarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: crypto.randomUUID(), nome: categoryFormData.name })
+        });
+        if (!res.ok) throw new Error('Failed to create');
+      }
+      await loadData();
+      setCategoryFormData({ name: '' });
+      setEditingCategory(null);
+    } catch (err) {
+      showAlert('Erro', 'Ocorreu um erro ao salvar categoria.', 'error');
     }
-    setCategoryFormData({ name: '' });
-    setEditingCategory(null);
   };
 
   const handleDeleteCategory = (cat: EmployeeCategory) => {
@@ -140,9 +206,14 @@ const Employees: React.FC<EmployeesProps> = ({ data, updateData }) => {
     showConfirm(
       'Remover Categoria',
       `Deseja remover a categoria "${cat.name}"?`,
-      () => {
-        const updatedCategories = categories.filter(c => c.id !== cat.id);
-        updateData({ employeeCategories: updatedCategories });
+      async () => {
+        try {
+          const res = await fetch(`/api/categorias_funcionarios/${cat.id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Failed to delete');
+          await loadData();
+        } catch (err) {
+          showAlert('Erro', 'Ocorreu um erro ao excluir a categoria.', 'error');
+        }
       }
     );
   };
@@ -154,7 +225,7 @@ const Employees: React.FC<EmployeesProps> = ({ data, updateData }) => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Funcionários</h2>
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Funcionários <span className="text-sm font-normal text-green-600 bg-green-50 px-2 py-1 rounded-md ml-2 border border-green-200">PostgreSQL</span></h2>
           <p className="text-slate-500">Gerencie sua equipe e categorias profissionais.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
@@ -252,7 +323,7 @@ const Employees: React.FC<EmployeesProps> = ({ data, updateData }) => {
         })}
       </div>
 
-      {employees.length === 0 && (
+      {!isLoadingData && employees.length === 0 && (
         <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center">
           <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
             <Users size={40} />

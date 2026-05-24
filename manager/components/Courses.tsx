@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SchoolData, Course } from '../types';
 import { useDialog } from '../DialogContext';
 import { Plus, Edit2, Trash2, X, Clock, DollarSign, BookText, Info, AlertTriangle } from 'lucide-react';
 
 interface CoursesProps {
-  data: SchoolData;
+  data: SchoolData; // mantido para classes e afins
   updateData: (newData: Partial<SchoolData>) => void;
 }
 
@@ -30,7 +30,41 @@ const Courses: React.FC<CoursesProps> = ({ data, updateData }) => {
     return match ? parseInt(match[0]) : 12;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  const loadData = async () => {
+    try {
+      setIsLoadingData(true);
+      const res = await fetch('/api/cursos');
+      const json = await res.json();
+      
+      const mappedCourses = (json.cursos || []).map((c: any) => ({
+        id: c.id,
+        name: c.nome,
+        duration: c.duracao,
+        durationMonths: c.duracao_meses,
+        registrationFee: Number(c.taxa_matricula || 0),
+        monthlyFee: Number(c.mensalidade || 0),
+        description: c.descricao,
+        finePercentage: Number(c.multa_percentual || 0),
+        interestPercentage: Number(c.juros_percentual || 0)
+      }));
+
+      setCourses(mappedCourses);
+    } catch (err) {
+      console.error('Erro ao buscar cursos:', err);
+      showAlert('Erro', 'Falha ao carregar cursos do servidor.', 'error');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.duration || formData.monthlyFee <= 0) {
@@ -45,14 +79,38 @@ const Courses: React.FC<CoursesProps> = ({ data, updateData }) => {
       durationMonths: calculatedMonths 
     };
 
-    if (editingCourse) {
-      const updated = data.courses.map(c => c.id === editingCourse.id ? { ...finalData, id: c.id } : c);
-      updateData({ courses: updated });
-    } else {
-      const newCourse: Course = { ...finalData, id: crypto.randomUUID() };
-      updateData({ courses: [...data.courses, newCourse] });
+    const payload = {
+      nome: finalData.name,
+      duracao: finalData.duration,
+      duracao_meses: finalData.durationMonths,
+      taxa_matricula: finalData.registrationFee,
+      mensalidade: finalData.monthlyFee,
+      descricao: finalData.description,
+      multa_percentual: finalData.finePercentage,
+      juros_percentual: finalData.interestPercentage
+    };
+
+    try {
+      if (editingCourse) {
+        const res = await fetch(`/api/cursos/${editingCourse.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Failed');
+      } else {
+        const res = await fetch('/api/cursos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, id: crypto.randomUUID() })
+        });
+        if (!res.ok) throw new Error('Failed');
+      }
+      await loadData();
+      closeModal();
+    } catch (err) {
+      showAlert('Erro', 'Ocorreu um erro ao salvar o curso.', 'error');
     }
-    closeModal();
   };
 
   const closeModal = () => {
@@ -90,8 +148,14 @@ const Courses: React.FC<CoursesProps> = ({ data, updateData }) => {
     showConfirm(
       'Excluir Curso', 
       'Tem certeza que deseja excluir este curso?',
-      () => {
-        updateData({ courses: data.courses.filter(c => c.id !== id) });
+      async () => {
+        try {
+          const res = await fetch(`/api/cursos/${id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Failed to delete');
+          await loadData();
+        } catch (err) {
+          showAlert('Erro', 'Ocorreu um erro ao excluir o curso.', 'error');
+        }
       }
     );
   };
@@ -102,14 +166,14 @@ const Courses: React.FC<CoursesProps> = ({ data, updateData }) => {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Cursos</h2>
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Cursos <span className="text-sm font-normal text-green-600 bg-green-50 px-2 py-1 rounded-md ml-2 border border-green-200">PostgreSQL</span></h2>
           <p className="text-slate-500">Gerencie os cursos oferecidos pela escola.</p>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg font-bold"><Plus size={20} /> Novo Curso</button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {data.courses.map(course => (
+        {courses.map(course => (
           <div key={course.id} className="bg-white p-7 rounded-xl border border-slate-200 shadow-sm hover:shadow-xl transition-all group flex flex-col h-full relative overflow-hidden">
              <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-white/80 backdrop-blur-sm rounded-bl-2xl">
                 <button onClick={() => handleEdit(course)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-all"><Edit2 size={16} /></button>

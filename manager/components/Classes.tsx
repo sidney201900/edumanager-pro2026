@@ -21,7 +21,6 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
   const [scheduleClass, setScheduleClass] = useState<Class | null>(null); // For LessonSchedule component
   const [viewingStudentsClass, setViewingStudentsClass] = useState<Class | null>(null); // For student list modal
   
-  // Helper para normalizar URLs de fotos (vacina contra cache antigo)
   const normalizePhotoUrl = (url?: string) => {
     if (!url || typeof url !== 'string') return '';
     if (url.startsWith('data:image') || url.startsWith('blob:')) return url;
@@ -34,6 +33,52 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
     
     return url;
   };
+
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [courses, setCourses] = useState<any[]>([]); // To display names correctly
+  const [employees, setEmployees] = useState<any[]>([]); // To display names
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  const loadData = async () => {
+    try {
+      setIsLoadingData(true);
+      const [clsRes, crsRes, empRes] = await Promise.all([
+        fetch('/api/turmas'),
+        fetch('/api/cursos'),
+        fetch('/api/funcionarios')
+      ]);
+      const clsData = await clsRes.json();
+      const crsData = await crsRes.json();
+      const empData = await empRes.json();
+
+      const mappedClasses = (clsData.turmas || []).map((t: any) => ({
+        id: t.id,
+        name: t.nome,
+        courseId: t.curso_id,
+        teacher: t.professor,
+        schedule: t.horario,
+        scheduleDay: t.dia_semana,
+        maxStudents: Number(t.max_alunos || 0),
+        startDate: t.data_inicio ? t.data_inicio.substring(0, 10) : '',
+        endDate: t.data_fim ? t.data_fim.substring(0, 10) : '',
+        defaultStartTime: t.horario_inicio_padrao,
+        defaultEndTime: t.horario_fim_padrao
+      }));
+
+      setClasses(mappedClasses);
+      setCourses(crsData.cursos || []);
+      setEmployees(empData.funcionarios || []);
+    } catch (err) {
+      console.error('Erro ao buscar turmas/cursos/funcionários:', err);
+      showAlert('Erro', 'Falha ao carregar dados do servidor.', 'error');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadData();
+  }, []);
   
   const [formData, setFormData] = useState<Omit<Class, 'id'>>({
     name: '',
@@ -57,16 +102,16 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
   // Auto-calculate end date based on course durationMonths
   React.useEffect(() => {
     if (formData.courseId && formData.startDate) {
-      const course = data.courses.find(c => c.id === formData.courseId);
-      if (course && course.durationMonths) {
+      const course = courses.find((c: any) => c.id === formData.courseId);
+      if (course && course.duracao_meses) {
         const start = new Date(formData.startDate + 'T12:00:00Z');
         const end = new Date(start);
-        end.setUTCMonth(end.getUTCMonth() + course.durationMonths);
+        end.setUTCMonth(end.getUTCMonth() + course.duracao_meses);
         const endString = end.toISOString().split('T')[0];
         setFormData(prev => ({ ...prev, endDate: endString }));
       }
     }
-  }, [formData.courseId, formData.startDate, data.courses]);
+  }, [formData.courseId, formData.startDate, courses]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,17 +173,49 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
       updatedLessons = [...updatedLessons, ...generatedLessons];
     }
 
-    let updatedClasses = [];
-    if (editingClass) {
-      updatedClasses = data.classes.map(c => c.id === editingClass.id ? newClass : c);
-    } else {
-      updatedClasses = [...data.classes, newClass];
-    }
+    const payload = {
+      nome: newClass.name,
+      curso_id: newClass.courseId,
+      professor: newClass.teacher,
+      horario: newClass.schedule,
+      dia_semana: newClass.scheduleDay,
+      max_alunos: newClass.maxStudents,
+      data_inicio: newClass.startDate,
+      data_fim: newClass.endDate,
+      horario_inicio_padrao: newClass.defaultStartTime,
+      horario_fim_padrao: newClass.defaultEndTime
+    };
 
-    updateData({ classes: updatedClasses, lessons: updatedLessons });
-    dbService.saveData({ ...data, classes: updatedClasses, lessons: updatedLessons });
+    const saveToServer = async () => {
+      try {
+        if (editingClass) {
+          const res = await fetch(`/api/turmas/${editingClass.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error('Failed to update class');
+        } else {
+          const res = await fetch('/api/turmas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...payload, id: newClass.id })
+          });
+          if (!res.ok) throw new Error('Failed to create class');
+        }
 
-    closeModal();
+        // Save lessons in the json fallback for now since lessons are not fully migrated
+        updateData({ lessons: updatedLessons });
+        dbService.saveData({ ...data, lessons: updatedLessons });
+
+        await loadData();
+        closeModal();
+      } catch (err) {
+        showAlert('Erro', 'Falha ao salvar turma no banco.', 'error');
+      }
+    };
+
+    saveToServer();
   };
 
   const closeModal = () => {
@@ -161,8 +238,14 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
     showConfirm(
       'Excluir Turma', 
       '⚠️ Tem certeza que deseja excluir esta turma? Isso não removerá os alunos, mas eles ficarão sem turma.',
-      () => {
-        updateData({ classes: data.classes.filter(c => c.id !== id) });
+      async () => {
+        try {
+          const res = await fetch(`/api/turmas/${id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Failed to delete');
+          await loadData();
+        } catch (err) {
+          showAlert('Erro', 'Ocorreu um erro ao deletar a turma.', 'error');
+        }
       }
     );
   };
@@ -228,7 +311,7 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Turmas</h2>
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Turmas <span className="text-sm font-normal text-green-600 bg-green-50 px-2 py-1 rounded-md ml-2 border border-green-200">PostgreSQL</span></h2>
           <p className="text-slate-500">Controle de horários e ocupação das salas.</p>
         </div>
         <button 
@@ -240,10 +323,10 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {data.classes.map(cls => {
+        {classes.map(cls => {
           const studentCount = data.students.filter(s => s.classId === cls.id).length;
-          const occupancyPercent = Math.min(100, (studentCount / cls.maxStudents) * 100);
-          const course = data.courses.find(c => c.id === cls.courseId);
+          const occupancyPercent = Math.min(100, (studentCount / (cls.maxStudents || 30)) * 100);
+          const course = courses.find((c: any) => c.id === cls.courseId);
           
           const now = new Date();
           const clsLessons = (data.lessons || []).filter(l => l.classId === cls.id && l.status !== 'cancelled');
@@ -270,7 +353,7 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">{course?.name || 'Sem Curso Vinculado'}</span>
+                  <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">{course?.nome || course?.name || 'Sem Curso Vinculado'}</span>
                   {cls.defaultStartTime && cls.defaultEndTime && (
                     <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-100">
                       <Clock size={12} /> {cls.defaultStartTime} - {cls.defaultEndTime}
@@ -380,7 +463,7 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
             </div>
           );
         })}
-        {data.classes.length === 0 && (
+        {classes.length === 0 && (
           <div className="col-span-full py-20 text-center text-slate-400 border-4 border-dashed border-slate-200 rounded-xl">
             <Book size={48} className="mx-auto mb-4 opacity-10" />
             <p className="font-bold text-lg">Nenhuma turma cadastrada ainda.</p>
@@ -419,7 +502,7 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
                   <select required className={inputClass}
                     value={formData.courseId} onChange={e => setFormData({...formData, courseId: e.target.value})}>
                     <option value="">Selecione um curso...</option>
-                    {data.courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {courses.map((c: any) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
                 </div>
               </div>
@@ -469,15 +552,11 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
                   <select required className={inputClass}
                     value={formData.teacher} onChange={e => setFormData({...formData, teacher: e.target.value})}>
                     <option value="">Selecione um professor...</option>
-                    {(data.employees || [])
-                      .filter(e => {
-                        const catName = (data.employeeCategories || []).find(c => c.id === e.categoryId)?.name?.toLowerCase() || '';
-                        return catName.includes('professor') || catName.includes('prof');
-                      })
-                      .map(emp => (
-                        <option key={emp.id} value={emp.name}>{emp.name}</option>
+                    {employees
+                      .map((emp: any) => (
+                        <option key={emp.id} value={emp.nome || emp.name}>{emp.nome || emp.name}</option>
                       ))}
-                    {formData.teacher && !(data.employees || []).some(e => e.name === formData.teacher) && (
+                    {formData.teacher && !employees.some((e: any) => (e.nome || e.name) === formData.teacher) && (
                       <option value={formData.teacher}>{formData.teacher} (Manual)</option>
                     )}
                   </select>

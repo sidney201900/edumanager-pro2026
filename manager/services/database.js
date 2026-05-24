@@ -368,6 +368,177 @@ export async function deleteNotasManuaisAusentes(alunoId, notasManuaisRetidas) {
 }
 
 // ============================================================
+// HELPERS: cursos e turmas
+// ============================================================
+export async function getCursos() {
+  const { rows } = await pool.query('SELECT * FROM cursos ORDER BY nome ASC');
+  return rows;
+}
+
+export async function insertCurso(c) {
+  await pool.query(
+    `INSERT INTO cursos (id, nome, duracao, duracao_meses, taxa_matricula, mensalidade, descricao, multa_percentual, juros_percentual)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [c.id, c.nome, c.duracao || '', c.duracao_meses || 12, c.taxa_matricula || 0, c.mensalidade || 0, c.descricao || '', c.multa_percentual || 0, c.juros_percentual || 0]
+  );
+}
+
+export async function updateCurso(id, updateData) {
+  const setClauses = [];
+  const values = [];
+  let i = 1;
+
+  for (const [key, value] of Object.entries(updateData)) {
+    if (value !== undefined) {
+      setClauses.push(`${key} = $${i}`);
+      values.push(value);
+      i++;
+    }
+  }
+
+  if (setClauses.length === 0) return;
+
+  values.push(id);
+  await pool.query(
+    `UPDATE cursos SET ${setClauses.join(', ')} WHERE id = $${i}`,
+    values
+  );
+}
+
+export async function deleteCurso(id) {
+  await pool.query('DELETE FROM cursos WHERE id = $1', [id]);
+}
+
+export async function getTurmas() {
+  const { rows } = await pool.query('SELECT * FROM turmas ORDER BY nome ASC');
+  return rows;
+}
+
+export async function insertTurma(t) {
+  await pool.query(
+    `INSERT INTO turmas (id, nome, curso_id, professor, horario, dia_semana, max_alunos, data_inicio, data_fim, horario_inicio_padrao, horario_fim_padrao)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [t.id, t.nome, t.curso_id || null, t.professor || '', t.horario || '', t.dia_semana || null, t.max_alunos || 30, t.data_inicio || null, t.data_fim || null, t.horario_inicio_padrao || null, t.horario_fim_padrao || null]
+  );
+}
+
+export async function updateTurma(id, updateData) {
+  const setClauses = [];
+  const values = [];
+  let i = 1;
+
+  for (const [key, value] of Object.entries(updateData)) {
+    if (value !== undefined) {
+      setClauses.push(`${key} = $${i}`);
+      values.push(value);
+      i++;
+    }
+  }
+
+  if (setClauses.length === 0) return;
+
+  values.push(id);
+  await pool.query(
+    `UPDATE turmas SET ${setClauses.join(', ')} WHERE id = $${i}`,
+    values
+  );
+}
+
+export async function deleteTurma(id) {
+  await pool.query('DELETE FROM turmas WHERE id = $1', [id]);
+}
+
+export async function getDisciplinas() {
+  const { rows } = await pool.query('SELECT * FROM disciplinas ORDER BY nome ASC');
+  return rows;
+}
+
+export async function insertDisciplina(d) {
+  await pool.query(
+    `INSERT INTO disciplinas (id, nome) VALUES ($1, $2)`,
+    [d.id, d.nome]
+  );
+}
+
+export async function updateDisciplina(id, updateData) {
+  if (updateData.nome !== undefined) {
+    await pool.query(
+      `UPDATE disciplinas SET nome = $1 WHERE id = $2`,
+      [updateData.nome, id]
+    );
+  }
+}
+
+export async function deleteDisciplina(id) {
+  await pool.query('DELETE FROM disciplinas WHERE id = $1', [id]);
+}
+
+// ============================================================
+// HELPERS: funcionarios e categorias_funcionarios
+// ============================================================
+export async function getFuncionarios() {
+  const { rows } = await pool.query('SELECT * FROM funcionarios ORDER BY nome ASC');
+  return rows;
+}
+
+export async function getCategoriasFuncionarios() {
+  const { rows } = await pool.query('SELECT * FROM categorias_funcionarios ORDER BY nome ASC');
+  return rows;
+}
+
+export async function insertFuncionario(f) {
+  await pool.query(
+    `INSERT INTO funcionarios (id, nome, cpf, email, telefone, categoria_id, data_admissao)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [f.id, f.nome, f.cpf, f.email, f.telefone, f.categoria_id, f.data_admissao || null]
+  );
+}
+
+export async function updateFuncionario(id, updateData) {
+  const setClauses = [];
+  const values = [];
+  let i = 1;
+
+  for (const [key, value] of Object.entries(updateData)) {
+    if (value !== undefined) {
+      setClauses.push(`${key} = $${i}`);
+      values.push(value);
+      i++;
+    }
+  }
+
+  if (setClauses.length === 0) return;
+
+  values.push(id);
+  await pool.query(
+    `UPDATE funcionarios SET ${setClauses.join(', ')} WHERE id = $${i}`,
+    values
+  );
+}
+
+export async function deleteFuncionario(id) {
+  await pool.query('DELETE FROM funcionarios WHERE id = $1', [id]);
+}
+
+export async function insertCategoriaFuncionario(c) {
+  await pool.query(
+    `INSERT INTO categorias_funcionarios (id, nome) VALUES ($1, $2)`,
+    [c.id, c.nome]
+  );
+}
+
+export async function updateCategoriaFuncionario(id, nome) {
+  await pool.query(
+    `UPDATE categorias_funcionarios SET nome = $1 WHERE id = $2`,
+    [nome, id]
+  );
+}
+
+export async function deleteCategoriaFuncionario(id) {
+  await pool.query('DELETE FROM categorias_funcionarios WHERE id = $1', [id]);
+}
+
+// ============================================================
 // SINCRONIZAÇÃO: JSON -> TABELAS RELACIONAIS
 // Garante que IDs do JSON existam nas tabelas para evitar erro de Foreign Key
 // ============================================================
@@ -404,6 +575,34 @@ export async function syncJsonToRelationalTables() {
             descricao = EXCLUDED.descricao, multa_percentual = EXCLUDED.multa_percentual,
             juros_percentual = EXCLUDED.juros_percentual`,
           [c.id, c.name, c.duration || '', c.durationMonths || 0, c.registrationFee || 0, c.monthlyFee || 0, c.description || '', c.finePercentage || 0, c.interestPercentage || 0]
+        );
+      }
+    }
+
+    // 1.5 Sincronizar Categorias de Funcionários
+    if (data.employeeCategories && Array.isArray(data.employeeCategories)) {
+      for (const cat of data.employeeCategories) {
+        if (!cat.id || !cat.name) continue;
+        await client.query(
+          `INSERT INTO categorias_funcionarios (id, nome) VALUES ($1, $2)
+           ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome`,
+          [cat.id, cat.name]
+        );
+      }
+    }
+
+    // 1.6 Sincronizar Funcionários
+    if (data.employees && Array.isArray(data.employees)) {
+      for (const emp of data.employees) {
+        if (!emp.id || !emp.name) continue;
+        await client.query(
+          `INSERT INTO funcionarios (id, nome, cpf, email, telefone, categoria_id, data_admissao)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO UPDATE SET 
+            nome = EXCLUDED.nome, cpf = EXCLUDED.cpf, email = EXCLUDED.email, 
+            telefone = EXCLUDED.telefone, categoria_id = EXCLUDED.categoria_id, 
+            data_admissao = EXCLUDED.data_admissao`,
+          [emp.id, emp.name, emp.cpf || '', emp.email || '', emp.phone || '', emp.categoryId || null, emp.admissionDate || null]
         );
       }
     }

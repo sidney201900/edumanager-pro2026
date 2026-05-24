@@ -37,9 +37,29 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, {acertos: number, erros: number}>>({}); // examId -> { acertos, erros }
   const [classGrades, setClassGrades] = useState<Grade[]>([]);
 
-  const subjects = data.subjects || [];
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const periods = data.periods || [];
   const grades = data.grades || [];
+
+  const loadSubjects = async () => {
+    try {
+      const res = await fetch('/api/disciplinas');
+      if (res.ok) {
+        const json = await res.json();
+        const mappedSubjects = (json.disciplinas || []).map((d: any) => ({
+          id: d.id,
+          name: d.nome
+        }));
+        setSubjects(mappedSubjects);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar disciplinas:', e);
+    }
+  };
+
+  React.useEffect(() => {
+    loadSubjects();
+  }, []);
 
   // Buscar todas as notas da turma para mostrar médias na lista
   React.useEffect(() => {
@@ -91,19 +111,30 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     return url;
   };
 
-  const handleAddSubject = () => {
+  const handleAddSubject = async () => {
     if (!newSubjectName.trim()) {
       showAlert('Atenção', '⚠️ Por favor, informe o nome da disciplina.', 'warning');
       return;
     }
-    const newSubject: Subject = {
-      id: crypto.randomUUID(),
-      name: newSubjectName.trim()
-    };
-    const updatedSubjects = [...subjects, newSubject];
-    updateData({ subjects: updatedSubjects });
-    dbService.saveData({ ...data, subjects: updatedSubjects });
-    setNewSubjectName('');
+    try {
+      const payload = {
+        id: crypto.randomUUID(),
+        nome: newSubjectName.trim()
+      };
+      const res = await fetch('/api/disciplinas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        await loadSubjects();
+        setNewSubjectName('');
+      } else {
+        showAlert('Erro', 'Falha ao salvar disciplina no banco.', 'error');
+      }
+    } catch (e) {
+      showAlert('Erro', 'Ocorreu um erro de conexão.', 'error');
+    }
   };
 
   const handleAddPeriod = () => {
@@ -125,11 +156,22 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     showConfirm(
       'Excluir Disciplina',
       '⚠️ Tem certeza que deseja excluir esta disciplina? Todas as notas vinculadas serão perdidas.',
-      () => {
-        const updatedSubjects = subjects.filter(s => s.id !== id);
-        const updatedGrades = grades.filter(g => g.subjectId !== id);
-        updateData({ subjects: updatedSubjects, grades: updatedGrades });
-        dbService.saveData({ ...data, subjects: updatedSubjects, grades: updatedGrades });
+      async () => {
+        try {
+          const res = await fetch(`/api/disciplinas/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            await loadSubjects();
+            // Notas dependem da disciplina, mas a exclusão das notas sql pode ser em cascade no postgres
+            // Se ainda usar JSON para notas manuais:
+            const updatedGrades = grades.filter(g => g.subjectId !== id);
+            updateData({ grades: updatedGrades });
+            dbService.saveData({ ...data, grades: updatedGrades });
+          } else {
+            showAlert('Erro', 'Falha ao deletar disciplina.', 'error');
+          }
+        } catch(e) {
+          showAlert('Erro', 'Ocorreu um erro ao comunicar com a API.', 'error');
+        }
       }
     );
   };
