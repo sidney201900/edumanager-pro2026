@@ -544,12 +544,25 @@ export async function deleteDisciplina(id) {
 // ============================================================
 export async function getFuncionarios() {
   const { rows } = await pool.query('SELECT * FROM funcionarios ORDER BY nome ASC');
-  return rows;
+  return rows.map(r => ({
+    id: r.id,
+    name: r.nome,
+    cpf: r.cpf,
+    email: r.email,
+    phone: r.telefone,
+    categoryId: r.categoria_id,
+    hireDate: r.data_admissao,
+    createdAt: r.created_at
+  }));
 }
 
 export async function getCategoriasFuncionarios() {
   const { rows } = await pool.query('SELECT * FROM categorias_funcionarios ORDER BY nome ASC');
-  return rows;
+  return rows.map(r => ({
+    id: r.id,
+    name: r.nome,
+    createdAt: r.created_at
+  }));
 }
 
 export async function insertFuncionario(f) {
@@ -609,7 +622,16 @@ export async function deleteCategoriaFuncionario(id) {
 // ============================================================
 export async function getAlunos() {
   const result = await pool.query("SELECT * FROM alunos ORDER BY nome ASC");
-  return result.rows;
+  return result.rows.map(r => ({
+    ...r,
+    classId: r.turma_id,
+    name: r.nome,
+    status: r.status,
+    cpf: r.cpf,
+    phone: r.telefone,
+    registrationDate: r.data_matricula,
+    contractTemplateId: r.modelo_contrato_id
+  }));
 }
 
 export async function insertAluno(a) {
@@ -775,8 +797,36 @@ export async function deleteAulas(ids) {
 // PROVAS & QUESTÕES (FASE 5)
 // ============================================================
 export async function getProvas() {
-  const result = await pool.query('SELECT * FROM provas ORDER BY created_at DESC');
-  return result.rows;
+  const { rows: provasRows } = await pool.query('SELECT * FROM provas ORDER BY created_at DESC');
+  
+  // Mapear campos para camelCase e buscar questoes para compatibilidade com o frontend antigo
+  const provasFormatadas = [];
+  for (const p of provasRows) {
+    const { rows: questoesRows } = await pool.query('SELECT * FROM questoes_provas WHERE prova_id = $1 ORDER BY ordem ASC', [p.id]);
+    
+    provasFormatadas.push({
+      id: p.id,
+      classId: p.turma_id,
+      subjectId: p.disciplina_id,
+      periodId: p.periodo_id,
+      title: p.titulo,
+      durationMinutes: p.duracao_minutos,
+      status: p.status,
+      allowRetake: p.permitir_refacao,
+      isDeleted: p.is_deleted,
+      evaluationType: p.evaluation_type || 'exam',
+      questions: questoesRows.map(q => ({
+        id: q.id,
+        examId: q.prova_id,
+        text: q.texto,
+        options: q.opcoes || [],
+        correctAnswer: q.resposta_correta,
+        order: q.ordem,
+        imageUrl: q.url_imagem
+      }))
+    });
+  }
+  return provasFormatadas;
 }
 
 export async function getQuestoesDaProva(provaId) {

@@ -40,17 +40,17 @@ const Employees: React.FC = () => {
       // Mapeamento caso a API retorne os nomes das colunas diferentes do TS
       const mappedEmployees = (empData.funcionarios || []).map((e: any) => ({
         id: e.id,
-        name: e.nome,
+        name: e.name || e.nome,
         cpf: e.cpf,
         email: e.email,
-        phone: e.telefone,
-        admissionDate: e.data_admissao ? e.data_admissao.substring(0, 10) : '',
-        categoryId: e.categoria_id
+        phone: e.phone || e.telefone,
+        admissionDate: e.hireDate || (e.data_admissao ? e.data_admissao.substring(0, 10) : ''),
+        categoryId: e.categoryId || e.categoria_id
       }));
 
       const mappedCategories = (catData.categorias || []).map((c: any) => ({
         id: c.id,
-        name: c.nome
+        name: c.name || c.nome
       }));
 
       setEmployees(mappedEmployees);

@@ -32,16 +32,16 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
         const { provas } = await res.json();
         setDbExams(provas.map((p: any) => ({
           id: p.id,
-          classId: p.turma_id,
-          subjectId: p.disciplina_id,
-          periodId: p.periodo_id,
-          title: p.titulo,
-          durationMinutes: p.duracao_minutos,
+          classId: p.classId || p.turma_id,
+          subjectId: p.subjectId || p.disciplina_id,
+          periodId: p.periodId || p.periodo_id,
+          title: p.title || p.titulo,
+          durationMinutes: p.durationMinutes || p.duracao_minutos,
           status: p.status,
-          allowRetake: p.permitir_refacao,
-          isDeleted: p.is_deleted,
-          evaluationType: p.evaluation_type || 'exam',
-          questions: [] // questoes carregadas sob demanda
+          allowRetake: p.allowRetake ?? p.permitir_refacao ?? false,
+          isDeleted: p.isDeleted ?? p.is_deleted ?? false,
+          evaluationType: p.evaluationType || p.evaluation_type || 'exam',
+          questions: p.questions || []
         })));
       }
     } catch(e) {
@@ -137,7 +137,18 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     showConfirm(
       'Mover para Lixeira',
       'Tem certeza que deseja mover esta avaliação para a lixeira? Ela será ocultada para os alunos, mas as notas no boletim continuarão intactas.',
-      () => {
+      async () => {
+        try {
+          const targetExam = exams.find(e => e.id === examId);
+          if (targetExam) {
+             await fetch(`/api/provas/${examId}`, {
+               method: 'PUT',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ ...targetExam, isDeleted: true })
+             });
+          }
+        } catch (e) { console.error('Erro ao deletar prova:', e); }
+
         const updatedExams = exams.map(e => e.id === examId ? { ...e, isDeleted: true } : e);
         updateData({ exams: updatedExams });
         dbService.saveData({ ...data, exams: updatedExams });
@@ -146,7 +157,18 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     );
   };
 
-  const handleRestoreExam = (examId: string) => {
+  const handleRestoreExam = async (examId: string) => {
+    try {
+      const targetExam = exams.find(e => e.id === examId);
+      if (targetExam) {
+         await fetch(`/api/provas/${examId}`, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ ...targetExam, isDeleted: false })
+         });
+      }
+    } catch (e) { console.error('Erro ao restaurar prova:', e); }
+
     const updatedExams = exams.map(e => e.id === examId ? { ...e, isDeleted: false } : e);
     updateData({ exams: updatedExams });
     dbService.saveData({ ...data, exams: updatedExams });

@@ -43,15 +43,18 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
   const [dbClasses, setDbClasses] = useState<Class[]>(data.classes || []);
   const [dbCourses, setDbCourses] = useState<any[]>(data.courses || []);
+  const [dbExams, setDbExams] = useState<any[]>(data.exams || []);
 
   const loadClassesAndCourses = async () => {
     try {
-      const [clsRes, crsRes] = await Promise.all([
+      const [clsRes, crsRes, examsRes] = await Promise.all([
         fetch('/api/turmas'),
-        fetch('/api/cursos')
+        fetch('/api/cursos'),
+        fetch('/api/provas')
       ]);
       const clsData = await clsRes.json();
       const crsData = await crsRes.json();
+      const examsData = await examsRes.json();
 
       if (clsData.turmas) {
         setDbClasses(clsData.turmas.map((t: any) => ({
@@ -63,8 +66,19 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
       if (crsData.cursos) {
         setDbCourses(crsData.cursos);
       }
+      if (examsData.provas) {
+        setDbExams(examsData.provas.map((p: any) => ({
+          id: p.id,
+          classId: p.classId || p.turma_id,
+          subjectId: p.subjectId || p.disciplina_id,
+          periodId: p.periodId || p.periodo_id,
+          title: p.title || p.titulo,
+          evaluationType: p.evaluationType || p.evaluation_type || 'exam',
+          isDeleted: p.isDeleted ?? p.is_deleted ?? false
+        })));
+      }
     } catch(e) {
-      console.error('Erro ao buscar turmas/cursos:', e);
+      console.error('Erro ao buscar dados:', e);
     }
   };
 
@@ -255,10 +269,9 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
       initialGrades[subject.id] = {};
       periods.forEach(period => {
         const periodGrades: any = {};
-        const linkedExams = (data.exams || []).filter(e => 
+        const linkedExams = (dbExams || []).filter(e => 
           String(e.subjectId).trim() === String(subject.id).trim() && 
-          String(e.periodId).trim() === String(period.id).trim() &&
-          !!subsMap[String(e.id).trim()]
+          String(e.periodId).trim() === String(period.id).trim()
         );
 
         if (linkedExams.length > 0) {
@@ -653,8 +666,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
               ) : (
                 <div className="space-y-6">
                   {subjects.map(subject => {
-                    // Encontrar provas vinculadas a esta disciplina
-                    const linkedExams = (data.exams || []).filter(e => String(e.subjectId).trim() === String(subject.id).trim());
+                    // Encontrar provas ativas vinculadas a esta disciplina
+                    const linkedExams = (dbExams || []).filter(e => String(e.subjectId).trim() === String(subject.id).trim());
 
                     return (
                       <div key={subject.id} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-4">
@@ -665,9 +678,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                           </div>
                           <div className="flex items-center gap-2">
                             {(() => {
-                              const linkedExams = (data.exams || []).filter(e => 
-                                String(e.subjectId).trim() === String(subject.id).trim() &&
-                                !!studentSubmissions[String(e.id).trim()]
+                              const linkedExams = (dbExams || []).filter(e => 
+                                String(e.subjectId).trim() === String(subject.id).trim()
                               );
                               const provasCount = linkedExams.filter(e => (e as any).evaluationType !== 'activity').length;
                               const atividadesCount = linkedExams.filter(e => (e as any).evaluationType === 'activity').length;
@@ -705,10 +717,9 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                         </div>
                         <div className="flex flex-col gap-6">
                           {periods.map(period => {
-                            const linkedExams = (data.exams || []).filter(e => 
+                            const linkedExams = (dbExams || []).filter(e => 
                               String(e.subjectId).trim() === String(subject.id).trim() && 
-                              String(e.periodId).trim() === String(period.id).trim() &&
-                              !!studentSubmissions[String(e.id).trim()]
+                              String(e.periodId).trim() === String(period.id).trim()
                             );
                             const periodGrades = studentGrades[subject.id]?.[period.id] || {};
                             const validPeriodValues = Object.values(periodGrades).filter(v => v !== '');
