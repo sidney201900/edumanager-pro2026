@@ -38,7 +38,12 @@ import {
   insertCategoriaFuncionario, updateCategoriaFuncionario, deleteCategoriaFuncionario,
   getCursos, insertCurso, updateCurso, deleteCurso,
   getTurmas, insertTurma, updateTurma, deleteTurma,
-  getDisciplinas, insertDisciplina, updateDisciplina, deleteDisciplina
+  getDisciplinas, insertDisciplina, updateDisciplina, deleteDisciplina,
+  getAlunos, insertAluno, updateAluno, deleteAluno,
+  getModelosContrato, insertModeloContrato, updateModeloContrato, deleteModeloContrato,
+  getContratos, insertContrato, deleteContrato,
+  getAulasByTurma, getAllAulas, insertAulas, deleteAulas,
+  getProvas, getQuestoesDaProva, insertProva, updateProva, deleteProva, syncQuestoesProva
 } from './services/database.js';
 import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, uploadReceipt as uploadReceiptToStorage, getMinioStats, s3Client, getBucketObjects, deleteMinioObject } from './services/storage.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -472,6 +477,175 @@ app.delete('/api/disciplinas/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao deletar disciplina:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// ============================================================
+// ROTAS DE ALUNOS (MIGRAÇÃO FASE 4)
+// ============================================================
+app.get('/api/alunos', async (req, res) => {
+  try {
+    const alunos = await getAlunos();
+    res.json({ alunos });
+  } catch (error) {
+    console.error('Erro ao buscar alunos:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.post('/api/alunos', async (req, res) => {
+  try {
+    await insertAluno(req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao criar aluno:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.put('/api/alunos/:id', async (req, res) => {
+  try {
+    await updateAluno(req.params.id, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao atualizar aluno:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.delete('/api/alunos/:id', async (req, res) => {
+  try {
+    await deleteAluno(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar aluno:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// ============================================================
+// ROTAS DE CONTRATOS E MODELOS
+// ============================================================
+app.get('/api/modelos-contrato', async (req, res) => {
+  try { res.json({ modelos: await getModelosContrato() }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+app.post('/api/modelos-contrato', async (req, res) => {
+  try { await insertModeloContrato(req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+app.put('/api/modelos-contrato/:id', async (req, res) => {
+  try { await updateModeloContrato(req.params.id, req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+app.delete('/api/modelos-contrato/:id', async (req, res) => {
+  try { await deleteModeloContrato(req.params.id); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+
+app.get('/api/contratos', async (req, res) => {
+  try { res.json({ contratos: await getContratos() }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+app.post('/api/contratos', async (req, res) => {
+  try { await insertContrato(req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+app.delete('/api/contratos/:id', async (req, res) => {
+  try { await deleteContrato(req.params.id); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+
+// ============================================================
+// ROTAS DE AULAS E CRONOGRAMA
+// ============================================================
+app.get('/api/aulas', async (req, res) => {
+  try {
+    const { turma_id } = req.query;
+    const aulas = turma_id ? await getAulasByTurma(turma_id) : await getAllAulas();
+    res.json({ aulas });
+  } catch (error) {
+    console.error('Erro ao buscar aulas:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.post('/api/aulas/lote', async (req, res) => {
+  try {
+    const { aulas } = req.body;
+    await insertAulas(aulas);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao inserir aulas em lote:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.delete('/api/aulas/lote', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    await deleteAulas(ids);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar aulas em lote:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// ============================================================
+// ROTAS DE AVALIAÇÕES (MIGRAÇÃO FASE 5)
+// ============================================================
+app.get('/api/provas', async (req, res) => {
+  try {
+    const provas = await getProvas();
+    res.json({ provas });
+  } catch (error) {
+    console.error('Erro ao buscar provas:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.get('/api/provas/:id/questoes', async (req, res) => {
+  try {
+    const questoes = await getQuestoesDaProva(req.params.id);
+    res.json({ questoes });
+  } catch (error) {
+    console.error('Erro ao buscar questoes:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.post('/api/provas', async (req, res) => {
+  try {
+    await insertProva(req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao criar prova:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.put('/api/provas/:id', async (req, res) => {
+  try {
+    await updateProva(req.params.id, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao atualizar prova:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.delete('/api/provas/:id', async (req, res) => {
+  try {
+    await deleteProva(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar prova:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.post('/api/provas/:id/questoes', async (req, res) => {
+  try {
+    const { questoes } = req.body;
+    await syncQuestoesProva(req.params.id, questoes || []);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao sincronizar questoes:', error);
     res.status(500).json({ error: 'Erro interno' });
   }
 });

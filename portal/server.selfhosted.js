@@ -125,18 +125,36 @@ app.post('/api/portal/login', async (req, res) => {
       return res.status(400).json({ error: 'Matrícula e senha são obrigatórios' });
     }
 
-    const schoolData = await getSchoolData();
-    const students = schoolData.students || [];
-
-    const student = students.find(
-      (s) => s.enrollmentNumber && s.enrollmentNumber.toLowerCase() === enrollmentNumber.toLowerCase()
+    const { rows: dbStudents } = await pool.query(
+      'SELECT * FROM alunos WHERE numero_matricula ILIKE $1',
+      [enrollmentNumber]
     );
+
+    let student;
+    if (dbStudents.length > 0) {
+      const s = dbStudents[0];
+      student = {
+        id: s.id,
+        enrollmentNumber: s.numero_matricula,
+        name: s.nome,
+        status: s.status,
+        portalPassword: s.senha_portal,
+        cpf: s.cpf,
+        classId: s.turma_id,
+        photo: normalizeStorageUrl(s.foto_url)
+      };
+    } else {
+      // Fallback para arquivo JSON caso não tenha sido migrado (segurança)
+      const schoolData = await getSchoolData();
+      const students = schoolData.students || [];
+      const s = students.find((x) => x.enrollmentNumber && x.enrollmentNumber.toLowerCase() === enrollmentNumber.toLowerCase());
+      if (s) student = { ...s, photo: normalizeStorageUrl(s.photo) };
+    }
 
     if (!student) {
       return res.status(401).json({ error: 'Matrícula não encontrada' });
     }
 
-    // Check password — COPIADA EXATAMENTE como está no JSON
     const expectedPassword = student.portalPassword || (student.cpf ? student.cpf.replace(/\D/g, '').substring(0, 6) : '');
     if (password !== expectedPassword) {
       return res.status(401).json({ error: 'Senha incorreta' });
@@ -153,13 +171,27 @@ app.post('/api/portal/login', async (req, res) => {
     };
     const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '7d' });
 
-    const studentClass = (schoolData.classes || []).find((c) => c.id === student.classId) || null;
-    const course = studentClass
-      ? (schoolData.courses || []).find((c) => c.id === studentClass.courseId) || null
-      : null;
+    // Buscar Turma e Curso no PostgreSQL
+    let studentClass = null;
+    let course = null;
+    
+    if (student.classId) {
+       const { rows: tRows } = await pool.query('SELECT * FROM turmas WHERE id = $1', [student.classId]);
+       if (tRows.length > 0) {
+          studentClass = { id: tRows[0].id, name: tRows[0].nome, courseId: tRows[0].curso_id };
+          if (studentClass.courseId) {
+             const { rows: cRows } = await pool.query('SELECT * FROM cursos WHERE id = $1', [studentClass.courseId]);
+             if (cRows.length > 0) course = { id: cRows[0].id, name: cRows[0].nome };
+          }
+       }
+    }
 
-    // Normalizar foto do aluno
-    if (student.photo) student.photo = normalizeStorageUrl(student.photo);
+    // Fallback JSON se não achou as entidades relacionais (turma/curso)
+    if (!studentClass) {
+       const schoolData = await getSchoolData();
+       studentClass = (schoolData.classes || []).find((c) => c.id === student.classId) || null;
+       course = studentClass ? (schoolData.courses || []).find((c) => c.id === studentClass.courseId) || null : null;
+    }
 
     res.json({
       token,
@@ -196,17 +228,51 @@ app.get('/api/portal/escola', async (req, res) => {
 // GET /api/portal/me
 app.get('/api/portal/me', authMiddleware, async (req, res) => {
   try {
-    const schoolData = await getSchoolData();
-    const student = (schoolData.students || []).find((s) => s.id === req.user.studentId);
+    const { rows: dbStudents } = await pool.query(
+      'SELECT * FROM alunos WHERE id = $1',
+      [req.user.studentId]
+    );
+
+    let student;
+    if (dbStudents.length > 0) {
+      const s = dbStudents[0];
+      student = {
+        id: s.id,
+        enrollmentNumber: s.numero_matricula,
+        name: s.nome,
+        status: s.status,
+        portalPassword: s.senha_portal,
+        cpf: s.cpf,
+        classId: s.turma_id,
+        photo: normalizeStorageUrl(s.foto_url)
+      };
+    } else {
+      const schoolData = await getSchoolData();
+      const s = (schoolData.students || []).find((x) => x.id === req.user.studentId);
+      if (s) student = { ...s, photo: normalizeStorageUrl(s.photo) };
+    }
+
     if (!student) return res.status(404).json({ error: 'Aluno não encontrado' });
 
-    const studentClass = (schoolData.classes || []).find((c) => c.id === student.classId) || null;
-    const course = studentClass
-      ? (schoolData.courses || []).find((c) => c.id === studentClass.courseId) || null
-      : null;
+    let studentClass = null;
+    let course = null;
+    
+    if (student.classId) {
+       const { rows: tRows } = await pool.query('SELECT * FROM turmas WHERE id = $1', [student.classId]);
+       if (tRows.length > 0) {
+          studentClass = { id: tRows[0].id, name: tRows[0].nome, courseId: tRows[0].curso_id };
+          if (studentClass.courseId) {
+             const { rows: cRows } = await pool.query('SELECT * FROM cursos WHERE id = $1', [studentClass.courseId]);
+             if (cRows.length > 0) course = { id: cRows[0].id, name: cRows[0].nome };
+          }
+       }
+    }
 
-    // Normalizar foto
-    if (student.photo) student.photo = normalizeStorageUrl(student.photo);
+    if (!studentClass) {
+       const schoolData = await getSchoolData();
+       studentClass = (schoolData.classes || []).find((c) => c.id === student.classId) || null;
+       course = studentClass ? (schoolData.courses || []).find((c) => c.id === studentClass.courseId) || null : null;
+    }
 
     res.json({
       student: { ...student, portalPassword: undefined },
@@ -534,13 +600,27 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
   }
 });
 
-// GET /api/portal/contratos
+// GET /api/portal/contratos (SQL-First)
 app.get('/api/portal/contratos', authMiddleware, async (req, res) => {
   try {
-    const schoolData = await getSchoolData();
-    const contracts = (schoolData.contracts || []).filter((c) => c.studentId === req.user.studentId);
-    res.json({ contracts });
+    const { rows } = await pool.query(
+      `SELECT id, aluno_id as "studentId", titulo as title, conteudo as content, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "createdAt"
+       FROM contratos 
+       WHERE aluno_id = $1 
+       ORDER BY created_at DESC`,
+      [req.user.studentId]
+    );
+
+    // Fallback de segurança para JSON legado caso não tenha sincronizado
+    if (rows.length === 0) {
+      const schoolData = await getSchoolData();
+      const fallbackContracts = (schoolData.contracts || []).filter((c) => c.studentId === req.user.studentId);
+      return res.json({ contracts: fallbackContracts });
+    }
+
+    res.json({ contracts: rows });
   } catch (err) {
+    console.error('Erro contratos portal:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
@@ -567,37 +647,60 @@ app.get('/api/portal/config', (req, res) => {
   });
 });
 
-// GET /api/portal/aulas (Leitura direta do school_data — mesma fonte do Manager)
+// GET /api/portal/aulas (SQL-First — Leitura direta do PostgreSQL)
 app.get('/api/portal/aulas', authMiddleware, async (req, res) => {
   try {
-    const schoolData = await getSchoolData();
-    const student = (schoolData.students || []).find(s => s.id === req.user.studentId);
-    if (!student) return res.json({ lessons: [] });
+    const { rows: dbStudents } = await pool.query('SELECT turma_id FROM alunos WHERE id = $1', [req.user.studentId]);
+    if (dbStudents.length === 0) return res.json({ lessons: [] });
 
-    // Obter turmas do aluno a partir do JSON (mesma lógica do Manager)
+    // Obter turmas do aluno a partir da turma atual e presenças históricas
+    const { rows: freqRows } = await pool.query('SELECT DISTINCT turma_id FROM frequencias WHERE aluno_id = $1', [req.user.studentId]);
+    
     const studentClassIds = new Set([
-      student.classId,
-      ...(schoolData.attendance || []).filter(a => a.studentId === req.user.studentId).map(a => a.classId)
+      dbStudents[0].turma_id,
+      ...freqRows.map(f => f.turma_id)
     ].filter(Boolean));
 
-    const parseDateHelper = (dStr) => {
-      if (!dStr) return 0;
-      const parts = dStr.substring(0, 10).split(/[-/]/);
-      if (parts.length < 3) return 0;
-      if (parts[0].length === 4) return new Date(parts[0], parts[1] - 1, parts[2]).getTime();
-      return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
-    };
+    if (studentClassIds.size === 0) return res.json({ lessons: [] });
 
-    const lessons = (schoolData.lessons || [])
-      .filter(l => studentClassIds.has(l.classId))
-      .map(l => {
-         const classObj = (schoolData.classes || []).find(c => c.id === l.classId);
-         return { ...l, className: classObj ? classObj.name : 'Turma' };
-      })
-      .sort((a, b) => parseDateHelper(a.date) - parseDateHelper(b.date));
+    const classIdsArray = Array.from(studentClassIds);
+    const { rows: aulasRows } = await pool.query(`
+      SELECT a.*, TO_CHAR(a.data, 'YYYY-MM-DD') as data_formatada, t.nome as class_name
+      FROM aulas a
+      LEFT JOIN turmas t ON a.turma_id = t.id
+      WHERE a.turma_id = ANY($1)
+      ORDER BY a.data ASC, a.horario_inicio ASC
+    `, [classIdsArray]);
+
+    const lessons = aulasRows.map(row => ({
+      id: row.id,
+      classId: row.turma_id,
+      date: row.data_formatada,
+      startTime: row.horario_inicio,
+      endTime: row.horario_fim,
+      status: row.status,
+      type: row.tipo,
+      cancellationReason: row.motivo_cancelamento,
+      originalLessonId: row.aula_original_id,
+      className: row.class_name || 'Turma'
+    }));
+
+    // Se por acaso as aulas não foram migradas ainda, faz um fallback
+    if (lessons.length === 0) {
+      const schoolData = await getSchoolData();
+      const fallbackLessons = (schoolData.lessons || [])
+        .filter(l => studentClassIds.has(l.classId))
+        .map(l => {
+           const classObj = (schoolData.classes || []).find(c => c.id === l.classId);
+           return { ...l, className: classObj ? classObj.name : 'Turma' };
+        })
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      return res.json({ lessons: fallbackLessons });
+    }
 
     res.json({ lessons });
   } catch (err) {
+    console.error('Erro ao buscar aulas:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
@@ -656,17 +759,36 @@ app.put('/api/portal/alterar-senha', authMiddleware, async (req, res) => {
     if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Campos obrigatórios' });
     if (newPassword.length < 4) return res.status(400).json({ error: 'Mínimo 4 caracteres' });
 
+    const { rows: dbStudents } = await pool.query('SELECT * FROM alunos WHERE id = $1', [req.user.studentId]);
+    let student, isDb = false, studentIndex = -1;
     const schoolData = await getSchoolData();
     const students = schoolData.students || [];
-    const studentIndex = students.findIndex((s) => s.id === req.user.studentId);
-    if (studentIndex === -1) return res.status(404).json({ error: 'Aluno não encontrado' });
 
-    const student = students[studentIndex];
+    if (dbStudents.length > 0) {
+      const s = dbStudents[0];
+      student = { id: s.id, portalPassword: s.senha_portal, cpf: s.cpf };
+      isDb = true;
+      studentIndex = students.findIndex((s) => s.id === req.user.studentId);
+    } else {
+      studentIndex = students.findIndex((s) => s.id === req.user.studentId);
+      if (studentIndex !== -1) student = students[studentIndex];
+    }
+
+    if (!student) return res.status(404).json({ error: 'Aluno não encontrado' });
+
     const expectedPassword = student.portalPassword || (student.cpf ? student.cpf.replace(/\D/g, '').substring(0, 6) : '');
     if (currentPassword !== expectedPassword) return res.status(401).json({ error: 'Senha atual incorreta' });
 
-    students[studentIndex] = { ...student, portalPassword: newPassword };
-    schoolData.students = students;
+    // 1. Atualizar no PostgreSQL se existir
+    if (isDb) {
+      await pool.query('UPDATE alunos SET senha_portal = $1 WHERE id = $2', [newPassword, req.user.studentId]);
+    }
+
+    // 2. Atualizar no JSON legado (Retrocompatibilidade e Segurança de Sincronia)
+    if (studentIndex !== -1) {
+       students[studentIndex] = { ...students[studentIndex], portalPassword: newPassword };
+       schoolData.students = students;
+    }
     schoolData.lastUpdated = new Date().toISOString();
     await saveSchoolData(schoolData);
 
@@ -686,17 +808,39 @@ app.get('/api/portal/avaliacoes', authMiddleware, async (req, res) => {
     const student = (schoolData.students || []).find(s => s.id === req.user.studentId);
     if (!student) return res.json({ exams: [], submissions: [] });
 
-    const exams = (schoolData.exams || [])
-      .filter(e => e.status === 'published' && e.classId === student.classId && !e.isDeleted)
-      .map(e => ({
-        ...e,
-        questions: e.questions.map(q => ({
+    const { rows: dbExams } = await pool.query(
+      `SELECT * FROM provas WHERE turma_id = $1 AND status = 'published' AND is_deleted = false`,
+      [student.classId]
+    );
+
+    const exams = [];
+    for (const row of dbExams) {
+      const { rows: questoes } = await pool.query(
+        `SELECT * FROM questoes_provas WHERE prova_id = $1 ORDER BY ordem ASC`,
+        [row.id]
+      );
+      
+      exams.push({
+        id: row.id,
+        classId: row.turma_id,
+        subjectId: row.disciplina_id,
+        periodId: row.periodo_id,
+        title: row.titulo,
+        durationMinutes: row.duracao_minutos,
+        status: row.status,
+        allowRetake: row.permitir_refacao,
+        isDeleted: row.is_deleted,
+        evaluationType: row.evaluation_type,
+        maxScore: 10,
+        questions: questoes.map(q => ({
           id: q.id,
-          text: q.text,
-          options: q.options,
-          imageUrl: normalizeStorageUrl(q.imageUrl)
+          text: q.texto,
+          options: typeof q.opcoes === 'string' ? JSON.parse(q.opcoes) : q.opcoes,
+          correctOptionIndex: q.indice_correto,
+          imageUrl: normalizeStorageUrl(q.imagem_url)
         }))
-      }));
+      });
+    }
 
     const { rows: submissions } = await pool.query(
       'SELECT * FROM provas_submissoes WHERE aluno_id = $1',
@@ -728,9 +872,25 @@ app.post('/api/portal/avaliacoes/submeter', authMiddleware, async (req, res) => 
     const { examId, answers } = req.body;
     if (!examId || !answers) return res.status(400).json({ error: 'Dados obrigatórios' });
 
-    const schoolData = await getSchoolData();
-    const exam = (schoolData.exams || []).find(e => e.id === examId);
-    if (!exam) return res.status(404).json({ error: 'Prova não encontrada.' });
+    const { rows: examRows } = await pool.query('SELECT * FROM provas WHERE id = $1', [examId]);
+    if (examRows.length === 0) return res.status(404).json({ error: 'Prova não encontrada.' });
+    const examData = examRows[0];
+    
+    const { rows: questoes } = await pool.query('SELECT * FROM questoes_provas WHERE prova_id = $1 ORDER BY ordem ASC', [examId]);
+    
+    const exam = {
+      id: examData.id,
+      title: examData.titulo,
+      allowRetake: examData.permitir_refacao,
+      subjectId: examData.disciplina_id,
+      periodId: examData.periodo_id,
+      evaluationType: examData.evaluation_type,
+      maxScore: 10,
+      questions: questoes.map(q => ({
+        id: q.id,
+        correctOptionIndex: q.indice_correto
+      }))
+    };
 
     // Verificar se já submeteu
     const { rows: existing } = await pool.query(

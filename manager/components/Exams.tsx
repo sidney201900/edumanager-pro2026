@@ -23,6 +23,35 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const [dbClasses, setDbClasses] = useState<any[]>(data?.classes || []);
   const [dbCourses, setDbCourses] = useState<any[]>(data?.courses || []);
   const [dbSubjects, setDbSubjects] = useState<any[]>(data?.subjects || []);
+  const [dbExams, setDbExams] = useState<Exam[]>(data.exams || []);
+
+  const loadExams = async () => {
+    try {
+      const res = await fetch('/api/provas');
+      if (res.ok) {
+        const { provas } = await res.json();
+        setDbExams(provas.map((p: any) => ({
+          id: p.id,
+          classId: p.turma_id,
+          subjectId: p.disciplina_id,
+          periodId: p.periodo_id,
+          title: p.titulo,
+          durationMinutes: p.duracao_minutos,
+          status: p.status,
+          allowRetake: p.permitir_refacao,
+          isDeleted: p.is_deleted,
+          evaluationType: p.evaluation_type || 'exam',
+          questions: [] // questoes carregadas sob demanda
+        })));
+      }
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  React.useEffect(() => {
+    loadExams();
+  }, []);
 
   React.useEffect(() => {
     Promise.all([
@@ -65,7 +94,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     return url;
   };
 
-  const exams = data.exams || [];
+  const exams = dbExams || [];
 
   const filteredExams = exams.filter(exam =>
     (activeTab === 'ativos' ? !exam.isDeleted : !!exam.isDeleted) &&

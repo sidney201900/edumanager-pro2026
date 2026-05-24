@@ -40,6 +40,20 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const [dbStudents, setDbStudents] = useState<any[]>([]);
+
+  const loadStudents = async () => {
+    try {
+      const res = await fetch('/api/alunos');
+      if (res.ok) {
+        const json = await res.json();
+        setDbStudents(json.alunos || []);
+      }
+    } catch(e) { console.error(e); }
+  };
+
+  useEffect(() => { loadStudents(); }, []);
+
   const [dbClasses, setDbClasses] = useState<any[]>(dbClasses || []);
   const [dbCourses, setDbCourses] = useState<any[]>(dbCourses || []);
 
@@ -114,7 +128,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
       if (clearDeepLink) clearDeepLink();
     }
     if (deepLinkStudentId) {
-      const student = data.students.find(s => s.id === deepLinkStudentId);
+      const student = dbStudents.find(s => s.id === deepLinkStudentId);
       if (student) {
         setSearchTerm(student.name);
         if (student.status === 'cancelled') setActiveTab('cancelled');
@@ -785,7 +799,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     let enrollmentNumber = formData.enrollmentNumber || editingStudent?.enrollmentNumber;
     if (!enrollmentNumber) {
       const year = new Date().getFullYear();
-      const existingCount = data.students.filter(s => s.enrollmentNumber?.startsWith(`MAT-${year}`)).length;
+      const existingCount = dbStudents.filter(s => s.enrollmentNumber?.startsWith(`MAT-${year}`)).length;
       enrollmentNumber = `MAT-${year}${String(existingCount + 1).padStart(5, '0')}`;
     }
 
@@ -831,7 +845,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     };
 
     if (editingStudent) {
-      updatedStudents = data.students.map(s => 
+      updatedStudents = dbStudents.map(s => 
         s.id === editingStudent.id ? studentToSave : s
       );
     } else {
@@ -978,7 +992,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
       return;
     }
 
-    const updatedStudents = data.students.map(s => 
+    const updatedStudents = dbStudents.map(s => 
       s.id === showDeleteModal.id ? { ...s, status: 'cancelled' as const, cancellationReason, classId: '' } : s
     );
     
@@ -1011,7 +1025,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
           }
 
           // Atualiza o estado local
-          const updatedStudents = data.students.map(s => 
+          const updatedStudents = dbStudents.map(s => 
             s.id === student.id ? { ...s, status: 'active' as const, cancellationReason: undefined } : s
           );
           
@@ -1032,7 +1046,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
       'Excluir Aluno Definitivamente',
       `⚠️ Atenção: Esta ação irá remover permanentemente ${student.name} e todo o seu histórico (mensalidades, contratos e presenças). Esta ação NÃO pode ser desfeita. Deseja continuar?`,
       async () => {
-        const updatedStudents = data.students.filter(s => s.id !== student.id);
+        const updatedStudents = dbStudents.filter(s => s.id !== student.id);
         const updatedPayments = data.payments.filter(p => p.studentId !== student.id);
         const updatedContracts = data.contracts.filter(c => c.studentId !== student.id);
         const updatedAttendance = data.attendance?.filter(a => a.studentId !== student.id) || [];
@@ -1056,7 +1070,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
   const handleTransferStudent = () => {
     if (!transferringStudent || !newClassId) return;
 
-    const updatedStudents = data.students.map(s => 
+    const updatedStudents = dbStudents.map(s => 
       s.id === transferringStudent.id ? { ...s, classId: newClassId } : s
     );
     updateData({ students: updatedStudents });
@@ -1195,7 +1209,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
         {(activeTab === 'active' && !selectedClassId && !searchTerm) ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {dbClasses.map(cls => {
-              const studentCount = data.students.filter(s => s.classId === cls.id && (activeTab === 'active' ? s.status !== 'cancelled' : s.status === 'cancelled')).length;
+              const studentCount = dbStudents.filter(s => s.classId === cls.id && (activeTab === 'active' ? s.status !== 'cancelled' : s.status === 'cancelled')).length;
               const course = dbCourses.find(c => c.id === cls.courseId);
               
               return (
@@ -1239,7 +1253,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
                     <UserX size={24} />
                   </div>
                   <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-bold">
-                    {data.students.filter(s => !s.classId && (activeTab === 'active' ? s.status !== 'cancelled' : s.status === 'cancelled')).length} Alunos
+                    {dbStudents.filter(s => !s.classId && (activeTab === 'active' ? s.status !== 'cancelled' : s.status === 'cancelled')).length} Alunos
                   </span>
                 </div>
                 <h4 className="text-lg font-black text-slate-800 mb-1">Sem Turma</h4>

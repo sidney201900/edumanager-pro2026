@@ -14,6 +14,17 @@ interface LessonScheduleProps {
 const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateData, onClose }) => {
   const { showAlert, showConfirm } = useDialog();
 
+  const [dbLessons, setDbLessons] = useState<Lesson[]>([]);
+  const loadLessons = async () => {
+    try {
+      const res = await fetch(`/api/aulas?turma_id=${classObj.id}`);
+      if (res.ok) {
+        const json = await res.json();
+        setDbLessons(json.aulas || []);
+      }
+    } catch(e) { console.error(e); }
+  };
+  React.useEffect(() => { loadLessons(); }, [classObj.id]);
   const [dbClasses, setDbClasses] = useState<any[]>(data?.classes || []);
   const [dbCourses, setDbCourses] = useState<any[]>(data?.courses || []);
   
@@ -73,7 +84,7 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
   const [replacementEndTime, setReplacementEndTime] = useState('');
 
   const checkCollision = (date: string, start: string, end: string, ignoreLessonId?: string) => {
-    return (data.lessons || []).find(l => {
+    return dbLessons.find(l => {
       // Ignore if it's the lesson being replaced (if any) or if it's cancelled
       if (l.id === ignoreLessonId || l.status === 'cancelled') return false;
       if (l.date !== date) return false;
@@ -91,7 +102,7 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
     });
   };
 
-  const classLessons = (data.lessons || [])
+  const classLessons = dbLessons
     .filter(l => l.classId === classObj.id)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -149,6 +160,13 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
       return;
     }
 
+    // Salvar no Banco
+    fetch('/api/aulas/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aulas: newLessons })
+    }).then(() => loadLessons());
+    
     const updatedLessons = [...(data.lessons || []), ...newLessons];
     
     // Notificar alunos sobre novas aulas extras geradas
@@ -268,7 +286,7 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
 
     setIsClosing(true);
 
-    const updatedLessons: Lesson[] = (data.lessons || []).map(l => 
+    const updatedLessons: Lesson[] = dbLessons.map(l => 
       l.id === lesson.id ? { ...l, status: 'cancelled', cancelReason } : l
     );
 
@@ -294,8 +312,13 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
     const newNotifs = notifyLessonAction('Aula Cancelada', notifMsg, waMsg);
     const updatedNotifications = [...(data.notifications || []), ...newNotifs];
 
-    updateData({ lessons: updatedLessons, notifications: updatedNotifications });
-    await dbService.saveData({ ...data, lessons: updatedLessons, notifications: updatedNotifications });
+    fetch('/api/aulas/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aulas: updatedLessons })
+    }).then(() => loadLessons());
+    updateData({ lessons: [...(data.lessons || []).filter(dl => dl.classId !== classObj.id), ...updatedLessons], notifications: updatedNotifications });
+    await dbService.saveData({ ...data, lessons: [...(data.lessons || []).filter(dl => dl.classId !== classObj.id), ...updatedLessons], notifications: updatedNotifications });
 
 
 
@@ -316,8 +339,13 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
     const updatedLessons: Lesson[] = (data.lessons || []).map(l => 
       l.id === lesson.id ? { ...l, status: 'scheduled', cancelReason: undefined } : l
     );
-    updateData({ lessons: updatedLessons });
-    await dbService.saveData({ ...data, lessons: updatedLessons });
+    fetch('/api/aulas/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aulas: updatedLessons })
+    }).then(() => loadLessons());
+    updateData({ lessons: [...(data.lessons || []).filter(dl => dl.classId !== classObj.id), ...updatedLessons] });
+    await dbService.saveData({ ...data, lessons: [...(data.lessons || []).filter(dl => dl.classId !== classObj.id), ...updatedLessons] });
 
     setTimeout(() => {
       setShowLessonDetail(null);
@@ -408,9 +436,20 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
 
   const handleDeleteAllSchedule = () => {
     showConfirm('Excluir Cronograma Completo', '⚠️ Tem certeza? Isso removerá TODAS as aulas desta turma permanentemente (agendadas, canceladas e reposições). Esta ação NÃO pode ser desfeita.', async () => {
+      // Deletar do PostgreSQL
+      const idsToDelete = dbLessons.map(l => l.id);
+      if (idsToDelete.length > 0) {
+        await fetch('/api/aulas/lote', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: idsToDelete })
+        });
+      }
+      
       const updatedLessons = (data.lessons || []).filter(l => l.classId !== classObj.id);
       updateData({ lessons: updatedLessons });
       await dbService.saveData({ ...data, lessons: updatedLessons });
+      await loadLessons();
       showAlert('Sucesso', 'Cronograma completo excluído.', 'success');
     });
   };

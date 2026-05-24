@@ -39,6 +39,28 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
     }).catch(console.error);
   }, []);
   
+  const [dbContracts, setDbContracts] = useState<Contract[]>([]);
+  const [dbTemplates, setDbTemplates] = useState<any[]>([]);
+
+  const loadData = async () => {
+    try {
+      const [resC, resT] = await Promise.all([
+        fetch('/api/contratos'),
+        fetch('/api/modelos-contrato')
+      ]);
+      if (resC.ok) {
+        const json = await resC.json();
+        setDbContracts(json.contratos || []);
+      }
+      if (resT.ok) {
+        const json = await resT.json();
+        setDbTemplates(json.modelos || []);
+      }
+    } catch(e) { console.error(e); }
+  };
+
+  useEffect(() => { loadData(); }, []);
+
   const [activeTab, setActiveTab] = useState<'contracts' | 'templates'>('contracts');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -72,7 +94,7 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       const student = data.students.find(s => s.id === formData.studentId);
       const cls = dbClasses.find(c => c.id === student?.classId);
       const course = dbCourses.find(c => c.id === cls?.courseId);
-      const templateObj = data.contractTemplates?.find(t => t.id === student?.contractTemplateId);
+      const templateObj = dbTemplates?.find(t => t.id === student?.contractTemplateId);
       
       if (student && course) {
         let template = templateObj?.content || '';
@@ -118,13 +140,13 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
     }
   }, [formData.studentId, data]);
 
-  const filteredContracts = data.contracts.filter(c => {
+  const filteredContracts = dbContracts.filter(c => {
     const student = data.students.find(s => s.id === c.studentId);
     const search = (searchTerm || '').toLowerCase();
     return (c.title || '').toLowerCase().includes(search) || (student?.name || '').toLowerCase().includes(search);
   });
 
-  const filteredTemplates = (data.contractTemplates || []).filter(t => 
+  const filteredTemplates = dbTemplates.filter(t => 
     (t.name || '').toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
@@ -141,7 +163,7 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString()
     };
-    updateData({ contracts: [...data.contracts, newContract] });
+    updateData({ contracts: [...dbContracts, newContract] });
     closeModal();
   };
 
@@ -152,7 +174,7 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       return;
     }
 
-    const templates = data.contractTemplates || [];
+    const templates = dbTemplates || [];
     let updatedTemplates;
 
     if (templateFormData.id) {
@@ -161,6 +183,19 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       updatedTemplates = [...templates, { ...templateFormData, id: crypto.randomUUID() }];
     }
 
+    if (templateFormData.id) {
+      fetch('/api/modelos-contrato/' + templateFormData.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateFormData)
+      }).then(() => loadData());
+    } else {
+      fetch('/api/modelos-contrato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...templateFormData, id: updatedTemplates.find(t=>t.name===templateFormData.name)?.id || crypto.randomUUID() })
+      }).then(() => loadData());
+    }
     updateData({ contractTemplates: updatedTemplates });
     closeTemplateModal();
   };
@@ -190,7 +225,7 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       'Excluir Contrato', 
       'Tem certeza que deseja excluir este contrato?',
       () => {
-        updateData({ contracts: data.contracts.filter(c => c.id !== id) });
+        updateData({ contracts: dbContracts.filter(c => c.id !== id) });
       }
     );
   };
@@ -200,7 +235,7 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       'Excluir Modelo', 
       'Tem certeza que deseja excluir este modelo de contrato?',
       () => {
-        updateData({ contractTemplates: (data.contractTemplates || []).filter(t => t.id !== id) });
+        updateData({ contractTemplates: dbTemplates.filter(t => t.id !== id) });
       }
     );
   };

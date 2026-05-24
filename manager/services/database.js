@@ -133,6 +133,72 @@ export async function insertCobrancas(cobrancas) {
         [c.aluno_id, c.asaas_customer_id, c.asaas_payment_id, c.asaas_installment_id || c.installment, c.installment, c.valor, c.vencimento, c.link_boleto, c.valor]
       );
     }
+
+
+    // --- SYNC MODELOS CONTRATO ---
+    if (schoolData.contractTemplates && schoolData.contractTemplates.length > 0) {
+      for (const t of schoolData.contractTemplates) {
+        await client.query(
+          `INSERT INTO modelos_contrato (id, nome, conteudo) VALUES ($1, $2, $3)
+          ON CONFLICT (id) DO UPDATE SET nome=EXCLUDED.nome, conteudo=EXCLUDED.conteudo`,
+          [t.id, t.name, t.content]
+        ).catch(err => console.warn(`[Sync:Modelos] Erro ${t.id}:`, err.message));
+      }
+    }
+
+    // --- SYNC CONTRATOS ---
+    if (schoolData.contracts && schoolData.contracts.length > 0) {
+      for (const c of schoolData.contracts) {
+        await client.query(
+          `INSERT INTO contratos (id, aluno_id, titulo, conteudo, created_at) VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (id) DO UPDATE SET titulo=EXCLUDED.titulo, conteudo=EXCLUDED.conteudo`,
+          [c.id, c.studentId, c.title, c.content, c.createdAt]
+        ).catch(err => console.warn(`[Sync:Contratos] Erro ${c.id}:`, err.message));
+      }
+    }
+
+    // --- SYNC AULAS ---
+    if (schoolData.lessons && schoolData.lessons.length > 0) {
+      for (const a of schoolData.lessons) {
+        await client.query(
+          `INSERT INTO aulas (
+            id, turma_id, data, horario_inicio, horario_fim, status, tipo, motivo_cancelamento, aula_original_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT (id) DO UPDATE SET
+            turma_id = EXCLUDED.turma_id,
+            data = EXCLUDED.data,
+            horario_inicio = COALESCE(EXCLUDED.horario_inicio, aulas.horario_inicio),
+            horario_fim = COALESCE(EXCLUDED.horario_fim, aulas.horario_fim),
+            status = EXCLUDED.status,
+            tipo = EXCLUDED.tipo,
+            motivo_cancelamento = EXCLUDED.motivo_cancelamento,
+            aula_original_id = COALESCE(EXCLUDED.aula_original_id, aulas.aula_original_id)`,
+          [
+            a.id, a.classId, a.date, a.startTime || null, a.endTime || null, a.status || 'scheduled', a.type || 'regular',
+            a.cancelReason || null, a.originalLessonId || null
+          ]
+        ).catch(err => console.warn(`[Sync:Aulas] Erro na aula ${a.id}:`, err.message));
+      }
+    }
+
+    // --- SYNC FREQUENCIAS ---
+    if (schoolData.attendance && schoolData.attendance.length > 0) {
+      for (const f of schoolData.attendance) {
+        await client.query(
+          `INSERT INTO frequencias (
+            id, aula_id, turma_id, aluno_id, tipo, data_registro, url_anexo, justificado
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (id) DO UPDATE SET
+            tipo = EXCLUDED.tipo,
+            url_anexo = COALESCE(EXCLUDED.url_anexo, frequencias.url_anexo),
+            justificado = EXCLUDED.justificado`,
+          [
+            f.id, f.lessonId, f.classId, f.studentId, f.type, f.date, f.attachment || null, f.justified || false
+          ]
+        ).catch(err => console.warn(`[Sync:Freq] Erro na freq ${f.id}:`, err.message));
+      }
+    }
+
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
@@ -539,6 +605,242 @@ export async function deleteCategoriaFuncionario(id) {
 }
 
 // ============================================================
+// ALUNOS (FASE 4)
+// ============================================================
+export async function getAlunos() {
+  const result = await pool.query("SELECT * FROM alunos ORDER BY nome ASC");
+  return result.rows;
+}
+
+export async function insertAluno(a) {
+  const result = await pool.query(
+    `INSERT INTO alunos (
+      id, nome, email, telefone, data_nascimento, cpf, rg, rg_data_emissao,
+      nome_responsavel, telefone_responsavel, cpf_responsavel, data_nascimento_responsavel,
+      turma_id, status, data_matricula, foto_url, cep, rua, numero, bairro, cidade, estado,
+      desconto, tem_responsavel, modelo_contrato_id, numero_matricula, senha_portal,
+      motivo_cancelamento
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+    ) RETURNING *`,
+    [
+      a.id, a.nome || a.name, a.email || '', a.telefone || a.phone || '', a.data_nascimento || a.birthDate || null,
+      a.cpf || '', a.rg || '', a.rg_data_emissao || a.rgIssueDate || null,
+      a.nome_responsavel || a.guardianName || '', a.telefone_responsavel || a.guardianPhone || '',
+      a.cpf_responsavel || a.guardianCpf || '', a.data_nascimento_responsavel || a.guardianBirthDate || null,
+      a.turma_id || a.classId || null, a.status || 'active', a.data_matricula || a.registrationDate || null,
+      a.foto_url || a.photo || '', a.cep || a.addressZip || '', a.rua || a.addressStreet || '',
+      a.numero || a.addressNumber || '', a.bairro || a.addressNeighborhood || '', a.cidade || a.addressCity || '',
+      a.estado || a.addressState || '', a.desconto || a.discount || 0, a.tem_responsavel !== undefined ? a.tem_responsavel : (a.hasGuardian || false),
+      a.modelo_contrato_id || a.contractTemplateId || null, a.numero_matricula || a.enrollmentNumber || null,
+      a.senha_portal || a.portalPassword || null, a.motivo_cancelamento || a.cancellationReason || null
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateAluno(id, a) {
+  const result = await pool.query(
+    `UPDATE alunos SET
+      nome=$1, email=$2, telefone=$3, data_nascimento=$4, cpf=$5, rg=$6, rg_data_emissao=$7,
+      nome_responsavel=$8, telefone_responsavel=$9, cpf_responsavel=$10, data_nascimento_responsavel=$11,
+      turma_id=$12, status=$13, data_matricula=$14, foto_url=$15, cep=$16, rua=$17, numero=$18, bairro=$19, cidade=$20, estado=$21,
+      desconto=$22, tem_responsavel=$23, modelo_contrato_id=$24, numero_matricula=$25, senha_portal=$26,
+      motivo_cancelamento=$27
+     WHERE id = $28 RETURNING *`,
+    [
+      a.nome || a.name, a.email || '', a.telefone || a.phone || '', a.data_nascimento || a.birthDate || null,
+      a.cpf || '', a.rg || '', a.rg_data_emissao || a.rgIssueDate || null,
+      a.nome_responsavel || a.guardianName || '', a.telefone_responsavel || a.guardianPhone || '',
+      a.cpf_responsavel || a.guardianCpf || '', a.data_nascimento_responsavel || a.guardianBirthDate || null,
+      a.turma_id || a.classId || null, a.status || 'active', a.data_matricula || a.registrationDate || null,
+      a.foto_url || a.photo || '', a.cep || a.addressZip || '', a.rua || a.addressStreet || '',
+      a.numero || a.addressNumber || '', a.bairro || a.addressNeighborhood || '', a.cidade || a.addressCity || '',
+      a.estado || a.addressState || '', a.desconto || a.discount || 0, a.tem_responsavel !== undefined ? a.tem_responsavel : (a.hasGuardian || false),
+      a.modelo_contrato_id || a.contractTemplateId || null, a.numero_matricula || a.enrollmentNumber || null,
+      a.senha_portal || a.portalPassword || null, a.motivo_cancelamento || a.cancellationReason || null,
+      id
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function deleteAluno(id) {
+  await pool.query('DELETE FROM alunos WHERE id = $1', [id]);
+}
+
+// ============================================================
+// CONTRATOS E MODELOS
+// ============================================================
+export async function getModelosContrato() {
+  const { rows } = await pool.query('SELECT * FROM modelos_contrato ORDER BY nome ASC');
+  return rows.map(r => ({ id: r.id, name: r.nome, content: r.conteudo }));
+}
+
+export async function insertModeloContrato(m) {
+  await pool.query('INSERT INTO modelos_contrato (id, nome, conteudo) VALUES ($1, $2, $3)', [m.id, m.name, m.content]);
+}
+
+export async function updateModeloContrato(id, m) {
+  await pool.query('UPDATE modelos_contrato SET nome=$1, conteudo=$2 WHERE id=$3', [m.name, m.content, id]);
+}
+
+export async function deleteModeloContrato(id) {
+  await pool.query('DELETE FROM modelos_contrato WHERE id=$1', [id]);
+}
+
+export async function getContratos() {
+  const { rows } = await pool.query('SELECT *, TO_CHAR(created_at, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\') as date FROM contratos ORDER BY created_at DESC');
+  return rows.map(r => ({ id: r.id, studentId: r.aluno_id, title: r.titulo, content: r.conteudo, date: r.date }));
+}
+
+export async function insertContrato(c) {
+  await pool.query('INSERT INTO contratos (id, aluno_id, titulo, conteudo) VALUES ($1, $2, $3, $4)', [c.id, c.studentId, c.title, c.content]);
+}
+
+export async function deleteContrato(id) {
+  await pool.query('DELETE FROM contratos WHERE id=$1', [id]);
+}
+
+// ============================================================
+// AULAS E CRONOGRAMA
+// ============================================================
+export async function getAulasByTurma(turma_id) {
+  const result = await pool.query(
+    `SELECT *, TO_CHAR(data, 'YYYY-MM-DD') as data_formatada FROM aulas WHERE turma_id = $1 ORDER BY data ASC, horario_inicio ASC`,
+    [turma_id]
+  );
+  return result.rows.map(row => ({
+    id: row.id,
+    classId: row.turma_id,
+    date: row.data_formatada,
+    startTime: row.horario_inicio,
+    endTime: row.horario_fim,
+    status: row.status,
+    type: row.tipo,
+    cancellationReason: row.motivo_cancelamento,
+    originalLessonId: row.aula_original_id
+  }));
+}
+
+export async function getAllAulas() {
+  const result = await pool.query(
+    `SELECT *, TO_CHAR(data, 'YYYY-MM-DD') as data_formatada FROM aulas ORDER BY data ASC, horario_inicio ASC`
+  );
+  return result.rows.map(row => ({
+    id: row.id,
+    classId: row.turma_id,
+    date: row.data_formatada,
+    startTime: row.horario_inicio,
+    endTime: row.horario_fim,
+    status: row.status,
+    type: row.tipo,
+    cancellationReason: row.motivo_cancelamento,
+    originalLessonId: row.aula_original_id
+  }));
+}
+
+export async function insertAulas(aulas) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const a of aulas) {
+      await client.query(
+        `INSERT INTO aulas (
+          id, turma_id, data, horario_inicio, horario_fim, status, tipo, motivo_cancelamento, aula_original_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (id) DO UPDATE SET
+          turma_id=$2, data=$3, horario_inicio=$4, horario_fim=$5, status=$6, tipo=$7, motivo_cancelamento=$8, aula_original_id=$9`,
+        [
+          a.id, a.classId, a.date, a.startTime, a.endTime, a.status || 'scheduled', a.type || 'regular',
+          a.cancellationReason || null, a.originalLessonId || null
+        ]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteAulas(ids) {
+  if (!ids || ids.length === 0) return;
+  await pool.query('DELETE FROM aulas WHERE id = ANY($1)', [ids]);
+}
+
+// ============================================================
+// PROVAS & QUESTÕES (FASE 5)
+// ============================================================
+export async function getProvas() {
+  const result = await pool.query('SELECT * FROM provas ORDER BY created_at DESC');
+  return result.rows;
+}
+
+export async function getQuestoesDaProva(provaId) {
+  const result = await pool.query('SELECT * FROM questoes_provas WHERE prova_id = $1 ORDER BY ordem ASC', [provaId]);
+  return result.rows;
+}
+
+export async function insertProva(p) {
+  await pool.query(
+    `INSERT INTO provas (id, turma_id, disciplina_id, periodo_id, titulo, duracao_minutos, status, permitir_refacao, is_deleted, evaluation_type)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [
+      p.id, p.turma_id || p.classId, p.disciplina_id || p.subjectId, p.periodo_id || p.periodId, 
+      p.titulo || p.title, p.duracao_minutos || p.durationMinutes || 60, p.status || 'draft', 
+      p.permitir_refacao || p.allowRetake || false,
+      p.is_deleted || p.isDeleted || false,
+      p.evaluation_type || p.evaluationType || 'exam'
+    ]
+  );
+}
+
+export async function updateProva(id, p) {
+  await pool.query(
+    `UPDATE provas SET 
+     turma_id = $1, disciplina_id = $2, periodo_id = $3, titulo = $4, duracao_minutos = $5, status = $6, permitir_refacao = $7, is_deleted = $8, evaluation_type = $9
+     WHERE id = $10`,
+    [
+      p.turma_id || p.classId, p.disciplina_id || p.subjectId, p.periodo_id || p.periodId, 
+      p.titulo || p.title, p.duracao_minutos || p.durationMinutes || 60, p.status || 'draft', 
+      p.permitir_refacao || p.allowRetake || false,
+      p.is_deleted || p.isDeleted || false,
+      p.evaluation_type || p.evaluationType || 'exam',
+      id
+    ]
+  );
+}
+
+export async function deleteProva(id) {
+  await pool.query('DELETE FROM provas WHERE id = $1', [id]);
+}
+
+export async function syncQuestoesProva(provaId, questoes) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM questoes_provas WHERE prova_id = $1', [provaId]);
+    for (let i = 0; i < questoes.length; i++) {
+      const q = questoes[i];
+      await client.query(
+        `INSERT INTO questoes_provas (id, prova_id, texto, imagem_url, opcoes, indice_correto, ordem)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [q.id || require('crypto').randomUUID(), provaId, q.texto || q.text, q.imagem_url || q.imageUrl, JSON.stringify(q.opcoes || q.options || []), q.indice_correto ?? q.correctIndex ?? 0, i]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// ============================================================
 // SINCRONIZAÇÃO: JSON -> TABELAS RELACIONAIS
 // Garante que IDs do JSON existam nas tabelas para evitar erro de Foreign Key
 // ============================================================
@@ -607,8 +909,10 @@ export async function syncJsonToRelationalTables() {
       }
     }
 
-    // Garantir colunas de refação em provas
+    // Garantir colunas de refação e soft delete em provas
     await client.query('ALTER TABLE provas ADD COLUMN IF NOT EXISTS permitir_refacao BOOLEAN DEFAULT FALSE');
+    await client.query('ALTER TABLE provas ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE');
+    await client.query("ALTER TABLE provas ADD COLUMN IF NOT EXISTS evaluation_type VARCHAR(50) DEFAULT 'exam'");
 
     // 2. Sincronizar Disciplinas (Subjects)
     if (data.subjects && Array.isArray(data.subjects)) {
