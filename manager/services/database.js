@@ -515,7 +515,7 @@ export async function deleteTurma(id) {
 }
 
 export async function getDisciplinas() {
-  const { rows } = await pool.query('SELECT * FROM disciplinas ORDER BY nome ASC');
+  const { rows } = await pool.query('SELECT * FROM disciplinas ORDER BY created_at ASC');
   return rows;
 }
 
@@ -720,6 +720,10 @@ export async function insertContrato(c) {
   await pool.query('INSERT INTO contratos (id, aluno_id, titulo, conteudo) VALUES ($1, $2, $3, $4)', [c.id, c.studentId, c.title, c.content]);
 }
 
+export async function updateContrato(id, c) {
+  await pool.query('UPDATE contratos SET titulo=$1, conteudo=$2 WHERE id=$3', [c.title, c.content, id]);
+}
+
 export async function deleteContrato(id) {
   await pool.query('DELETE FROM contratos WHERE id=$1', [id]);
 }
@@ -820,9 +824,9 @@ export async function getProvas() {
         examId: q.prova_id,
         text: q.texto,
         options: q.opcoes || [],
-        correctAnswer: q.resposta_correta,
+        correctAnswer: q.indice_correto,
         order: q.ordem,
-        imageUrl: q.url_imagem
+        imageUrl: q.imagem_url
       }))
     });
   }

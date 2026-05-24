@@ -88,52 +88,58 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
     content: ''
   });
 
+  const generateContractContent = (student: any, templateContent: string) => {
+    const cls = dbClasses.find(c => c.id === student?.classId);
+    const course = dbCourses.find(c => c.id === cls?.courseId);
+    if (!student || !course) return templateContent;
+
+    let template = templateContent;
+    // Aluno
+    template = template.replace(/{{aluno}}/g, student.name || '');
+    template = template.replace(/{{aluno_cpf}}/g, student.cpf || '');
+    template = template.replace(/{{aluno_rg}}/g, student.rg || '');
+    template = template.replace(/{{aluno_nascimento}}/g, student.birthDate ? new Date(student.birthDate).toLocaleDateString('pt-BR') : '');
+    template = template.replace(/{{aluno_email}}/g, student.email || '');
+    template = template.replace(/{{aluno_telefone}}/g, student.phone || '');
+    template = template.replace(/{{aluno_cep}}/g, student.addressZip || '');
+    template = template.replace(/{{aluno_endereco}}/g, `${student.addressStreet || ''}, ${student.addressNumber || ''}`);
+    template = template.replace(/{{aluno_bairro}}/g, student.addressNeighborhood || '');
+    template = template.replace(/{{aluno_cidade}}/g, student.addressCity || '');
+    template = template.replace(/{{aluno_estado}}/g, student.addressState || '');
+
+    // Responsável
+    template = template.replace(/{{responsavel_nome}}/g, student.guardianName || '');
+    template = template.replace(/{{responsavel_cpf}}/g, student.guardianCpf || '');
+    template = template.replace(/{{responsavel_nascimento}}/g, student.guardianBirthDate ? new Date(student.guardianBirthDate).toLocaleDateString('pt-BR') : '');
+
+    // Curso e Turma
+    template = template.replace(/{{curso}}/g, course.name || '');
+    template = template.replace(/{{mensalidade}}/g, course.monthlyFee ? `R$ ${course.monthlyFee.toFixed(2)}` : 'R$ 0,00');
+    template = template.replace(/{{duracao}}/g, course.duration || '');
+    template = template.replace(/{{curso_taxa_matricula}}/g, course.registrationFee ? `R$ ${course.registrationFee.toFixed(2)}` : 'R$ 0,00');
+    template = template.replace(/{{turma_nome}}/g, cls?.name || '');
+    template = template.replace(/{{turma_professor}}/g, cls?.teacher || '');
+    template = template.replace(/{{turma_horario}}/g, cls?.schedule || '');
+
+    // Escola
+    template = template.replace(/{{data}}/g, new Date().toLocaleDateString('pt-BR'));
+    template = template.replace(/{{escola}}/g, data.profile.name || '');
+    template = template.replace(/{{cnpj_escola}}/g, data.profile.cnpj || '');
+
+    return template;
+  };
+
   // Pre-load content when student is selected based on template
   useEffect(() => {
     if (formData.studentId && !formData.content) {
       const student = data.students.find(s => s.id === formData.studentId);
-      const cls = dbClasses.find(c => c.id === student?.classId);
-      const course = dbCourses.find(c => c.id === cls?.courseId);
       const templateObj = dbTemplates?.find(t => t.id === student?.contractTemplateId);
       
-      if (student && course) {
-        let template = templateObj?.content || '';
-        
-        // Aluno
-        template = template.replace(/{{aluno}}/g, student.name || '');
-        template = template.replace(/{{aluno_cpf}}/g, student.cpf || '');
-        template = template.replace(/{{aluno_rg}}/g, student.rg || '');
-        template = template.replace(/{{aluno_nascimento}}/g, student.birthDate ? new Date(student.birthDate).toLocaleDateString('pt-BR') : '');
-        template = template.replace(/{{aluno_email}}/g, student.email || '');
-        template = template.replace(/{{aluno_telefone}}/g, student.phone || '');
-        template = template.replace(/{{aluno_cep}}/g, student.addressZip || '');
-        template = template.replace(/{{aluno_endereco}}/g, `${student.addressStreet || ''}, ${student.addressNumber || ''}`);
-        template = template.replace(/{{aluno_bairro}}/g, student.addressNeighborhood || '');
-        template = template.replace(/{{aluno_cidade}}/g, student.addressCity || '');
-        template = template.replace(/{{aluno_estado}}/g, student.addressState || '');
-
-        // Responsável
-        template = template.replace(/{{responsavel_nome}}/g, student.guardianName || '');
-        template = template.replace(/{{responsavel_cpf}}/g, student.guardianCpf || '');
-        template = template.replace(/{{responsavel_nascimento}}/g, student.guardianBirthDate ? new Date(student.guardianBirthDate).toLocaleDateString('pt-BR') : '');
-
-        // Curso e Turma
-        template = template.replace(/{{curso}}/g, course.name || '');
-        template = template.replace(/{{mensalidade}}/g, course.monthlyFee ? `R$ ${course.monthlyFee.toFixed(2)}` : 'R$ 0,00');
-        template = template.replace(/{{duracao}}/g, course.duration || '');
-        template = template.replace(/{{curso_taxa_matricula}}/g, course.registrationFee ? `R$ ${course.registrationFee.toFixed(2)}` : 'R$ 0,00');
-        template = template.replace(/{{turma_nome}}/g, cls?.name || '');
-        template = template.replace(/{{turma_professor}}/g, cls?.teacher || '');
-        template = template.replace(/{{turma_horario}}/g, cls?.schedule || '');
-
-        // Escola
-        template = template.replace(/{{data}}/g, new Date().toLocaleDateString('pt-BR'));
-        template = template.replace(/{{escola}}/g, data.profile.name || '');
-        template = template.replace(/{{cnpj_escola}}/g, data.profile.cnpj || '');
-        
+      if (student) {
+        const finalContent = generateContractContent(student, templateObj?.content || '');
         setFormData(prev => ({ 
           ...prev, 
-          content: template,
+          content: finalContent,
           title: prev.title || `Contrato de Matrícula - ${student.name}`
         }));
       }
@@ -158,11 +164,33 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       return;
     }
 
+    if ((formData as any).id) {
+       // Editar individual
+       fetch(`/api/contratos/${(formData as any).id}`, {
+         method: 'PUT',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify(formData)
+       }).then(() => loadData());
+       
+       updateData({
+          contracts: dbContracts.map(c => c.id === (formData as any).id ? { ...c, ...formData } : c)
+       });
+       closeModal();
+       return;
+    }
+
     const newContract: Contract = {
       ...formData,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString()
     };
+    
+    fetch('/api/contratos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newContract)
+    }).then(() => loadData());
+
     updateData({ contracts: [...dbContracts, newContract] });
     closeModal();
   };
@@ -188,7 +216,30 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(templateFormData)
-      }).then(() => loadData());
+      }).then(async () => {
+         // Propagar para todos os alunos que usam este template e já tem contrato gerado
+         const affectedStudents = data.students.filter(s => s.contractTemplateId === templateFormData.id);
+         const promises = [];
+         
+         affectedStudents.forEach(student => {
+             const existingContract = dbContracts.find(c => c.studentId === student.id);
+             if (existingContract) {
+                 const newContent = generateContractContent(student, templateFormData.content);
+                 promises.push(
+                     fetch(`/api/contratos/${existingContract.id}`, {
+                         method: 'PUT',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ title: existingContract.title, content: newContent })
+                     })
+                 );
+             }
+         });
+         
+         if (promises.length > 0) {
+             await Promise.all(promises);
+         }
+         loadData();
+      });
     } else {
       fetch('/api/modelos-contrato', {
         method: 'POST',
@@ -408,6 +459,16 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
                           ) : (
                             <Printer size={20} />
                           )}
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setFormData({ studentId: contract.studentId, title: contract.title, content: contract.content, ...( { id: contract.id } as any ) });
+                            setIsModalOpen(true);
+                          }} 
+                          className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 rounded-xl transition-all shadow-sm" 
+                          title="Editar Contrato"
+                        >
+                          <Edit2 size={20} />
                         </button>
                         <button onClick={() => handleDelete(contract.id)} className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-red-600 rounded-xl transition-all shadow-sm" title="Excluir"><Trash2 size={20} /></button>
                       </td>

@@ -41,7 +41,7 @@ import {
   getDisciplinas, insertDisciplina, updateDisciplina, deleteDisciplina,
   getAlunos, insertAluno, updateAluno, deleteAluno,
   getModelosContrato, insertModeloContrato, updateModeloContrato, deleteModeloContrato,
-  getContratos, insertContrato, deleteContrato,
+  getContratos, insertContrato, updateContrato, deleteContrato,
   getAulasByTurma, getAllAulas, insertAulas, deleteAulas,
   getProvas, getQuestoesDaProva, insertProva, updateProva, deleteProva, syncQuestoesProva
 } from './services/database.js';
@@ -545,6 +545,9 @@ app.get('/api/contratos', async (req, res) => {
 });
 app.post('/api/contratos', async (req, res) => {
   try { await insertContrato(req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+app.put('/api/contratos/:id', async (req, res) => {
+  try { await updateContrato(req.params.id, req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 app.delete('/api/contratos/:id', async (req, res) => {
   try { await deleteContrato(req.params.id); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
