@@ -1,23 +1,64 @@
-# Log de Migração SQL-First (Fase 5/6: Aulas, Frequências e Contratos)
+# Log da Migração Massiva SQL-First (Sessão Completa)
 
-## Resumo das Modificações
-Nesta sessão, focamos em remover a exclusividade do arquivo `school_data.json` nos módulos de Cronograma (Aulas), Frequências e Contratos (incluindo Modelos de Contrato).
+## Visão Geral
+Nesta sessão de trabalho, realizamos o "core" da transição do sistema EduManager, saindo do modelo puramente JSON (`school_data.json`) e consolidando 4 módulos centrais diretamente no Banco de Dados Relacional PostgreSQL.
 
-### 1. Banco de Dados e Backend (Manager)
-- Adicionados métodos CRUD no arquivo `manager/services/database.js` para as tabelas `aulas`, `contratos` e `modelos_contrato`.
-- Expostos endpoints em `manager/server.selfhosted.js`:
-  - `/api/aulas` (GET) e `/api/aulas/lote` (POST, DELETE)
-  - `/api/modelos-contrato` (GET, POST, PUT, DELETE)
-  - `/api/contratos` (GET, POST, DELETE)
-- **Sincronização Injetada:** Modificada a função `syncJsonToRelationalTables` para iterar sobre `schoolData.lessons`, `schoolData.attendance`, `schoolData.contracts` e `schoolData.contractTemplates`, executando `INSERT ... ON CONFLICT DO UPDATE`. Isso garante que operações híbridas (que salvam JSON no Frontend) sejam espelhadas instantaneamente no PostgreSQL.
+## Módulos Migrados
 
-### 2. Frontend (Manager)
-- `LessonSchedule.tsx` (Cronograma): Refatorado para carregar as aulas ( `fetch('/api/aulas')`) em estado próprio (`dbLessons`), removendo a leitura estática de `data.lessons`. Todas as ações (gerar aulas, reagendar, cancelar e exclusão em lote) agora enviam chamadas à API antes de atualizar a UI e invocar o `saveData`.
-- `Contracts.tsx` (Contratos): Refatorado para utilizar estados locais (`dbContracts` e `dbTemplates`) carregados das novas rotas de API. Criações e exclusões realizam requests HTTP para persistir os dados nativamente no SQL, mantendo compatibilidade com o formato JSON da UI base.
+### Fase 4: Gestão de Alunos e Autenticação
+- **Backend Manager**: CRUD no `database.js` para tabela `alunos`, rotas `/api/alunos` no `server.selfhosted.js`.
+- **Frontend Manager (`Students.tsx`)**: Refatorado para buscar via `fetch('/api/alunos')`.
+- **Portal do Aluno**: Login (`/api/portal/login`) e perfil (`/api/portal/me`) reescritos para consultar a tabela `alunos` no PostgreSQL.
 
-### 3. Portal do Aluno
-- **`GET /api/portal/aulas`**: Alterada a rota para fazer um `SELECT` direto na tabela `aulas`, cruzando os IDs de turma vinculados ao aluno (via tabela `alunos` e histórico em `frequencias`). Adicionado fallback para ler o JSON caso o banco retorne vazio (útil durante a janela de transição).
-- **`GET /api/portal/contratos`**: Alterada a rota para fazer um `SELECT` na tabela `contratos` puxando pelos dados salvos, com fallback seguro para o JSON se necessário.
+### Fase 5: Avaliações e Provas
+- Backend e Frontend conectados às tabelas `provas` e `questoes_provas`.
 
-## Impacto
-O Portal do Aluno agora opera primordialmente com PostgreSQL para a maior parte de sua leitura, incluindo alunos, provas, aulas, frequências e contratos. O painel administrativo foi fortalecido, registrando operações nos dois bancos simultaneamente para evitar a temida "Tela Branca" durante leituras em cascata no dashboard antigo.
+### Fase 6: Cronograma e Aulas
+- **Backend Manager**: Queries em lote (`insertAulas`, `getAulasByTurma`, `getAllAulas`, `deleteAulas`).
+- **Frontend Manager (`LessonSchedule.tsx`)**: Consome `fetch('/api/aulas')` em estado próprio (`dbLessons`).
+- **Frontend Manager (`Classes.tsx`)**: Ao criar/editar turma e gerar cronograma, agora envia aulas via `POST /api/aulas/lote` para o PostgreSQL.
+- **Portal do Aluno**: Rota `/api/portal/aulas` faz `SELECT FROM aulas WHERE turma_id = ANY(...)`.
+
+### Fase 7: Contratos e Modelos
+- **Backend Manager**: CRUD para `contratos` e `modelos_contrato`.
+- **Frontend Manager (`Contracts.tsx`)**: Consome `/api/contratos` e `/api/modelos-contrato`.
+- **Portal do Aluno**: Rota `/api/portal/contratos` faz `SELECT FROM contratos WHERE aluno_id = $1`.
+
+## Bugs Encontrados e Corrigidos
+
+### 🐛 Bug 1: Tela Branca na Aba Alunos (`Students.tsx`)
+- **Causa**: Referência circular no `useState` — `useState<any[]>(dbClasses || [])` referenciava a si mesma.
+- **Fix**: Alterado para `useState<any[]>(data?.classes || [])`.
+
+### 🐛 Bug 2: Dados Não Migrados para PostgreSQL
+- **Causa**: A rotina `syncJsonToRelationalTables` só roda quando o Manager salva o JSON via `PUT /api/school-data`. Como a migração era nova, os dados nunca foram sincronizados.
+- **Fix**: Criado script `migrate_aulas_contratos.cjs` que conecta diretamente ao PostgreSQL de produção e roda os INSERTs.
+- **Resultado**: 109 aulas, 9 contratos, 1 modelo e 89 frequências migrados com sucesso.
+
+### 🐛 Bug 3: Aulas Órfãs (FK Constraint)
+- **Causa**: 57 aulas no JSON pertenciam a uma turma deletada (`d48b268c-...`), causando violação de FK.
+- **Fix**: O script filtra aulas cujo `classId` não existe na tabela `turmas`.
+
+### 🐛 Bug 4: Contratos Não Apareciam no Manager
+- **Causa**: A função `getContratos()` retornava o campo como `date`, mas o frontend (`Contracts.tsx`) esperava `createdAt`.
+- **Fix**: Corrigido o mapeamento em `database.js` para retornar `createdAt: r.created_at_fmt`.
+
+### 🐛 Bug 5: Classes.tsx Não Salvava Aulas no PostgreSQL
+- **Causa**: Ao criar/editar turma com cronograma, as aulas geradas eram salvas **apenas no JSON** (`data.lessons`), nunca no banco.
+- **Fix**: Adicionado `fetch('/api/aulas/lote')` no `Classes.tsx` para enviar as aulas geradas ao PostgreSQL.
+
+## Estado Final do Banco de Dados
+| Tabela | Registros |
+|---|---|
+| alunos | 9 |
+| aulas | 109 |
+| contratos | 9 |
+| frequencias | 89 |
+| modelos_contrato | 1 |
+| provas | 3 |
+| turmas | 3 |
+
+## Padrões de Arquitetura
+1. **Reverse Sync (Mão Dupla)**: Frontend salva no SQL via API e mantém backup no JSON.
+2. **Fallback Gradual**: Portal prioriza SQL, invoca JSON apenas se banco retornar vazio.
+3. **Migração de Dados**: Executada via script Node.js conectando diretamente ao PostgreSQL de produção (host: `150.230.87.131`, user: `edumanager`).

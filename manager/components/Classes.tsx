@@ -204,7 +204,15 @@ const Classes: React.FC<ClassesProps> = ({ data, updateData, onNavigateToClass }
           if (!res.ok) throw new Error('Failed to create class');
         }
 
-        // Save lessons in the json fallback for now since lessons are not fully migrated
+        // Save lessons in both PostgreSQL and JSON for compatibility
+        const classLessons = updatedLessons.filter(l => l.classId === newClass.id);
+        if (classLessons.length > 0) {
+          await fetch('/api/aulas/lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aulas: classLessons })
+          }).catch(e => console.warn('Erro ao salvar aulas no SQL:', e));
+        }
         updateData({ lessons: updatedLessons });
         dbService.saveData({ ...data, lessons: updatedLessons });
 

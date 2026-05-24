@@ -54,8 +54,8 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
 
   useEffect(() => { loadStudents(); }, []);
 
-  const [dbClasses, setDbClasses] = useState<any[]>(dbClasses || []);
-  const [dbCourses, setDbCourses] = useState<any[]>(dbCourses || []);
+  const [dbClasses, setDbClasses] = useState<any[]>(data?.classes || []);
+  const [dbCourses, setDbCourses] = useState<any[]>(data?.courses || []);
 
   useEffect(() => {
     Promise.all([

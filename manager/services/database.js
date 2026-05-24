@@ -690,8 +690,8 @@ export async function deleteModeloContrato(id) {
 }
 
 export async function getContratos() {
-  const { rows } = await pool.query('SELECT *, TO_CHAR(created_at, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\') as date FROM contratos ORDER BY created_at DESC');
-  return rows.map(r => ({ id: r.id, studentId: r.aluno_id, title: r.titulo, content: r.conteudo, date: r.date }));
+  const { rows } = await pool.query('SELECT *, TO_CHAR(created_at, \'YYYY-MM-DD"T"HH24:MI:SS"Z"\') as created_at_fmt FROM contratos ORDER BY created_at DESC');
+  return rows.map(r => ({ id: r.id, studentId: r.aluno_id, title: r.titulo, content: r.conteudo, createdAt: r.created_at_fmt }));
 }
 
 export async function insertContrato(c) {
