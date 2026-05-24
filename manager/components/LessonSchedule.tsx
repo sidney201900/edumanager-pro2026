@@ -13,6 +13,34 @@ interface LessonScheduleProps {
 
 const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateData, onClose }) => {
   const { showAlert, showConfirm } = useDialog();
+
+  const [dbClasses, setDbClasses] = useState<any[]>(data?.classes || []);
+  const [dbCourses, setDbCourses] = useState<any[]>(data?.courses || []);
+  
+
+  React.useEffect(() => {
+    Promise.all([
+      fetch('/api/turmas').catch(() => ({ ok: false, json: async () => ({}) })),
+      fetch('/api/cursos').catch(() => ({ ok: false, json: async () => ({}) })),
+      
+    ]).then(async (responses) => {
+      const [resT, resC] = responses;
+      if (resT && resT.ok) {
+        const jsonT = await resT.json();
+        if (jsonT.turmas) setDbClasses(jsonT.turmas.map((t: any) => ({
+          id: t.id, name: t.nome, courseId: t.curso_id, maxStudents: Number(t.max_alunos || 0)
+        })));
+      }
+      if (resC && resC.ok) {
+        const jsonC = await resC.json();
+        if (jsonC.cursos) setDbCourses(jsonC.cursos.map((c: any) => ({
+          id: c.id, name: c.nome, monthlyFee: Number(c.mensalidade || 0), registrationFee: Number(c.taxa_matricula || 0)
+        })));
+      }
+      
+    }).catch(console.error);
+  }, []);
+  
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showLessonDetail, setShowLessonDetail] = useState<Lesson | null>(null);
   const [isClosing, setIsClosing] = useState(false);
@@ -53,7 +81,7 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
 
       // Só dá conflito se for na mesma TURMA ou com o mesmo PROFESSOR
       const isSameClass = l.classId === classObj.id;
-      const otherClass = data.classes.find(c => c.id === l.classId);
+      const otherClass = dbClasses.find(c => c.id === l.classId);
       const isSameTeacher = otherClass && classObj.teacher && otherClass.teacher === classObj.teacher;
 
       if (!isSameClass && !isSameTeacher) return false;

@@ -41,6 +41,33 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
   const periods = data.periods || [];
   const grades = data.grades || [];
 
+  const [dbClasses, setDbClasses] = useState<Class[]>(data.classes || []);
+  const [dbCourses, setDbCourses] = useState<any[]>(data.courses || []);
+
+  const loadClassesAndCourses = async () => {
+    try {
+      const [clsRes, crsRes] = await Promise.all([
+        fetch('/api/turmas'),
+        fetch('/api/cursos')
+      ]);
+      const clsData = await clsRes.json();
+      const crsData = await crsRes.json();
+
+      if (clsData.turmas) {
+        setDbClasses(clsData.turmas.map((t: any) => ({
+          id: t.id,
+          name: t.nome,
+          courseId: t.curso_id
+        })));
+      }
+      if (crsData.cursos) {
+        setDbCourses(crsData.cursos);
+      }
+    } catch(e) {
+      console.error('Erro ao buscar turmas/cursos:', e);
+    }
+  };
+
   const loadSubjects = async () => {
     try {
       const res = await fetch('/api/disciplinas');
@@ -59,6 +86,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
   React.useEffect(() => {
     loadSubjects();
+    loadClassesAndCourses();
   }, []);
 
   // Buscar todas as notas da turma para mostrar médias na lista
@@ -361,7 +389,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
     return (totalSum / subjectAverages.length).toFixed(2);
   };
 
-  const filteredClasses = data.classes.filter(c =>
+  const filteredClasses = dbClasses.filter(c =>
     (c.name || '').toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
@@ -494,7 +522,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredClasses.map(cls => {
-                  const course = data.courses.find(c => c.id === cls.courseId);
+                  const course = dbCourses.find(c => c.id === cls.courseId);
                   const studentCount = data.students.filter(s => s.classId === cls.id).length;
                   return (
                     <div
@@ -511,7 +539,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ data, updateData }) => {
                         </div>
                         <div>
                           <h3 className="font-black text-slate-800 text-lg">{cls.name}</h3>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{course?.name || 'Curso não encontrado'}</p>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{course?.nome || course?.name || 'Curso não encontrado'}</p>
                         </div>
                       </div>
                       <div className="flex items-center justify-between text-sm">

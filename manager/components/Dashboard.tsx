@@ -41,10 +41,27 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ data }) => {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [dashboardView, setDashboardView] = useState<'standard' | 'detailed'>('standard');
+  const [dbClasses, setDbClasses] = useState<any[]>(data.classes || []);
+
+  React.useEffect(() => {
+    fetch('/api/turmas')
+      .then(res => res.json())
+      .then(json => {
+        if (json.turmas) {
+          setDbClasses(json.turmas.map((t: any) => ({
+            id: t.id,
+            name: t.nome,
+            courseId: t.curso_id,
+            maxStudents: Number(t.max_alunos || 0)
+          })));
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   // Basic Stats
   const activeStudents = useMemo(() => data.students.filter(s => s.status === 'active').length, [data.students]);
-  const totalClasses = useMemo(() => data.classes.length, [data.classes]);
+  const totalClasses = useMemo(() => dbClasses.length, [dbClasses]);
   const pendingPayments = useMemo(() => data.payments.filter(p => p.status === 'pending').length, [data.payments]);
   const revenue = useMemo(() => data.payments
     .filter(p => p.status === 'paid')
@@ -76,11 +93,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
   }, [data.lessons]);
 
   // Chart Data: Class Occupancy
-  const classOccupancy = useMemo(() => data.classes.map(c => ({
+  const classOccupancy = useMemo(() => dbClasses.map(c => ({
     name: c.name,
     students: data.students.filter(s => s.classId === c.id).length,
-    capacity: 20 // Assuming a default capacity
-  })).sort((a, b) => b.students - a.students), [data.classes, data.students]);
+    capacity: c.maxStudents || 20 // Usando a capacidade real se disponível
+  })).sort((a, b) => b.students - a.students), [dbClasses, data.students]);
 
   // Chart Data: Payment Status
   const paymentStatus = useMemo(() => [

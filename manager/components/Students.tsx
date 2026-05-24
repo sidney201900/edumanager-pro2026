@@ -39,6 +39,27 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
   const [cancellationReason, setCancellationReason] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [dbClasses, setDbClasses] = useState<any[]>(dbClasses || []);
+  const [dbCourses, setDbCourses] = useState<any[]>(dbCourses || []);
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/turmas'),
+      fetch('/api/cursos')
+    ]).then(async ([resT, resC]) => {
+      if(resT.ok && resC.ok) {
+        const jsonT = await resT.json();
+        const jsonC = await resC.json();
+        if (jsonT.turmas) setDbClasses(jsonT.turmas.map((t: any) => ({
+          id: t.id, name: t.nome, courseId: t.curso_id, maxStudents: Number(t.max_alunos || 0)
+        })));
+        if (jsonC.cursos) setDbCourses(jsonC.cursos.map((c: any) => ({
+          id: c.id, name: c.nome
+        })));
+      }
+    }).catch(console.error);
+  }, []);
   
   // Academic History State
   const [historyGrades, setHistoryGrades] = useState<any[]>([]);
@@ -818,8 +839,8 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     }
 
     // Process Generate Fee and Contract
-    const studentClass = data.classes.find(c => c.id === formData.classId);
-    const course = studentClass ? data.courses.find(c => c.id === studentClass.courseId) : null;
+    const studentClass = dbClasses.find(c => c.id === formData.classId);
+    const course = studentClass ? dbCourses.find(c => c.id === studentClass.courseId) : null;
 
     if ((formData as any).generateFee && course) {
       const feeAmount = (course.registrationFee || 0) - (formData.discount || 0);
@@ -1173,9 +1194,9 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
 
         {(activeTab === 'active' && !selectedClassId && !searchTerm) ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {data.classes.map(cls => {
+            {dbClasses.map(cls => {
               const studentCount = data.students.filter(s => s.classId === cls.id && (activeTab === 'active' ? s.status !== 'cancelled' : s.status === 'cancelled')).length;
-              const course = data.courses.find(c => c.id === cls.courseId);
+              const course = dbCourses.find(c => c.id === cls.courseId);
               
               return (
                 <button
@@ -1242,7 +1263,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
                 </button>
                 {selectedClassId && (
                   <h4 className="text-lg font-black text-slate-800">
-                    {selectedClassId === 'none' ? 'Alunos Sem Turma' : data.classes.find(c => c.id === selectedClassId)?.name}
+                    {selectedClassId === 'none' ? 'Alunos Sem Turma' : dbClasses.find(c => c.id === selectedClassId)?.name}
                   </h4>
                 )}
               </div>
@@ -1261,7 +1282,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
                 </thead>
                 <tbody className="text-sm divide-y divide-slate-50">
                   {filteredStudents.map(student => {
-                    const studentClass = data.classes.find(c => c.id === student.classId);
+                    const studentClass = dbClasses.find(c => c.id === student.classId);
                     return (
                       <tr key={student.id} className={`hover:bg-slate-50 transition-colors group ${student.status === 'cancelled' ? 'bg-slate-50 opacity-60 grayscale' : ''}`}>
                         <td className="p-4">
@@ -1752,7 +1773,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
                         onChange={e => setFormData({...formData, classId: e.target.value})}
                       >
                         <option value="">Selecione uma turma...</option>
-                        {data.classes.map(c => (
+                        {dbClasses.map(c => (
                           <option key={c.id} value={c.id}>{c.name} - {c.schedule}</option>
                         ))}
                       </select>
@@ -1873,7 +1894,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
                   onChange={e => setNewClassId(e.target.value)}
                 >
                   <option value="">Selecione uma turma...</option>
-                  {data.classes.filter(c => c.id !== transferringStudent.classId).map(c => (
+                  {dbClasses.filter(c => c.id !== transferringStudent.classId).map(c => (
                     <option key={c.id} value={c.id}>{c.name} - {c.schedule}</option>
                   ))}
                 </select>

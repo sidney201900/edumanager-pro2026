@@ -28,6 +28,34 @@ const defaultTemplates = {
 
 const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
   const { showAlert, showConfirm } = useDialog();
+
+  const [dbClasses, setDbClasses] = useState<any[]>(data?.classes || []);
+  const [dbCourses, setDbCourses] = useState<any[]>(data?.courses || []);
+  
+
+  React.useEffect(() => {
+    Promise.all([
+      fetch('/api/turmas').catch(() => ({ ok: false, json: async () => ({}) })),
+      fetch('/api/cursos').catch(() => ({ ok: false, json: async () => ({}) })),
+      
+    ]).then(async (responses) => {
+      const [resT, resC] = responses;
+      if (resT && resT.ok) {
+        const jsonT = await resT.json();
+        if (jsonT.turmas) setDbClasses(jsonT.turmas.map((t: any) => ({
+          id: t.id, name: t.nome, courseId: t.curso_id, maxStudents: Number(t.max_alunos || 0)
+        })));
+      }
+      if (resC && resC.ok) {
+        const jsonC = await resC.json();
+        if (jsonC.cursos) setDbCourses(jsonC.cursos.map((c: any) => ({
+          id: c.id, name: c.nome, monthlyFee: Number(c.mensalidade || 0), registrationFee: Number(c.taxa_matricula || 0)
+        })));
+      }
+      
+    }).catch(console.error);
+  }, []);
+  
   const defaultVars = data.messageTemplates || defaultTemplates;
   const initRules = defaultVars.automationRules || defaultTemplates.automationRules;
   
@@ -356,7 +384,7 @@ const Messages: React.FC<MessagesProps> = ({ data, updateData }) => {
                 >
                   <option value="">-- Selecione --</option>
                   {targetType === 'turma' 
-                    ? data.classes?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
+                    ? dbClasses?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
                     : data.students?.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
                   }
                 </select>

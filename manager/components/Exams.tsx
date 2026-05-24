@@ -20,6 +20,41 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const [activeTab, setActiveTab] = useState<'ativos' | 'lixeira'>('ativos');
   const { showAlert, showConfirm } = useDialog();
 
+  const [dbClasses, setDbClasses] = useState<any[]>(data?.classes || []);
+  const [dbCourses, setDbCourses] = useState<any[]>(data?.courses || []);
+  const [dbSubjects, setDbSubjects] = useState<any[]>(data?.subjects || []);
+
+  React.useEffect(() => {
+    Promise.all([
+      fetch('/api/turmas').catch(() => ({ ok: false, json: async () => ({}) })),
+      fetch('/api/cursos').catch(() => ({ ok: false, json: async () => ({}) })),
+      fetch('/api/disciplinas').catch(() => ({ ok: false, json: async () => ({}) }))
+    ]).then(async (responses) => {
+      const [resT, resC, resS] = responses;
+      if (resT && resT.ok) {
+        const jsonT = await resT.json();
+        if (jsonT.turmas) setDbClasses(jsonT.turmas.map((t: any) => ({
+          id: t.id, name: t.nome, courseId: t.curso_id, maxStudents: Number(t.max_alunos || 0)
+        })));
+      }
+      if (resC && resC.ok) {
+        const jsonC = await resC.json();
+        if (jsonC.cursos) setDbCourses(jsonC.cursos.map((c: any) => ({
+          id: c.id, name: c.nome, monthlyFee: Number(c.mensalidade || 0), registrationFee: Number(c.taxa_matricula || 0)
+        })));
+      }
+      
+      if (resS && resS.ok) {
+        const jsonS = await resS.json();
+        if (jsonS.disciplinas) setDbSubjects(jsonS.disciplinas.map((d: any) => ({
+          id: d.id, name: d.nome
+        })));
+      }
+      
+    }).catch(console.error);
+  }, []);
+  
+
   const normalizePhotoUrl = (url?: string) => {
     if (!url) return '';
     if (url.startsWith('data:image') || url.startsWith('/storage')) return url;
@@ -35,14 +70,14 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   const filteredExams = exams.filter(exam =>
     (activeTab === 'ativos' ? !exam.isDeleted : !!exam.isDeleted) &&
     (exam.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    data.classes.find(c => c.id === exam.classId)?.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    dbClasses.find(c => c.id === exam.classId)?.name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleStartCreate = () => {
     setEditingExam({
       id: Date.now().toString(),
       title: '',
-      classId: data.classes[0]?.id || '',
+      classId: dbClasses[0]?.id || '',
       durationMinutes: 60,
       status: 'draft',
       questions: [],
@@ -194,7 +229,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
   };
 
   const handleNotifyStudents = async (exam: Exam) => {
-    const classObj = (data.classes || []).find(c => c.id === exam.classId);
+    const classObj = (dbClasses || []).find(c => c.id === exam.classId);
     if (!classObj) return;
     
     showConfirm(
@@ -318,7 +353,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all font-medium text-slate-800"
               >
                 <option value="" disabled>Selecione uma turma</option>
-                {data.classes.map(c => (
+                {dbClasses.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
@@ -343,7 +378,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all font-medium text-slate-800"
               >
                 <option value="">Nenhuma (não vincular)</option>
-                {(data.subjects || []).map(s => (
+                {(dbSubjects || []).map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
@@ -575,7 +610,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredExams.map(exam => {
-            const classObj = data.classes.find(c => c.id === exam.classId);
+            const classObj = dbClasses.find(c => c.id === exam.classId);
             return (
               <div key={exam.id} className={`rounded-2xl p-6 shadow-sm border transition-shadow relative overflow-hidden group ${exam.isDeleted ? 'bg-slate-50 border-slate-200 opacity-80' : 'bg-white border-slate-100 hover:shadow-md'}`}>
                 <div className={`absolute top-0 left-0 w-1.5 h-full rounded-l-2xl ${exam.isDeleted ? 'bg-slate-400' : 'bg-indigo-500'}`}></div>
@@ -613,7 +648,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                   {exam.subjectId && (
                     <p className="text-sm text-slate-500 flex items-center gap-2">
                       <span className="font-bold text-slate-700">Disciplina:</span>
-                      {(data.subjects || []).find(s => s.id === exam.subjectId)?.name || '—'}
+                      {(dbSubjects || []).find(s => s.id === exam.subjectId)?.name || '—'}
                     </p>
                   )}
                   {exam.periodId && (
@@ -716,7 +751,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                   onChange={e => setTargetClassId(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all font-bold text-slate-700"
                 >
-                  {data.classes.map(c => (
+                  {dbClasses.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
