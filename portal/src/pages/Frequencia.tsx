@@ -49,7 +49,47 @@ export default function Frequencia() {
 
   const openJustifyModal = (preselectedTimestamp?: string) => {
     setShowJustifyModal(true);
-    setSelectedDate(preselectedTimestamp || '');
+    let initialDate = preselectedTimestamp || '';
+    
+    if (!initialDate) {
+      // Find the closest justifiable lesson
+      const deduplicated = lessons.filter((lesson, index, self) =>
+        index === self.findIndex((t) => t.date === lesson.date && t.startTime === lesson.startTime)
+      );
+      
+      const justifiable = deduplicated.filter(l => {
+        if (l.status === 'cancelled') return false;
+        if (!isLessonWithinJustificationWindow(l, now)) return false;
+        
+        const lessonStartMs = parseLessonDateTime(l.date, l.startTime || '00:00', 0);
+        const lessonEndMs = parseLessonDateTime(l.date, l.endTime || '23:59', 23);
+        const presenceStartWindowMs = lessonStartMs - (30 * 60 * 1000);
+
+        const att = attendance.find(a => {
+          if (!a.date || typeof a.date !== 'string') return false;
+          if ((a as any).lessonId === l.id) return true;
+          const recordTime = new Date(a.date).getTime();
+          return recordTime >= presenceStartWindowMs && recordTime <= lessonEndMs;
+        });
+
+        if (att) {
+          if (att.type === 'presence' || (att.verified && att.type !== 'absence')) return false;
+          if (att.justification) return false;
+        }
+        return true;
+      });
+
+      if (justifiable.length > 0) {
+        const closest = justifiable.sort((a, b) => {
+          const diffA = Math.abs(now.getTime() - parseLessonDateTime(a.date, a.startTime));
+          const diffB = Math.abs(now.getTime() - parseLessonDateTime(b.date, b.startTime));
+          return diffA - diffB;
+        })[0];
+        initialDate = `${closest.date}T${closest.startTime || '00:00'}:00`;
+      }
+    }
+
+    setSelectedDate(initialDate);
     setJustificationText('');
     setJustificationFile(null);
     setError('');
@@ -249,7 +289,7 @@ export default function Frequencia() {
     });
 
     if (att) {
-      if (att.type === 'presence' || att.verified) return false;
+      if (att.type === 'presence' || (att.verified && att.type !== 'absence')) return false;
       if (att.justification) return false;
     }
     return true;

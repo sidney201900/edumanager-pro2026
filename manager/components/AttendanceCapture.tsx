@@ -280,14 +280,15 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
       verified: true
     };
 
+    fetch('/api/frequencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newAttendance)
+    });
+
     const updatedAttendance = [...filteredAttendance, newAttendance];
     updateData({ attendance: updatedAttendance });
     
-    // Sincronização em duas etapas: Local e Servidor (SQL)
-    const updatedData = { ...data, attendance: updatedAttendance };
-    dbService.saveData(updatedData);
-    dbService.saveToCloud(updatedData); 
-
     // Reset de interface
     setCapturedImage(null);
     setShowConfirmModal(false);

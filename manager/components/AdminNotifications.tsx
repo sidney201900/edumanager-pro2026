@@ -147,6 +147,9 @@ const AdminNotifications: React.FC<Props> = ({ data, updateData, setView, onNavi
         a.id === matchedAbsence.id ? { ...a, justificationAccepted: true } : a
       );
       
+      const modifiedRecord = updatedAttendance.find(a => a.id === matchedAbsence.id);
+      fetch(`/api/frequencias/${matchedAbsence.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
+      
       updateData({ attendance: updatedAttendance });
       dbService.saveData({ ...data, attendance: updatedAttendance });
       handleMarkAsRead(notif.id);

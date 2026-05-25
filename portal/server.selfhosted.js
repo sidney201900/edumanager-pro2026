@@ -508,11 +508,35 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/portal/frequencia (Leitura direta do school_data — mesma fonte do Manager)
+// GET /api/portal/frequencia (SQL-First — Leitura direta do PostgreSQL)
 app.get('/api/portal/frequencia', authMiddleware, async (req, res) => {
   try {
-    const schoolData = await getSchoolData();
-    const attendance = (schoolData.attendance || []).filter(a => a.studentId === req.user.studentId);
+    const { rows } = await pool.query(
+      `SELECT * FROM frequencias WHERE aluno_id = $1 ORDER BY data DESC`,
+      [req.user.studentId]
+    );
+    
+    const attendance = rows.map(r => ({
+      id: r.id,
+      studentId: r.aluno_id,
+      classId: r.turma_id,
+      lessonId: r.aula_id,
+      date: r.data,
+      photo: r.foto_url || r.foto,
+      verified: r.verificado,
+      type: r.tipo,
+      justification: r.justificativa,
+      justificationAccepted: r.justificativa_aceita,
+      createdAt: r.created_at
+    }));
+
+    // Fallback Híbrido: Se não achou no SQL, tenta pegar do JSON (caso haja registros antigos não sincronizados)
+    if (attendance.length === 0) {
+       const schoolData = await getSchoolData();
+       const fallbackAttendance = (schoolData.attendance || []).filter(a => a.studentId === req.user.studentId);
+       return res.json({ attendance: fallbackAttendance });
+    }
+
     res.json({ attendance });
   } catch (err) {
     console.error('Frequencia error:', err);

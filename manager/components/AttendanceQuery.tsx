@@ -106,21 +106,22 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
 
       if (existingIdx >= 0) {
         updatedAttendance[existingIdx] = { ...updatedAttendance[existingIdx], type: newType, justification: undefined, justificationAccepted: undefined };
+        fetch(`/api/frequencias/${updatedAttendance[existingIdx].id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedAttendance[existingIdx]) });
       } else {
         updatedAttendance.push(newRecord);
+        fetch('/api/frequencias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newRecord) });
       }
     } else {
       // Toggle existing record
       const newType = record.type === 'absence' ? 'presence' : 'absence';
+      const modifiedRecord = { ...record, type: newType, justification: undefined, justificationAccepted: undefined };
       updatedAttendance = updatedAttendance.map(a =>
-        a.id === record.id ? { ...a, type: newType, justification: undefined, justificationAccepted: undefined } : a
+        a.id === record.id ? modifiedRecord : a
       );
+      fetch(`/api/frequencias/${record.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
     }
 
     updateData({ attendance: updatedAttendance });
-    const updatedData = { ...data, attendance: updatedAttendance };
-    dbService.saveData(updatedData);
-    dbService.saveToCloud(updatedData); // Sincronia imediata com SQL
     showAlert('Sucesso', 'Status de frequência atualizado com sucesso.', 'success');
   };
 
@@ -137,8 +138,10 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
         a.id === attendanceForAttachment.id ? { ...a, justification: updatedJustification } : a
       );
 
+      const modifiedRecord = updatedAttendance.find(a => a.id === attendanceForAttachment.id);
+      fetch(`/api/frequencias/${attendanceForAttachment.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
+
       updateData({ attendance: updatedAttendance });
-      dbService.saveData({ ...data, attendance: updatedAttendance });
       setViewingAttachment(null);
       setAttendanceForAttachment(null);
       showAlert('Sucesso', 'Arquivo removido com sucesso.', 'success');
@@ -203,6 +206,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
         verified: true,
         lessonId: lesson.id as any
       };
+      fetch(`/api/frequencias/${updatedAttendance[existingIndex].id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedAttendance[existingIndex]) });
     } else {
       const newAbsence: Attendance = {
         id: crypto.randomUUID(),
@@ -216,12 +220,11 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
         ...(lesson ? { lessonId: lesson.id } : {}) as any
       };
       updatedAttendance.push(newAbsence);
+      fetch('/api/frequencias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAbsence) });
     }
 
-    const updatedData = { ...data, attendance: updatedAttendance };
     updateData({ attendance: updatedAttendance });
-    dbService.saveData(updatedData);
-    dbService.saveToCloud(updatedData); // Sincronia imediata com SQL
+    dbService.saveData({ ...data, attendance: updatedAttendance });
 
     setAbsenceStudentId('');
     setAbsenceJustification('');
@@ -744,6 +747,8 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                                       <button
                                         onClick={() => {
                                           const updated = (data.attendance || []).map(a => a.id === record.id ? { ...a, justificationAccepted: true } : a);
+                                          const modifiedRecord = updated.find(a => a.id === record.id);
+                                          fetch(`/api/frequencias/${record.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
                                           updateData({ attendance: updated });
                                           dbService.saveData({ ...data, attendance: updated });
                                           showAlert('Sucesso', 'Justificativa aceita com sucesso.', 'success');
@@ -936,6 +941,8 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 <button
                   onClick={() => {
                     const updated = (data.attendance || []).map(a => a.id === currentRecordForJustification.id ? { ...a, justificationAccepted: true } : a);
+                    const modifiedRecord = updated.find(a => a.id === currentRecordForJustification.id);
+                    fetch(`/api/frequencias/${currentRecordForJustification.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
                     updateData({ attendance: updated });
                     dbService.saveData({ ...data, attendance: updated });
                     showAlert('Sucesso', 'Justificativa aceita com sucesso.', 'success');

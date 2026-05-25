@@ -798,6 +798,51 @@ export async function deleteAulas(ids) {
 }
 
 // ============================================================
+// FREQUÊNCIAS (CHAMADA)
+// ============================================================
+export async function getFrequencias() {
+  const { rows } = await pool.query('SELECT * FROM frequencias ORDER BY created_at DESC');
+  return rows.map(r => ({
+    id: r.id,
+    studentId: r.aluno_id,
+    classId: r.turma_id,
+    lessonId: r.aula_id,
+    date: r.data,
+    photo: r.foto,
+    verified: r.verificado,
+    type: r.tipo,
+    justification: r.justificativa,
+    justificationAccepted: r.justificativa_aceita,
+    createdAt: r.created_at
+  }));
+}
+
+export async function insertFrequencia(f) {
+  await pool.query(
+    `INSERT INTO frequencias (id, aluno_id, turma_id, aula_id, data, foto, verificado, tipo, justificativa, justificativa_aceita)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [
+      f.id, f.studentId, f.classId, f.lessonId, f.date, f.photo, 
+      f.verified || false, f.type || 'presence', f.justification, f.justificationAccepted || false
+    ]
+  );
+}
+
+export async function updateFrequencia(id, f) {
+  // Update apenas dos campos que podem mudar
+  await pool.query(
+    `UPDATE frequencias 
+     SET tipo = $1, justificativa = $2, justificativa_aceita = $3, verificado = $4
+     WHERE id = $5`,
+    [f.type, f.justification, f.justificationAccepted, f.verified, id]
+  );
+}
+
+export async function deleteFrequencia(id) {
+  await pool.query('DELETE FROM frequencias WHERE id = $1', [id]);
+}
+
+// ============================================================
 // PROVAS & QUESTÕES (FASE 5)
 // ============================================================
 export async function getProvas() {
@@ -1101,27 +1146,8 @@ export async function syncJsonToRelationalTables() {
     }
 
     // 7. Sincronizar Frequências
-    if (data.attendance && Array.isArray(data.attendance)) {
-      const attIds = data.attendance.map(f => f.id).filter(Boolean);
-      if (attIds.length > 0) {
-        await client.query('DELETE FROM frequencias WHERE id != ALL($1)', [attIds]);
-      } else {
-        await client.query('DELETE FROM frequencias');
-      }
-
-      for (const f of data.attendance) {
-        if (!f.id || !f.studentId || !f.classId) continue;
-        await client.query(
-          `INSERT INTO frequencias (id, aluno_id, turma_id, aula_id, data, foto, verificado, tipo, justificativa, justificativa_aceita)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-           ON CONFLICT (id) DO UPDATE SET 
-            aluno_id = EXCLUDED.aluno_id, turma_id = EXCLUDED.turma_id, aula_id = EXCLUDED.aula_id, data = EXCLUDED.data,
-            foto = EXCLUDED.foto, verificado = EXCLUDED.verificado, tipo = EXCLUDED.tipo,
-            justificativa = EXCLUDED.justificativa, justificativa_aceita = EXCLUDED.justificativa_aceita`,
-          [f.id, f.studentId, f.classId, f.lessonId || null, f.date, f.photo || '', f.verified || false, f.type || 'presence', f.justification || null, f.justificationAccepted || false]
-        );
-      }
-    }
+    // [REMOVIDO] A tabela de frequencias agora é a Single Source of Truth (SQL-First).
+    // O JSON legado data.attendance é ignorado para não sobrescrever os registros reais do banco.
 
     // 8. Sincronizar Cobranças (Financeiro) — com campos ricos para migração SQL-First
     if (data.payments && Array.isArray(data.payments)) {

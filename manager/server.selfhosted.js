@@ -43,6 +43,7 @@ import {
   getModelosContrato, insertModeloContrato, updateModeloContrato, deleteModeloContrato,
   getContratos, insertContrato, updateContrato, deleteContrato,
   getAulasByTurma, getAllAulas, insertAulas, deleteAulas,
+  getFrequencias, insertFrequencia, updateFrequencia, deleteFrequencia,
   getProvas, getQuestoesDaProva, insertProva, updateProva, deleteProva, syncQuestoesProva
 } from './services/database.js';
 import { uploadLogo as uploadLogoToStorage, uploadCarne as uploadCarneToStorage, uploadReceipt as uploadReceiptToStorage, getMinioStats, s3Client, getBucketObjects, deleteMinioObject } from './services/storage.js';
@@ -144,6 +145,13 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/school-data', async (req, res) => {
   try {
     const data = await getSchoolData();
+    
+    // Injetar dados migrados diretamente do PostgreSQL
+    try {
+      data.attendance = await getFrequencias();
+    } catch (e) {
+      console.error('[SQL] Falha ao carregar frequencias do banco:', e);
+    }
     
     // Normalizar URLs do MinIO para proxy relativo
     // Converte URLs como https://storageedu.xxx/bucket/file para /storage/bucket/file
@@ -585,6 +593,49 @@ app.delete('/api/aulas/lote', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao deletar aulas em lote:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// ============================================================
+// ROTAS DE FREQUÊNCIAS (CHAMADA)
+// ============================================================
+app.get('/api/frequencias', async (req, res) => {
+  try {
+    const frequencias = await getFrequencias();
+    res.json({ frequencias });
+  } catch (error) {
+    console.error('Erro ao buscar frequencias:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.post('/api/frequencias', async (req, res) => {
+  try {
+    await insertFrequencia(req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao inserir frequencia:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.put('/api/frequencias/:id', async (req, res) => {
+  try {
+    await updateFrequencia(req.params.id, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao atualizar frequencia:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.delete('/api/frequencias/:id', async (req, res) => {
+  try {
+    await deleteFrequencia(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar frequencia:', error);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
