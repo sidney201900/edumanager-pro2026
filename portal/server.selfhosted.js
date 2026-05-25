@@ -512,7 +512,8 @@ app.get('/api/portal/notas', authMiddleware, async (req, res) => {
 app.get('/api/portal/frequencia', authMiddleware, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM frequencias WHERE aluno_id = $1 ORDER BY data DESC`,
+      `SELECT *, TO_CHAR(data, 'YYYY-MM-DD"T"HH24:MI:SS') as formatted_data 
+       FROM frequencias WHERE aluno_id = $1 ORDER BY data DESC`,
       [req.user.studentId]
     );
     
@@ -521,7 +522,7 @@ app.get('/api/portal/frequencia', authMiddleware, async (req, res) => {
       studentId: r.aluno_id,
       classId: r.turma_id,
       lessonId: r.aula_id,
-      date: r.data,
+      date: r.formatted_data || r.data,
       photo: r.foto_url || r.foto,
       verified: r.verificado,
       type: r.tipo,

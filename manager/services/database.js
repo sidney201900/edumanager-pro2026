@@ -822,13 +822,16 @@ export async function deleteAulas(ids) {
 // FREQUÊNCIAS (CHAMADA)
 // ============================================================
 export async function getFrequencias() {
-  const { rows } = await pool.query('SELECT * FROM frequencias ORDER BY created_at DESC');
+  const { rows } = await pool.query(`
+    SELECT *, TO_CHAR(data, 'YYYY-MM-DD"T"HH24:MI:SS') as formatted_data 
+    FROM frequencias ORDER BY created_at DESC
+  `);
   return rows.map(r => ({
     id: r.id,
     studentId: r.aluno_id,
     classId: r.turma_id,
     lessonId: r.aula_id,
-    date: r.data,
+    date: r.formatted_data || r.data,
     photo: r.foto,
     verified: r.verificado,
     type: r.tipo,
