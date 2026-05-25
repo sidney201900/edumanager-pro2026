@@ -492,6 +492,34 @@ app.delete('/api/disciplinas/:id', async (req, res) => {
 // ============================================================
 // ROTAS DE ALUNOS (MIGRAÇÃO FASE 4)
 // ============================================================
+app.get('/api/fix-alunos-migracao', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      UPDATE alunos a
+      SET
+          data_nascimento = NULLIF(s.elem->>'data_nascimento', '')::timestamp,
+          rg = s.elem->>'rg',
+          rua = s.elem->>'rua',
+          numero = s.elem->>'numero',
+          bairro = s.elem->>'bairro',
+          cidade = s.elem->>'cidade',
+          estado = s.elem->>'estado',
+          cep = s.elem->>'cep'
+      FROM (
+          SELECT jsonb_array_elements(data->'students') as elem
+          FROM school_data
+          WHERE id = 1
+      ) s
+      WHERE a.id = s.elem->>'id'
+      RETURNING a.nome;
+    `);
+    res.json({ success: true, message: `Foram atualizados ${result.rowCount} alunos com os dados do JSON original!` });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/alunos', async (req, res) => {
   try {
     const alunos = await getAlunos();
