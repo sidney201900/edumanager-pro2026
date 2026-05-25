@@ -733,7 +733,21 @@ app.get('/api/provas/:id/questoes', async (req, res) => {
 
 app.post('/api/provas', async (req, res) => {
   try {
-    await insertProva(req.body);
+    const prova = req.body;
+    await insertProva(prova);
+
+    // Sync questions if provided
+    if (prova.questions && prova.questions.length > 0) {
+      await syncQuestoesProva(prova.id, prova.questions);
+    }
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbProvas = await getProvas();
+    appData.exams = dbProvas;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao criar prova:', error);
@@ -743,7 +757,22 @@ app.post('/api/provas', async (req, res) => {
 
 app.put('/api/provas/:id', async (req, res) => {
   try {
-    await updateProva(req.params.id, req.body);
+    const { id } = req.params;
+    const prova = req.body;
+    await updateProva(id, prova);
+
+    // Sync questions if provided
+    if (prova.questions) {
+      await syncQuestoesProva(id, prova.questions);
+    }
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbProvas = await getProvas();
+    appData.exams = dbProvas;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao atualizar prova:', error);
@@ -753,7 +782,18 @@ app.put('/api/provas/:id', async (req, res) => {
 
 app.delete('/api/provas/:id', async (req, res) => {
   try {
-    await deleteProva(req.params.id);
+    const { id } = req.params;
+    // Cleanup relational dependencies
+    await pool.query('DELETE FROM questoes_provas WHERE prova_id = $1', [id]);
+    await pool.query('DELETE FROM provas_submissoes WHERE prova_id = $1', [id]);
+    await deleteProva(id);
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    appData.exams = (appData.exams || []).filter(e => e.id !== id);
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao deletar prova:', error);

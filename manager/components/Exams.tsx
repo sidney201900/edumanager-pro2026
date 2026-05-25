@@ -3,7 +3,7 @@ import { SchoolData, Exam, Question } from '../types';
 import { FileText, Plus, Search, BookOpen, Upload, Trash2, ArrowLeft, Save, CheckCircle, Image as ImageIcon, X, RefreshCw, Lock, Unlock, AlertTriangle, Copy, Bell } from 'lucide-react';
 import { uploadExamImage } from '../services/supabase';
 import { useDialog } from '../DialogContext';
-import { dbService } from '../services/dbService';
+
 
 interface ExamsProps {
   data: SchoolData;
@@ -122,15 +122,19 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     setCurrentView('builder');
   };
 
-  const handleToggleRetake = (examId: string) => {
-    const updatedExams = exams.map(e => {
-      if (e.id === examId) {
-        return { ...e, allowRetake: !e.allowRetake };
-      }
-      return e;
-    });
-    updateData({ exams: updatedExams });
-    dbService.saveData({ ...data, exams: updatedExams });
+  const handleToggleRetake = async (examId: string) => {
+    const targetExam = exams.find(e => e.id === examId);
+    if (!targetExam) return;
+    try {
+      await fetch(`/api/provas/${examId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...targetExam, allowRetake: !targetExam.allowRetake })
+      });
+      await loadExams();
+    } catch (e) {
+      console.error('Erro ao alterar refação:', e);
+    }
   };
 
   const handleDeleteExam = (examId: string) => {
@@ -149,9 +153,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
           }
         } catch (e) { console.error('Erro ao deletar prova:', e); }
 
-        const updatedExams = exams.map(e => e.id === examId ? { ...e, isDeleted: true } : e);
-        updateData({ exams: updatedExams });
-        dbService.saveData({ ...data, exams: updatedExams });
+        await loadExams();
         showAlert('Sucesso', 'Avaliação movida para a lixeira.', 'success');
       }
     );
@@ -169,30 +171,37 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
       }
     } catch (e) { console.error('Erro ao restaurar prova:', e); }
 
-    const updatedExams = exams.map(e => e.id === examId ? { ...e, isDeleted: false } : e);
-    updateData({ exams: updatedExams });
-    dbService.saveData({ ...data, exams: updatedExams });
+    await loadExams();
     showAlert('Sucesso', 'Avaliação reativada.', 'success');
   };
 
-  const handleDuplicateExam = () => {
+  const handleDuplicateExam = async () => {
     if (!duplicatingExam || !targetClassId) return;
 
     const newExam: Exam = {
       ...duplicatingExam,
       id: Date.now().toString() + Math.random().toString(36).substring(7),
       classId: targetClassId,
-      status: 'draft', // Sempre começa como rascunho para segurança
+      status: 'draft',
       title: `${duplicatingExam.title} (Cópia)`
     };
 
-    const updatedExams = [...exams, newExam];
-    updateData({ exams: updatedExams });
-    dbService.saveData({ ...data, exams: updatedExams });
+    try {
+      const response = await fetch('/api/provas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newExam)
+      });
+      if (!response.ok) throw new Error('Falha ao duplicar prova');
+      await loadExams();
+      showAlert('Sucesso', 'Avaliação duplicada com sucesso!', 'success');
+    } catch (e) {
+      console.error('Erro ao duplicar:', e);
+      showAlert('Erro', 'Falha ao duplicar a avaliação.', 'error');
+    }
     
     setDuplicatingExam(null);
     setTargetClassId('');
-    showAlert('Sucesso', 'Avaliação duplicada com sucesso!', 'success');
   };
 
   const handleAddQuestion = () => {
@@ -306,7 +315,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     );
   };
 
-  const handleSave = (status: 'draft' | 'published') => {
+  const handleSave = async (status: 'draft' | 'published') => {
     if (!editingExam) return;
 
     if (!editingExam.title || !editingExam.classId) {
@@ -324,18 +333,25 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     }
 
     const finalExam = { ...editingExam, status };
-    const currentExams = data.exams || [];
-    const existingIndex = currentExams.findIndex(e => e.id === finalExam.id);
+    const isNew = !dbExams.some(e => e.id === finalExam.id);
+    const endpoint = isNew ? '/api/provas' : `/api/provas/${finalExam.id}`;
+    const method = isNew ? 'POST' : 'PUT';
 
-    let newExams;
-    if (existingIndex >= 0) {
-      newExams = [...currentExams];
-      newExams[existingIndex] = finalExam;
-    } else {
-      newExams = [...currentExams, finalExam];
+    try {
+      const response = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalExam)
+      });
+      if (!response.ok) throw new Error('Falha ao salvar avaliação');
+      await loadExams();
+      showAlert('Sucesso', status === 'published' ? 'Avaliação publicada com sucesso!' : 'Rascunho salvo com sucesso!', 'success');
+    } catch (e) {
+      console.error('Erro ao salvar prova:', e);
+      showAlert('Erro', 'Falha ao salvar a avaliação no servidor.', 'error');
+      return;
     }
 
-    updateData({ exams: newExams });
     setCurrentView('list');
     setEditingExam(null);
   };

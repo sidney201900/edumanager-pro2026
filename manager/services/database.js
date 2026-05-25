@@ -917,7 +917,7 @@ export async function getProvas() {
         examId: q.prova_id,
         text: q.texto,
         options: q.opcoes || [],
-        correctAnswer: q.indice_correto,
+        correctOptionIndex: q.indice_correto ?? 0,
         order: q.ordem,
         imageUrl: q.imagem_url
       }))
@@ -975,7 +975,7 @@ export async function syncQuestoesProva(provaId, questoes) {
       await client.query(
         `INSERT INTO questoes_provas (id, prova_id, texto, imagem_url, opcoes, indice_correto, ordem)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [q.id || require('crypto').randomUUID(), provaId, q.texto || q.text, q.imagem_url || q.imageUrl, JSON.stringify(q.opcoes || q.options || []), q.indice_correto ?? q.correctIndex ?? 0, i]
+        [q.id || require('crypto').randomUUID(), provaId, q.texto || q.text, q.imagem_url || q.imageUrl, JSON.stringify(q.opcoes || q.options || []), q.indice_correto ?? q.correctOptionIndex ?? q.correctIndex ?? 0, i]
       );
     }
     await client.query('COMMIT');
