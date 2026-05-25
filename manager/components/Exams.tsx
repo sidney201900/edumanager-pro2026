@@ -175,6 +175,23 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
     showAlert('Sucesso', 'Avaliação reativada.', 'success');
   };
 
+  const handlePermanentDelete = (examId: string) => {
+    showConfirm(
+      'Excluir Permanentemente',
+      '⚠️ Atenção: Esta ação irá apagar esta avaliação e todas as suas questões PERMANENTEMENTE do banco de dados. As submissões dos alunos também serão removidas. Esta ação NÃO pode ser desfeita. Deseja continuar?',
+      async () => {
+        try {
+          const response = await fetch(`/api/provas/${examId}`, { method: 'DELETE' });
+          if (!response.ok) throw new Error('Falha ao excluir');
+          await loadExams();
+          showAlert('Sucesso', 'Avaliação excluída permanentemente.', 'success');
+        } catch (e) {
+          console.error('Erro ao excluir permanentemente:', e);
+          showAlert('Erro', 'Falha ao excluir a avaliação do servidor.', 'error');
+        }
+      }
+    );
+  };
   const handleDuplicateExam = async () => {
     if (!duplicatingExam || !targetClassId) return;
 
@@ -742,12 +759,21 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
                 </div>
                 <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
                   {exam.isDeleted ? (
-                    <button
-                      onClick={() => handleRestoreExam(exam.id)}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-colors"
-                    >
-                      <RefreshCw size={18} /> Reativar
-                    </button>
+                    <div className="flex items-center gap-2 w-full">
+                      <button
+                        onClick={() => handleRestoreExam(exam.id)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-colors"
+                      >
+                        <RefreshCw size={18} /> Reativar
+                      </button>
+                      <button
+                        onClick={() => handlePermanentDelete(exam.id)}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-red-100 text-red-600 rounded-xl font-bold hover:bg-red-200 transition-colors"
+                        title="Excluir permanentemente"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   ) : (
                     <>
                       <div className="flex items-center gap-2">
