@@ -373,7 +373,7 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
     }
 
     setIsClosing(true);
-    const updatedLessons: Lesson[] = (data.lessons || []).map(l => 
+    const updatedClassLessons: Lesson[] = dbLessons.map(l => 
       l.id === lesson.id ? { ...l, date: replacementDate, startTime: replacementStartTime, endTime: replacementEndTime, status: 'rescheduled', type: l.type, cancelReason: undefined } : l
     );
 
@@ -391,8 +391,16 @@ const LessonSchedule: React.FC<LessonScheduleProps> = ({ classObj, data, updateD
     const newNotifs = notifyLessonAction('Aula Reagendada', notifMsg, waMsg);
     const updatedNotifications = [...(data.notifications || []), ...newNotifs];
 
-    updateData({ lessons: updatedLessons, notifications: updatedNotifications, attendance: updatedAttendance });
-    await dbService.saveData({ ...data, lessons: updatedLessons, notifications: updatedNotifications, attendance: updatedAttendance });
+    fetch('/api/aulas/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aulas: updatedClassLessons })
+    }).then(() => loadLessons());
+
+    const allUpdatedLessons = [...(data.lessons || []).filter(dl => dl.classId !== classObj.id), ...updatedClassLessons];
+
+    updateData({ lessons: allUpdatedLessons, notifications: updatedNotifications, attendance: updatedAttendance });
+    await dbService.saveData({ ...data, lessons: allUpdatedLessons, notifications: updatedNotifications, attendance: updatedAttendance });
 
     setTimeout(() => {
       setShowLessonDetail(null);
