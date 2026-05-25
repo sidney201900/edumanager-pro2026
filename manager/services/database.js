@@ -645,13 +645,34 @@ export async function getAlunos() {
   const result = await pool.query("SELECT * FROM alunos ORDER BY nome ASC");
   return result.rows.map(r => ({
     ...r,
-    classId: r.turma_id,
+    id: r.id,
     name: r.nome,
-    status: r.status,
-    cpf: r.cpf,
+    email: r.email,
     phone: r.telefone,
+    birthDate: r.data_nascimento,
+    cpf: r.cpf,
+    rg: r.rg,
+    rgIssueDate: r.rg_data_emissao,
+    guardianName: r.nome_responsavel,
+    guardianPhone: r.telefone_responsavel,
+    guardianCpf: r.cpf_responsavel,
+    guardianBirthDate: r.data_nascimento_responsavel,
+    classId: r.turma_id,
+    status: r.status,
     registrationDate: r.data_matricula,
+    photo: r.foto_url,
+    addressZip: r.cep,
+    addressStreet: r.rua,
+    addressNumber: r.numero,
+    addressNeighborhood: r.bairro,
+    addressCity: r.cidade,
+    addressState: r.estado,
+    discount: r.desconto,
+    hasGuardian: r.tem_responsavel,
     contractTemplateId: r.modelo_contrato_id,
+    enrollmentNumber: r.numero_matricula,
+    portalPassword: r.senha_portal,
+    cancellationReason: r.motivo_cancelamento,
     faceDescriptor: r.face_descriptor
   }));
 }
@@ -1139,11 +1160,11 @@ export async function syncJsonToRelationalTables() {
             modelo_contrato_id = EXCLUDED.modelo_contrato_id, numero_matricula = EXCLUDED.numero_matricula,
             senha_portal = EXCLUDED.senha_portal`,
           [
-            s.id, s.name, s.email || '', s.phone || '', s.birthDate || null, s.cpf || '', s.rg || '', s.rgIssueDate || null,
-            s.guardianName || '', s.guardianPhone || '', s.guardianCpf || '', s.guardianBirthDate || null,
-            s.classId || null, s.status || 'active', s.registrationDate || null, s.photo || '',
-            s.addressZip || '', s.addressStreet || '', s.addressNumber || '', s.addressNeighborhood || '', s.addressCity || '', s.addressState || '',
-            s.discount || 0, s.hasGuardian || false, s.contractTemplateId || null, s.enrollmentNumber || null, s.portalPassword || null
+            s.id, s.name || s.nome, s.email || '', s.phone || s.telefone || '', s.birthDate || s.data_nascimento || null, s.cpf || '', s.rg || '', s.rgIssueDate || s.rg_data_emissao || null,
+            s.guardianName || s.nome_responsavel || '', s.guardianPhone || s.telefone_responsavel || '', s.guardianCpf || s.cpf_responsavel || '', s.guardianBirthDate || s.data_nascimento_responsavel || null,
+            s.classId || s.turma_id || null, s.status || 'active', s.registrationDate || s.data_matricula || null, s.photo || s.foto_url || '',
+            s.addressZip || s.cep || '', s.addressStreet || s.rua || '', s.addressNumber || s.numero || '', s.addressNeighborhood || s.bairro || '', s.addressCity || s.cidade || '', s.addressState || s.estado || '',
+            s.discount || s.desconto || 0, s.hasGuardian !== undefined ? s.hasGuardian : (s.tem_responsavel || false), s.contractTemplateId || s.modelo_contrato_id || null, s.enrollmentNumber || s.numero_matricula || null, s.portalPassword || s.senha_portal || null
           ]
         );
       }
