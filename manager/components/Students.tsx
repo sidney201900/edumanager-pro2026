@@ -1117,7 +1117,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     );
   };
 
-  const handleTransferStudent = () => {
+  const handleTransferStudent = async () => {
     if (!transferringStudent || !newClassId) return;
 
     const updatedStudents = dbStudents.map(s => 
