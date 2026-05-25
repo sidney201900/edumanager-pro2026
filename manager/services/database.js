@@ -1146,8 +1146,8 @@ export async function syncJsonToRelationalTables() {
             id, nome, email, telefone, data_nascimento, cpf, rg, rg_data_emissao,
             nome_responsavel, telefone_responsavel, cpf_responsavel, data_nascimento_responsavel,
             turma_id, status, data_matricula, foto_url, cep, rua, numero, bairro, cidade, estado,
-            desconto, tem_responsavel, modelo_contrato_id, numero_matricula, senha_portal
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+            desconto, tem_responsavel, modelo_contrato_id, numero_matricula, senha_portal, face_descriptor
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
           ON CONFLICT (id) DO UPDATE SET 
             nome = EXCLUDED.nome, email = EXCLUDED.email, telefone = EXCLUDED.telefone, data_nascimento = EXCLUDED.data_nascimento,
             cpf = EXCLUDED.cpf, rg = EXCLUDED.rg, rg_data_emissao = EXCLUDED.rg_data_emissao,
@@ -1158,13 +1158,14 @@ export async function syncJsonToRelationalTables() {
             bairro = EXCLUDED.bairro, cidade = EXCLUDED.cidade, estado = EXCLUDED.estado,
             desconto = EXCLUDED.desconto, tem_responsavel = EXCLUDED.tem_responsavel,
             modelo_contrato_id = EXCLUDED.modelo_contrato_id, numero_matricula = EXCLUDED.numero_matricula,
-            senha_portal = EXCLUDED.senha_portal`,
+            senha_portal = EXCLUDED.senha_portal, face_descriptor = COALESCE(EXCLUDED.face_descriptor, alunos.face_descriptor)`,
           [
             s.id, s.name || s.nome, s.email || '', s.phone || s.telefone || '', s.birthDate || s.data_nascimento || null, s.cpf || '', s.rg || '', s.rgIssueDate || s.rg_data_emissao || null,
             s.guardianName || s.nome_responsavel || '', s.guardianPhone || s.telefone_responsavel || '', s.guardianCpf || s.cpf_responsavel || '', s.guardianBirthDate || s.data_nascimento_responsavel || null,
             s.classId || s.turma_id || null, s.status || 'active', s.registrationDate || s.data_matricula || null, s.photo || s.foto_url || '',
             s.addressZip || s.cep || '', s.addressStreet || s.rua || '', s.addressNumber || s.numero || '', s.addressNeighborhood || s.bairro || '', s.addressCity || s.cidade || '', s.addressState || s.estado || '',
-            s.discount || s.desconto || 0, s.hasGuardian !== undefined ? s.hasGuardian : (s.tem_responsavel || false), s.contractTemplateId || s.modelo_contrato_id || null, s.enrollmentNumber || s.numero_matricula || null, s.portalPassword || s.senha_portal || null
+            s.discount || s.desconto || 0, s.hasGuardian !== undefined ? s.hasGuardian : (s.tem_responsavel || false), s.contractTemplateId || s.modelo_contrato_id || null, s.enrollmentNumber || s.numero_matricula || null, s.portalPassword || s.senha_portal || null,
+            s.faceDescriptor ? JSON.stringify(s.faceDescriptor) : null
           ]
         );
       }
