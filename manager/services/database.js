@@ -835,7 +835,7 @@ export async function getFrequencias() {
     classId: r.turma_id,
     lessonId: r.aula_id,
     date: r.formatted_data || r.data,
-    photo: r.foto,
+    photo: r.foto_url || r.foto,
     verified: r.verificado,
     type: r.tipo,
     justification: r.justificativa,

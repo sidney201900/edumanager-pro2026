@@ -252,13 +252,17 @@ const AttendanceCapture: React.FC<AttendanceCaptureProps> = ({ data, updateData 
       return;
     }
 
-    // Gerar string de data local para o banco de dados
-    const localDateStr = nowLocal.getFullYear() + '-' + 
-      String(nowLocal.getMonth() + 1).padStart(2, '0') + '-' + 
-      String(nowLocal.getDate()).padStart(2, '0') + 'T' + 
-      String(nowLocal.getHours()).padStart(2, '0') + ':' + 
-      String(nowLocal.getMinutes()).padStart(2, '0') + ':' + 
-      String(nowLocal.getSeconds()).padStart(2, '0');
+    // Gerar string de data local forçando o fuso horário de Brasília (America/Sao_Paulo)
+    // Isso evita que dispositivos em UTC (como o servidor Windows) salvem horários +3 horas
+    const brtString = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' });
+    const brtDate = new Date(brtString);
+    
+    const localDateStr = brtDate.getFullYear() + '-' + 
+      String(brtDate.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(brtDate.getDate()).padStart(2, '0') + 'T' + 
+      String(brtDate.getHours()).padStart(2, '0') + ':' + 
+      String(brtDate.getMinutes()).padStart(2, '0') + ':' + 
+      String(brtDate.getSeconds()).padStart(2, '0');
 
     // Limpar qualquer falta auto-gerada para o mesmo aluno nesta mesma aula/dia
     const filteredAttendance = (data.attendance || []).filter(a => {
