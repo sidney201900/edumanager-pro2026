@@ -53,8 +53,11 @@ export default function MeusDados() {
   if (!student) return null;
 
   const formatDate = (d: string) => {
-    const date = new Date(d + 'T00:00:00');
-    return date.toLocaleDateString('pt-BR');
+    if (!d) return '—';
+    // Se a data já for um timestamp ISO (ex: vindo do banco PostgreSQL), não adicionamos o 'T00:00:00'
+    const dateStr = d.includes('T') ? d : d + 'T00:00:00';
+    const date = new Date(dateStr);
+    return isNaN(date.getTime()) ? '—' : date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
   };
 
   const InfoRow = ({ icon: Icon, label, value }: { icon: any; label: string; value?: string }) => (
