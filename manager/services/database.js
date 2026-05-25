@@ -651,7 +651,8 @@ export async function getAlunos() {
     cpf: r.cpf,
     phone: r.telefone,
     registrationDate: r.data_matricula,
-    contractTemplateId: r.modelo_contrato_id
+    contractTemplateId: r.modelo_contrato_id,
+    faceDescriptor: r.face_descriptor
   }));
 }
 
@@ -662,9 +663,9 @@ export async function insertAluno(a) {
       nome_responsavel, telefone_responsavel, cpf_responsavel, data_nascimento_responsavel,
       turma_id, status, data_matricula, foto_url, cep, rua, numero, bairro, cidade, estado,
       desconto, tem_responsavel, modelo_contrato_id, numero_matricula, senha_portal,
-      motivo_cancelamento
+      motivo_cancelamento, face_descriptor
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
     ) RETURNING *`,
     [
       a.id, a.nome || a.name, a.email || '', a.telefone || a.phone || '', a.data_nascimento || a.birthDate || null,
@@ -676,7 +677,8 @@ export async function insertAluno(a) {
       a.numero || a.addressNumber || '', a.bairro || a.addressNeighborhood || '', a.cidade || a.addressCity || '',
       a.estado || a.addressState || '', a.desconto || a.discount || 0, a.tem_responsavel !== undefined ? a.tem_responsavel : (a.hasGuardian || false),
       a.modelo_contrato_id || a.contractTemplateId || null, a.numero_matricula || a.enrollmentNumber || null,
-      a.senha_portal || a.portalPassword || null, a.motivo_cancelamento || a.cancellationReason || null
+      a.senha_portal || a.portalPassword || null, a.motivo_cancelamento || a.cancellationReason || null,
+      a.faceDescriptor ? JSON.stringify(a.faceDescriptor) : null
     ]
   );
   return result.rows[0];
@@ -689,8 +691,8 @@ export async function updateAluno(id, a) {
       nome_responsavel=$8, telefone_responsavel=$9, cpf_responsavel=$10, data_nascimento_responsavel=$11,
       turma_id=$12, status=$13, data_matricula=$14, foto_url=$15, cep=$16, rua=$17, numero=$18, bairro=$19, cidade=$20, estado=$21,
       desconto=$22, tem_responsavel=$23, modelo_contrato_id=$24, numero_matricula=$25, senha_portal=$26,
-      motivo_cancelamento=$27
-     WHERE id = $28 RETURNING *`,
+      motivo_cancelamento=$27, face_descriptor=COALESCE($28, face_descriptor)
+     WHERE id = $29 RETURNING *`,
     [
       a.nome || a.name, a.email || '', a.telefone || a.phone || '', a.data_nascimento || a.birthDate || null,
       a.cpf || '', a.rg || '', a.rg_data_emissao || a.rgIssueDate || null,
@@ -702,6 +704,7 @@ export async function updateAluno(id, a) {
       a.estado || a.addressState || '', a.desconto || a.discount || 0, a.tem_responsavel !== undefined ? a.tem_responsavel : (a.hasGuardian || false),
       a.modelo_contrato_id || a.contractTemplateId || null, a.numero_matricula || a.enrollmentNumber || null,
       a.senha_portal || a.portalPassword || null, a.motivo_cancelamento || a.cancellationReason || null,
+      a.faceDescriptor ? JSON.stringify(a.faceDescriptor) : null,
       id
     ]
   );
