@@ -183,7 +183,11 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
       id: Date.now().toString() + Math.random().toString(36).substring(7),
       classId: targetClassId,
       status: 'draft',
-      title: `${duplicatingExam.title} (Cópia)`
+      title: `${duplicatingExam.title} (Cópia)`,
+      questions: (duplicatingExam.questions || []).map((q: any) => ({
+        ...q,
+        id: Date.now().toString() + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6)
+      }))
     };
 
     try {
