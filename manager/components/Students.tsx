@@ -849,7 +849,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
         s.id === editingStudent.id ? studentToSave : s
       );
     } else {
-      updatedStudents = [...data.students, studentToSave];
+      updatedStudents = [...dbStudents, studentToSave];
     }
 
     // Process Generate Fee and Contract
@@ -969,7 +969,23 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     };
 
     updateData(newData);
-    dbService.saveData({ ...data, ...newData });
+    const isNew = !editingStudent;
+    const endpoint = isNew ? '/api/alunos' : `/api/alunos/${studentToSave.id}`;
+    const method = isNew ? 'POST' : 'PUT';
+
+    const saveResponse = await fetch(endpoint, {
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(studentToSave)
+    });
+
+    if (!saveResponse.ok) {
+      throw new Error('Falha ao salvar o aluno no banco de dados');
+    }
+
+    await loadStudents();
     showAlert('Sucesso', (formData as any).generateFee ? 'Aluno salvo e nova cobrança gerada com sucesso.' : 'Aluno salvo com sucesso.', 'success');
     closeModal();
     } catch (error) {
@@ -997,7 +1013,27 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     );
     
     updateData({ students: updatedStudents });
-    dbService.saveData({ ...data, students: updatedStudents });
+    try {
+      const studentToUpdate = {
+        ...showDeleteModal,
+        status: 'cancelled' as const,
+        cancellationReason,
+        classId: ''
+      };
+      const response = await fetch(`/api/alunos/${showDeleteModal.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(studentToUpdate)
+      });
+      if (!response.ok) {
+        throw new Error('Falha ao cancelar matrícula no servidor');
+      }
+      await loadStudents();
+    } catch (err) {
+      console.error(err);
+      showAlert('Erro', 'Falha ao cancelar a matrícula no servidor.', 'error');
+      return;
+    }
     
     if (generatePDF) {
       await pdfService.generateCancellationTermPDF(showDeleteModal, data, cancellationReason);
@@ -1030,7 +1066,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
           );
           
           updateData({ students: updatedStudents });
-          dbService.saveData({ ...data, students: updatedStudents });
+          await loadStudents();
           
           showAlert('Sucesso', 'Aluno rematriculado com sucesso.', 'success');
         } catch (error) {
@@ -1061,7 +1097,21 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
         };
         
         updateData(newData);
-        dbService.saveData({ ...data, ...newData });
+        try {
+          const response = await fetch(`/api/alunos/${student.id}`, {
+            method: 'DELETE'
+          });
+
+          if (!response.ok) {
+            throw new Error('Falha ao deletar aluno no servidor');
+          }
+
+          await loadStudents();
+        } catch (err) {
+          console.error(err);
+          showAlert('Erro', 'Ocorreu um erro ao excluir o aluno do servidor.', 'error');
+          return;
+        }
         showAlert('Sucesso', 'O aluno e todo o seu histórico foram removidos permanentemente.', 'success');
       }
     );
@@ -1074,7 +1124,25 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
       s.id === transferringStudent.id ? { ...s, classId: newClassId } : s
     );
     updateData({ students: updatedStudents });
-    dbService.saveData({ ...data, students: updatedStudents });
+    try {
+      const studentToUpdate = {
+        ...transferringStudent,
+        classId: newClassId
+      };
+      const response = await fetch(`/api/alunos/${transferringStudent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(studentToUpdate)
+      });
+      if (!response.ok) {
+        throw new Error('Falha ao transferir aluno no servidor');
+      }
+      await loadStudents();
+    } catch (err) {
+      console.error(err);
+      showAlert('Erro', 'Ocorreu um erro ao transferir o aluno no servidor.', 'error');
+      return;
+    }
     showAlert('Sucesso', 'Aluno transferido com sucesso.', 'success');
     closeTransferModal();
   };
@@ -1117,7 +1185,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
     setShowModal(true);
   };
 
-  const filteredStudents = data.students
+  const filteredStudents = dbStudents
     .filter(s => {
       const matchesSearch = (s.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
                            (s.cpf || '').includes(searchTerm) ||
@@ -1243,7 +1311,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
             })}
             
             {/* Card for students without class */}
-            {data.students.some(s => !s.classId && (activeTab === 'active' ? s.status !== 'cancelled' : s.status === 'cancelled')) && (
+            {dbStudents.some(s => !s.classId && (activeTab === 'active' ? s.status !== 'cancelled' : s.status === 'cancelled')) && (
               <button
                 onClick={() => setSelectedClassId('none')}
                 className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-300 transition-all text-left group"

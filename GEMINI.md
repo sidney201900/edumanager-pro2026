@@ -1,37 +1,37 @@
 # EduManager - Regras Globais e Escopo
 
-## 🚀 Escopo do Projeto
-**EduManager** é um Sistema de Gestão Escolar completo, focado em alta performance, usabilidade premium e automação de processos administrativos e acadêmicos.
+## ðŸš€ Escopo do Projeto
+**EduManager** Ã© um Sistema de GestÃ£o Escolar completo, focado em alta performance, usabilidade premium e automaÃ§Ã£o de processos administrativos e acadÃªmicos.
 
-## 🛠️ Stack Tecnológica
+## ðŸ› ï¸� Stack TecnolÃ³gica
 - **Frontend/Backend:** Remix (React)
 - **Banco de Dados:** PostgreSQL (100% Local/Self-Hosted)
 - **Storage Architecture**: 100% Self-Hosted (MinIO) - Decoupled from Supabase Cloud.
 - **Image Serving**: All images are served via a backend proxy route (`/storage/:bucket/:key`) to ensure cross-origin compatibility and security.
 - **Synchronization**: High-performance local API for bank reconciliation (Asaas).
-- **Orquestração e CI/CD:** Portainer (Docker) com GitHub Actions via Self-Hosted Runner (Oracle ARM64 nativo) e Watchtower.
+- **OrquestraÃ§Ã£o e CI/CD:** Portainer (Docker) com GitHub Actions via Self-Hosted Runner (Oracle ARM64 nativo) e Watchtower.
 - **Production Entry Point**: All production deployments MUST use `server.selfhosted.js` renamed/copied as `server.js` in the Docker containers to ensure full local feature availability.
 
-## ⚠️ Regras de Negócio Críticas (MANDATÓRIO)
+## âš ï¸� Regras de NegÃ³cio CrÃ­ticas (MANDATÃ“RIO)
 
 > [!IMPORTANT]
-> **Migração de Dados (Legado 'schoodat'):**
-> Ao realizar a migração completa dos dados do sistema legado 'schoodat' para o nosso banco de dados local Postgres, **é terminantemente proibido alterar, resetar ou re-hashear as senhas existentes.**
-> As credenciais devem ser mantidas exatamente como estão para garantir que o acesso dos usuários não seja interrompido.
+> **MigraÃ§Ã£o de Dados (Legado 'schoodat'):**
+> Ao realizar a migraÃ§Ã£o completa dos dados do sistema legado 'schoodat' para o nosso banco de dados local Postgres, **Ã© terminantemente proibido alterar, resetar ou re-hashear as senhas existentes.**
+> As credenciais devem ser mantidas exatamente como estÃ£o para garantir que o acesso dos usuÃ¡rios nÃ£o seja interrompido.
 
-## 🚨 Regras de Fluxo de Trabalho (CRÍTICO)
+## ðŸš¨ Regras de Fluxo de Trabalho (CRÃ�TICO)
 
 > [!CAUTION]
-> **Git Push Proibido Sem Demanda Explícita:**
-> NUNCA execute `git add`, `git commit` ou `git push` sem que o USUÁRIO solicite explicitamente. Alterações devem ser feitas nos arquivos, mas o envio ao repositório remoto é uma ação exclusiva do usuário. Aguarde sempre o comando direto do usuário para realizar qualquer operação de versionamento.
-> **ESTA REGRA É INVIOLÁVEL E O ASSISTENTE JÁ FALHOU NELA EM 01/05/2026. NÃO REPITA O ERRO.**
+> **Git Push Proibido Sem Demanda ExplÃ­cita:**
+> NUNCA execute `git add`, `git commit` ou `git push` sem que o USUÃ�RIO solicite explicitamente. AlteraÃ§Ãµes devem ser feitas nos arquivos, mas o envio ao repositÃ³rio remoto Ã© uma aÃ§Ã£o exclusiva do usuÃ¡rio. Aguarde sempre o comando direto do usuÃ¡rio para realizar qualquer operaÃ§Ã£o de versionamento.
+> **ESTA REGRA Ã‰ INVIOLÃ�VEL E O ASSISTENTE JÃ� FALHOU NELA EM 01/05/2026. NÃƒO REPITA O ERRO.**
 
-## 📜 Padrões de Desenvolvimento
-1. **Design System:** Estética Premium, Dark Mode por padrão (ou glassmorphism), micro-animações e ausência de placeholders.
-2. **Segurança:** Todas as rotas sensíveis devem validar o token JWT local (via secrets do ambiente). Proibido usar Supabase SDK para lógica de autenticação ou sincronização no frontend.
-3. **Resiliência:** Tratamento rigoroso de erros em chamadas de API de terceiros (Asaas, Evolution API).
+## ðŸ“œ PadrÃµes de Desenvolvimento
+1. **Design System:** EstÃ©tica Premium, Dark Mode por padrÃ£o (ou glassmorphism), micro-animaÃ§Ãµes e ausÃªncia de placeholders.
+2. **SeguranÃ§a:** Todas as rotas sensÃ­veis devem validar o token JWT local (via secrets do ambiente). Proibido usar Supabase SDK para lÃ³gica de autenticaÃ§Ã£o ou sincronizaÃ§Ã£o no frontend.
+3. **ResiliÃªncia:** Tratamento rigoroso de erros em chamadas de API de terceiros (Asaas, Evolution API).
 4. **Upload de Arquivos:** Proibido o uso de Base64 para envio de novos arquivos ao servidor. Use obrigatoriamente `FormData` e envie o objeto `File/Blob` para as rotas de API que integram com o MinIO.
-5. **Build & Deploy Stability:** O pipeline de deploy deve obrigatoriamente utilizar `runs-on: self-hosted` e compilar apenas a plataforma `linux/arm64` (sem emulação QEMU). A atualização da stack em produção deve ser automatizada via container transiente do Watchtower.
+5. **Build & Deploy Stability:** O pipeline de deploy deve obrigatoriamente utilizar `runs-on: self-hosted` e compilar apenas a plataforma `linux/arm64` (sem emulaÃ§Ã£o QEMU). A atualizaÃ§Ã£o da stack em produÃ§Ã£o deve ser automatizada via container transiente do Watchtower.
 6. **Express Compatibility**: Avoid using raw `/*` wildcards in Express 5 routes; use Regex paths (`/^\/route\/(.+)$/`) for compatibility with `path-to-regexp` v8.
 7. **Frontend Independence**: NEVER import files from `services/` or `server.js` directly into React components to prevent Node.js/SDK leakage (causes White Screen). Physical isolation is enforced: backend-only services (like MinIO/S3 storage) MUST stay outside the `src/` directory in Vite/React projects. Use `helpers.ts` for UI logic and standard `fetch` for API calls.
 8. **Login Persistence**: Administrative sessions are persisted via `localStorage` ('edumanager_session'). The main entry point MUST validate the session on mount to ensure UX continuity.
@@ -42,12 +42,13 @@
 13. **Grading & Evaluation Standards**: Assessments are categorized as `exam` (violet/violet labels) or `activity` (sky/blue labels). The report card (Boletim) MUST support multiple evaluations per period, showing the individual breakdown (name and value). The module MUST be named **"Atividades e Provas"** for clarity.
 14. **Asaas Safety**: All financial generation forms MUST implement a loading state (`isCreating`) to disable submit buttons and prevent duplicate charges.
 15. **Retake Policy**: Students ARE allowed to retake activities and exams. The system MUST implement a "Lock" (Cadeado) logic: if locked, the retake button is hidden; if unlocked, the button is visible and the new submission overwrites the previous grade.
-16. **Financial Categories**: The system supports categories: `monthly` (Mensalidade), `registration` (Matrícula), `handout` (Apostila), and `others` (Outros). Automated forms must map references (Cursos -> monthly, Registration -> registration, Handout -> handout).
+16. **Financial Categories**: The system supports categories: `monthly` (Mensalidade), `registration` (MatrÃ­cula), `handout` (Apostila), and `others` (Outros). Automated forms must map references (Cursos -> monthly, Registration -> registration, Handout -> handout).
 17. **Modal Floating Principle**: All system modals must avoid backdrop-blur and background overlays. Use `bg-transparent` for the fixed container and `bg-white` (solid) for the modal box, ensuring contrast via large soft shadows (`shadow-2xl` or equivalent).
 18. **Automated Messaging (Cron Jobs)**: The system uses `node-cron` for independent message scheduling (Preventive vs. Overdue). Overdue logic MUST implement safety checks using `overdue_warnings_count` and `last_overdue_warning_at` to avoid spamming the student. Immediate webhook triggers for `PAYMENT_OVERDUE` are disabled in favor of scheduled routines.
 19. **Numerical Data Integrity**: When retrieving data from PostgreSQL `NUMERIC` or `DECIMAL` columns, values MUST be explicitly cast to `Number()` in the backend before being sent to the frontend to prevent crashes when using `.toFixed()` in React.
-20. **Exam Duplication**: The system supports cloning evaluations. Duplicated exams MUST default to `draft` status and include `(Cópia)` in the title to allow verification before deployment to new classes.
+20. **Exam Duplication**: The system supports cloning evaluations. Duplicated exams MUST default to `draft` status and include `(CÃ³pia)` in the title to allow verification before deployment to new classes.
 21. **Automatic Attendance Closure**: The system implements an automatic closure routine (`processAutoAbsences`) that generates physical "Absence" records in the PostgreSQL database for any past lesson where a student has no presence or justification. This routine is triggered during data save operations to ensure retroactive consistency between lessons and records.
+22. **Biometric Data Preservation**: In PostgreSQL sync operations (`syncJsonToRelationalTables`), the `face_descriptor` column MUST ALWAYS use `COALESCE(EXCLUDED.face_descriptor, alunos.face_descriptor)` during updates. This prevents facial biometrics and photos from being overwritten or nullified by legacy JSON sync operations.
 22. **Unified Notification System (SQL)**: The system uses the `notificacoes` PostgreSQL table as the single source of truth for both Portal and Manager. JSON-based notifications in `school_data` are deprecated. New features (exams, justifications) MUST use SQL INSERT/SELECT and implement **Intelligent Polling (30s)** in the UI to ensure synchronization.
 23. **Soft Delete Policy (Lixeira)**: Evaluations (exams/activities) MUST NOT be hard-deleted to preserve grade history. Use the `isDeleted` flag to hide them from students and active management views, keeping them accessible in the "Lixeira" for restoration and ensuring reference integrity in the Report Card.
 24. **Grading Arithmetic Logic**: All grade averages (Period, Subject, and General) MUST be calculated as arithmetic means (Average of Means). Summing grades for a final period result is prohibited to ensure consistency between Portal and Manager.
@@ -59,18 +60,18 @@
 30. **Financial Data Integrity**: Automation routines MUST prioritize `school_data.payments` (JSON) as the trigger source while using `alunos_cobrancas` (SQL) for tracking notification counters (spam control), ensuring 100% parity with the management UI.
 31. **Real-Time Bidirectional Sync**: Asaas webhooks MUST update both the PostgreSQL `alunos_cobrancas` table and the legacy `school_data.json` file in real-time to ensure immediate UI feedback in the administrative panel.
 32. **Numerical Type Enforcement**: When serving data from PostgreSQL `NUMERIC` columns, the backend MUST map the result to ensure amounts are sent as `Number` (not String) to prevent string concatenation bugs in the frontend.
-33. **Reverse Sync Requirement (SQL -> JSON) e (JSON -> SQL)**: Para módulos em fase de transição híbrida (como Aulas e Contratos), o sistema implementa a sincronização de Mão Dupla no `syncJsonToRelationalTables`. O frontend Manager invoca a API SQL mas também atualiza o contexto. O backend detecta a gravação e roda INSERTs ON CONFLICT para popular o PostgreSQL.
+33. **Reverse Sync Requirement (SQL -> JSON) e (JSON -> SQL)**: Para mÃ³dulos em fase de transiÃ§Ã£o hÃ­brida (como Aulas e Contratos), o sistema implementa a sincronizaÃ§Ã£o de MÃ£o Dupla no `syncJsonToRelationalTables`. O frontend Manager invoca a API SQL mas tambÃ©m atualiza o contexto. O backend detecta a gravaÃ§Ã£o e roda INSERTs ON CONFLICT para popular o PostgreSQL.
 34. **Deletion & Notification Order (Async)**: When processing deletions that trigger notifications (e.g., WhatsApp via Asaas Webhook), local database deletion MUST happen only AFTER the notification dispatch. Manual deletion routes should only trigger the external API delete and wait for the webhook to finalize local cleanup, ensuring data availability for message variables.
 35. **Mass Send Standard (V3)**: The mass send feature MUST use the student's or guardian's first name for the {nome} variable (via `.split(' ')[0]`). It MUST support dual dispatch (sending to both student and guardian if phones are distinct) and allow attachments (Image/PDF) handled via `multipart/form-data` and the Evolution API `sendMedia` endpoint.
-36. **Frequency Visibility & Justification Tracking**: All attendance records of type `absence` MUST be excluded from the "Presence Time" calculation in the Portal, showing a dash (`—`). Justifications MUST store the `submittedAt` timestamp in both SQL and JSON formats to allow auditing and clear display of submission time in the UI.
+36. **Frequency Visibility & Justification Tracking**: All attendance records of type `absence` MUST be excluded from the "Presence Time" calculation in the Portal, showing a dash (`â€”`). Justifications MUST store the `submittedAt` timestamp in both SQL and JSON formats to allow auditing and clear display of submission time in the UI.
 37. **Server Entry Point Safety**: The original `server.js` files in both Manager and Portal are OBSOLETE and kept only for historical context. You MUST NEVER modify or edit `server.js`. All backend changes must be applied exclusively to `server.selfhosted.js`.
 38. **Database Connection & MCP Integration**: Direct PostgreSQL access has been successfully configured via the `@modelcontextprotocol/server-postgres` MCP server to connect directly to the production database on the VPS (`150.230.87.131`). Database telemetry and operations can be executed via MCP SQL tools.
 39. **Portal SQL-First Migration**: O Portal do Aluno consome dados majoritariamente de tabelas PostgreSQL (`alunos`, `aulas`, `frequencias`, `contratos`) usando `SELECT` e implementa Fallbacks legados lendo do JSON apenas se o BD retornar vazio.
-40. **CamelCase Backend Mapping**: Funções do backend que buscam dados do PostgreSQL (`getAlunos`, `getProvas`, `getFuncionarios`) DEVEM mapear as chaves de `snake_case` (ex: `turma_id`, `is_deleted`) para `camelCase` (ex: `classId`, `isDeleted`) antes de enviar para o Frontend. O Frontend deve usar fallbacks (`p.classId || p.turma_id`) durante a fase de transição para evitar quebras em views legadas (White Screen) e perdas de filtro de contagem (ex: "0 alunos").
-41. **Database Schema Sync**: Sempre garanta que as tabelas de destino possuam colunas como `is_deleted` e demais modificadores antes de habilitar rotas PUT/DELETE, pois a ausência do schema falhará silenciosamente no Express 5.
-42. **Cronological Display Standard**: Consultas a cadastros secundários (como Disciplinas e Categorias) DEVEM utilizar `ORDER BY created_at ASC` no SQL para manter a mesma ordem de listagem original do sistema (evitando reordenação alfabética não-intencional).
-43. **Mass Contracts Update**: A edição de um "Modelo de Contrato" dispara atualizações em massa (PUT `/api/contratos/:id`) recalcularizando as variáveis de todos os contratos já emitidos para os alunos vinculados àquele modelo, garantindo atualização em tempo real no Portal do Aluno via SQL.
-4 4 .   * * B i o m e t r i a   S Q L - F i r s t   P a r c i a l * * :   A   b i o m e t r i a   ( f a c e D e s c r i p t o r )   j �   e s t �   p r e p a r a d a   p a r a   p e r s i s t � n c i a   n a t i v a   n a   c o l u n a   j s o n b   ' f a c e _ d e s c r i p t o r '   d o   P o s t g r e S Q L   ( c o m   m a p e a m e n t o   c a m e l C a s e   n a   A P I ) .   C o n t u d o ,   o   c a d a s t r o   d e   a l u n o s   v i a   M a n a g e r   a i n d a   n � o   u t i l i z a   a   A P I   S Q L   e m   s u a   p l e n i t u d e   n o   h a n d l e S a v e .   A t �   a   r e f a t o r a � � o   d o   S t u d e n t s . t s x ,   o s   a l u n o s   n o v o s   c o n t i n u a r � o   d e p e n d e n d o   d o   f a l l b a c k   d o   s c h o o l _ d a t a . j s o n .  
- 4 5 .   * * F o r � a r   F u s o   H o r � r i o   B r a s i l e i r o   n a   O r i g e m * * :   A o   g e r a r   d a t a s   o u   h o r � r i o s   l o c a i s   n o   f r o n t e n d   p a r a   e n v i o   a o   b a n c o   P o s t g r e S Q L   ( c o m o   r e g i s t r o s   d e   b i o m e t r i a   o u   p o n t o ) ,   �   O B R I G A T � R I O   f o r � a r   o   c � l c u l o   n o   f u s o   ' A m e r i c a / S a o _ P a u l o '   ( e x :   \ 
- e w   D a t e ( ) . t o L o c a l e S t r i n g ( ' e n - U S ' ,   {   t i m e Z o n e :   ' A m e r i c a / S a o _ P a u l o '   } ) \ ) .   I s s o   e v i t a   q u e   i n s t � n c i a s   r o d a n d o   e m   U T C   n o   W i n d o w s   S e r v e r   o u   c e l u l a r e s   c o m   f u s o   e r r a d o   e n v i e m   h o r � r i o s   d e f a s a d o s ,   o   q u e   c a u s a r i a   q u e b r a   e m   l � g i c a s   d e   r e s t r i � � o   d e   j a n e l a   d e   t e m p o   ( e x :   h o r � r i o   d e   a u l a ) .  
+40. **CamelCase Backend Mapping**: FunÃ§Ãµes do backend que buscam dados do PostgreSQL (`getAlunos`, `getProvas`, `getFuncionarios`) DEVEM mapear as chaves de `snake_case` (ex: `turma_id`, `is_deleted`) para `camelCase` (ex: `classId`, `isDeleted`) antes de enviar para o Frontend. O Frontend deve usar fallbacks (`p.classId || p.turma_id`) durante a fase de transiÃ§Ã£o para evitar quebras em views legadas (White Screen) e perdas de filtro de contagem (ex: "0 alunos").
+41. **Database Schema Sync**: Sempre garanta que as tabelas de destino possuam colunas como `is_deleted` e demais modificadores antes de habilitar rotas PUT/DELETE, pois a ausÃªncia do schema falharÃ¡ silenciosamente no Express 5.
+42. **Cronological Display Standard**: Consultas a cadastros secundÃ¡rios (como Disciplinas e Categorias) DEVEM utilizar `ORDER BY created_at ASC` no SQL para manter a mesma ordem de listagem original do sistema (evitando reordenaÃ§Ã£o alfabÃ©tica nÃ£o-intencional).
+43. **Mass Contracts Update**: A ediÃ§Ã£o de um "Modelo de Contrato" dispara atualizaÃ§Ãµes em massa (PUT `/api/contratos/:id`) recalcularizando as variÃ¡veis de todos os contratos jÃ¡ emitidos para os alunos vinculados Ã quele modelo, garantindo atualizaÃ§Ã£o em tempo real no Portal do Aluno via SQL.
+4 4 .   * * B i o m e t r i a   S Q L - F i r s t   P a r c i a l * * :   A   b i o m e t r i a   ( f a c e D e s c r i p t o r )   j á   e s t á   p r e p a r a d a   p a r a   p e r s i s t ê n c i a   n a t i v a   n a   c o l u n a   j s o n b   ' f a c e _ d e s c r i p t o r '   d o   P o s t g r e S Q L   ( c o m   m a p e a m e n t o   c a m e l C a s e   n a   A P I ) .   C o n t u d o ,   o   c a d a s t r o   d e   a l u n o s   v i a   M a n a g e r   a i n d a   n ã o   u t i l i z a   a   A P I   S Q L   e m   s u a   p l e n i t u d e   n o   h a n d l e S a v e .   A t é   a   r e f a t o r a ç ã o   d o   S t u d e n t s . t s x ,   o s   a l u n o s   n o v o s   c o n t i n u a r ã o   d e p e n d e n d o   d o   f a l l b a c k   d o   s c h o o l _ d a t a . j s o n .  
+ 4 5 .   * * F o r ç a r   F u s o   H o r á r i o   B r a s i l e i r o   n a   O r i g e m * * :   A o   g e r a r   d a t a s   o u   h o r á r i o s   l o c a i s   n o   f r o n t e n d   p a r a   e n v i o   a o   b a n c o   P o s t g r e S Q L   ( c o m o   r e g i s t r o s   d e   b i o m e t r i a   o u   p o n t o ) ,   é   O B R I G A T Ó R I O   f o r ç a r   o   c á l c u l o   n o   f u s o   ' A m e r i c a / S a o _ P a u l o '   ( e x :   \ 
+ e w   D a t e ( ) . t o L o c a l e S t r i n g ( ' e n - U S ' ,   {   t i m e Z o n e :   ' A m e r i c a / S a o _ P a u l o '   } ) \ ) .   I s s o   e v i t a   q u e   i n s t â n c i a s   r o d a n d o   e m   U T C   n o   W i n d o w s   S e r v e r   o u   c e l u l a r e s   c o m   f u s o   e r r a d o   e n v i e m   h o r á r i o s   d e f a s a d o s ,   o   q u e   c a u s a r i a   q u e b r a   e m   l ó g i c a s   d e   r e s t r i ç ã o   d e   j a n e l a   d e   t e m p o   ( e x :   h o r á r i o   d e   a u l a ) .  
  

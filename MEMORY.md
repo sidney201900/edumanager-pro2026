@@ -6,9 +6,10 @@ Nesta sessão de trabalho, realizamos o "core" da transição do sistema EduMana
 ## Módulos Migrados
 
 ### Fase 4: Gestão de Alunos e Autenticação
-- **Backend Manager**: CRUD no `database.js` para tabela `alunos`, rotas `/api/alunos` no `server.selfhosted.js`.
-- **Frontend Manager (`Students.tsx`)**: Refatorado para buscar via `fetch('/api/alunos')`.
+- **Backend Manager**: CRUD no `database.js` para tabela `alunos`, com rotas `/api/alunos` e `/api/alunos/:id/rematricular` no `server.selfhosted.js` que executam operações no PostgreSQL e realizam sincronização reversa em tempo real no legado `school_data.json` para total compatibilidade legacy.
+- **Frontend Manager (`Students.tsx`)**: Completamente refatorado para ler e gravar diretamente nas rotas relacionais `/api/alunos`, eliminando 100% das chamadas `dbService.saveData` nesta tela, mantendo apenas o estado em memória sincronizado para continuidade UX.
 - **Portal do Aluno**: Login (`/api/portal/login`) e perfil (`/api/portal/me`) reescritos para consultar a tabela `alunos` no PostgreSQL.
+
 
 ### Fase 5: Avaliações e Provas
 - Backend e Frontend conectados às tabelas `provas` e `questoes_provas`.

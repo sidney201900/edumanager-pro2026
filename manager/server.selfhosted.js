@@ -532,7 +532,16 @@ app.get('/api/alunos', async (req, res) => {
 
 app.post('/api/alunos', async (req, res) => {
   try {
-    await insertAluno(req.body);
+    const student = req.body;
+    await insertAluno(student);
+    
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbAlunos = await getAlunos();
+    appData.students = dbAlunos;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao criar aluno:', error);
@@ -542,7 +551,17 @@ app.post('/api/alunos', async (req, res) => {
 
 app.put('/api/alunos/:id', async (req, res) => {
   try {
-    await updateAluno(req.params.id, req.body);
+    const { id } = req.params;
+    const student = req.body;
+    await updateAluno(id, student);
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbAlunos = await getAlunos();
+    appData.students = dbAlunos;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao atualizar aluno:', error);
@@ -552,13 +571,34 @@ app.put('/api/alunos/:id', async (req, res) => {
 
 app.delete('/api/alunos/:id', async (req, res) => {
   try {
-    await deleteAluno(req.params.id);
+    const { id } = req.params;
+    
+    // 1. Relational cleanups in Postgres
+    await pool.query('DELETE FROM alunos_cobrancas WHERE aluno_id = $1', [id]);
+    await pool.query('DELETE FROM contratos WHERE aluno_id = $1', [id]);
+    await pool.query('DELETE FROM frequencias WHERE aluno_id = $1', [id]);
+    await pool.query('DELETE FROM notificacoes WHERE aluno_id = $1', [id]);
+    await pool.query('DELETE FROM provas_submissoes WHERE aluno_id = $1', [id]);
+    await pool.query('DELETE FROM notas_boletim WHERE aluno_id = $1', [id]);
+    await deleteAluno(id);
+
+    // 2. Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    appData.students = appData.students.filter(s => s.id !== id);
+    appData.payments = appData.payments.filter(p => p.studentId !== id);
+    appData.contracts = appData.contracts.filter(c => c.studentId !== id);
+    if (appData.attendance) appData.attendance = appData.attendance.filter(a => a.studentId !== id);
+    if (appData.notifications) appData.notifications = appData.notifications.filter(n => n.studentId !== id);
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao deletar aluno:', error);
     res.status(500).json({ error: 'Erro interno' });
   }
 });
+
 
 // ============================================================
 // ROTAS DE CONTRATOS E MODELOS
@@ -1787,7 +1827,25 @@ app.get('/api/cobrancas/:id/link', async (req, res) => {
   } catch (error) { return res.status(500).json({ error: 'Erro interno.' }); }
 });
 
-app.patch('/api/alunos/:id/rematricular', async (req, res) => res.json({ success: true }));
+app.patch('/api/alunos/:id/rematricular', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // 1. Update in Postgres
+    await pool.query("UPDATE alunos SET status = 'active', motivo_cancelamento = NULL WHERE id = $1", [id]);
+    
+    // 2. Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbAlunos = await getAlunos();
+    appData.students = dbAlunos;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao rematricular aluno:', error);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
 
 app.put('/api/cobrancas/:id', async (req, res) => {
   try {
