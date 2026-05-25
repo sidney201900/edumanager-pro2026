@@ -59,6 +59,27 @@ export async function processAutoAbsences(data) {
     updated = true;
   }
 
+  // Cleanup SQL orphaned absences as well, so SQL and JSON are consistently cleaned
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query(`
+        DELETE FROM frequencias a
+        WHERE a.tipo = 'absence' AND a.id LIKE 'auto-abs-%'
+        AND EXISTS (
+            SELECT 1 FROM frequencias p
+            WHERE p.tipo = 'presence'
+            AND p.aluno_id = a.aluno_id
+            AND (p.aula_id = a.aula_id OR DATE(p.data AT TIME ZONE 'UTC') = DATE(a.data AT TIME ZONE 'UTC'))
+        )
+      `);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.warn('[Database:AutoAbsences] Erro ao limpar faltas órfãs no SQL:', err.message);
+  }
+
   // Cache de alunos por turma para performance
   const studentsByClass = {};
 
