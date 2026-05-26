@@ -25,9 +25,9 @@
 | **Funcionários** | `employees`, `employeeCategories` | `funcionarios`, `categorias_funcionarios` | SQL Estruturado (`/api/funcionarios`) | SQL Estruturado (`POST`/`PUT`/`DELETE` `/api/funcionarios`) | Não aplicável | 🟢 **100% SQL-First** — Totalmente independente do JSON. |
 | **Boletim (Notas)** | `grades`, `periods` | `notas_boletim`, `periodos` | SQL Estruturado (`/api/notas`) | SQL Estruturado (`/api/notas`) | SQL Estruturado (Arithmetic Mean direto do SQL) | 🟢 **100% SQL-First** |
 | **Avaliações (Provas)** | `exams` | `provas`, `questoes_provas` | SQL Estruturado (`GET /api/provas` → estado `dbExams`) | SQL Estruturado (`POST`/`PUT`/`DELETE` `/api/provas` com sync de questões) | SQL Estruturado (Tabelas `provas` e `questoes_provas`) | 🟢 **100% SQL-First** — Zero chamadas `dbService.saveData` no frontend. Questões sincronizadas inline. Reverse-sync automático no backend. |
-| **Frequências (Chamadas)** | `attendance` | `frequencias` | Híbrido (Lê contexto JSON do Manager) | SQL Estruturado (`POST /api/frequencias`) + Atualiza local | SQL Estruturado (Query direta no Postgres) | 🟡 **Híbrido / Em Transição** — Backend SQL-First; frontend do Manager sincroniza em duas vias. |
-| **Aulas e Diários** | `lessons` | `aulas` | Híbrido (Lê contexto JSON do Manager) | SQL Estruturado (`/api/aulas/lote`) + Atualiza local | SQL Estruturado (Query direta no Postgres) | 🟡 **Híbrido / Em Transição** — Backend SQL-First; Frontend ainda acoplado ao contexto JSON. |
-| **Contratos** | `contracts`, `contractTemplates` | `contratos`, `modelos_contrato` | Híbrido (Lê contexto JSON) | Híbrido (Escrita via JSON com trigger de sync no banco) | SQL Estruturado (Lê de `contratos`) | 🟡 **Híbrido / Em Transição** |
+| **Frequências (Chamadas)** | `attendance` | `frequencias` | SQL Estruturado (`GET /api/frequencias` → estado `dbAttendance`) | SQL Estruturado (`POST`/`PUT`/`DELETE` `/api/frequencias`) | SQL Estruturado (Query direta no Postgres) | 🟢 **100% SQL-First** — Zero chamadas `dbService.saveData` no frontend. Reverse-sync automático no backend. |
+| **Aulas e Diários** | `lessons` | `aulas` | SQL Estruturado (`GET /api/aulas` → estado `dbLessons`) | SQL Estruturado (`POST`/`DELETE` `/api/aulas/lote`) | SQL Estruturado (Query direta no Postgres) | 🟢 **100% SQL-First** — Zero chamadas `dbService.saveData` no frontend. Reverse-sync automático no backend. |
+| **Contratos** | `contracts`, `contractTemplates` | `contratos`, `modelos_contrato` | SQL Estruturado (`GET /api/contratos` e `GET /api/modelos-contrato`) | SQL Estruturado (`POST`/`PUT`/`DELETE`) | SQL Estruturado (Lê de `contratos`) | 🟢 **100% SQL-First** — Zero chamadas `dbService.saveData` no frontend. Reverse-sync no backend. |
 | **Configurações Globais** | `profile`, `evolutionConfig`, `messageTemplates` | `configuracoes` | Pendente (Lê contexto JSON) | Pendente (Escreve via `dbService.saveData` no JSON) | Pendente (Lê do JSON) | 🔴 **Pendente** — Último bloco a ser migrado. |
 
 ---
@@ -36,18 +36,15 @@
 
 | Status | Qtd. Módulos | Módulos |
 |:---|:---:|:---|
-| 🟢 100% SQL-First | **5** | Alunos, Financeiro, Funcionários, Boletim, Avaliações |
-| 🟡 Híbrido | **3** | Frequências, Aulas, Contratos |
+| 🟢 100% SQL-First | **8** | Alunos, Financeiro, Funcionários, Boletim, Avaliações, Frequências, Aulas, Contratos |
+| 🟡 Híbrido | **0** | Nenhum |
 | 🔴 Pendente | **1** | Configurações Globais |
 
 ---
 
 ## Próximos Passos (Ordem Sugerida de Prioridade)
 
-1. **Frequências (Chamadas)** — Frontend do Manager (`AttendanceQuery.tsx` / `LessonSchedule.tsx`) precisa ler do estado `dbAttendance` via SQL ao invés do contexto JSON `data.attendance`.
-2. **Aulas e Diários** — Frontend do Manager (`LessonSchedule.tsx`) precisa ler aulas do estado SQL (`dbLessons`) e eliminar a dependência de `data.lessons`.
-3. **Contratos** — Frontend do Manager (`Contracts.tsx`) precisa ler/gravar via `/api/contratos` e eliminar `dbService.saveData`.
-4. **Configurações Globais** — Criar tabela `configuracoes` no PostgreSQL e migrar `profile`, `evolutionConfig`, `messageTemplates` com rotas CRUD dedicadas.
+1. **Configurações Globais** — Criar tabela `configuracoes` no PostgreSQL e migrar `profile`, `evolutionConfig`, `messageTemplates` com rotas CRUD dedicadas.
 
 ---
 

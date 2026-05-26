@@ -178,7 +178,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
 
   const fetchPostgresPayments = async () => {
     try {
-      const resp = await fetch('/api/admin/cobrancas');
+      const resp = await fetch(`/api/admin/cobrancas?t=${Date.now()}`);
       if (resp.ok) {
         const records = await resp.json();
         const normalized = (records || []).map((r: any) => {
@@ -260,7 +260,7 @@ const Finance: React.FC<FinanceProps> = ({ data, updateData }) => {
     setIsFetchingSupabase(true);
     setSelectedSupabaseRows([]);
     try {
-      const resp = await fetch('/api/admin/cobrancas');
+      const resp = await fetch(`/api/admin/cobrancas?t=${Date.now()}`);
       if (!resp.ok) throw new Error('API fetch failed');
       const records = await resp.json();
       setSupabaseRecords(records || []);

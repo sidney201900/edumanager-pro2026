@@ -29,7 +29,12 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [currentView, setCurrentView] = useState<View>(View.Dashboard);
+  const [currentView, setCurrentView] = useState<View>(() => {
+    return (localStorage.getItem('manager_active_tab') as View) || View.Dashboard;
+  });
+  useEffect(() => {
+    localStorage.setItem('manager_active_tab', currentView);
+  }, [currentView]);
   const [deepLinkStudentId, setDeepLinkStudentId] = useState<string | null>(null);
   const [deepLinkClassId, setDeepLinkClassId] = useState<string | null>(null);
   // Initial load from LocalStorage for speed (fallback), then IDB

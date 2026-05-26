@@ -607,26 +607,68 @@ app.get('/api/modelos-contrato', async (req, res) => {
   try { res.json({ modelos: await getModelosContrato() }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 app.post('/api/modelos-contrato', async (req, res) => {
-  try { await insertModeloContrato(req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+  try { 
+    await insertModeloContrato(req.body); 
+    const appData = await getSchoolData();
+    appData.contractTemplates = await getModelosContrato();
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+    res.json({ success: true }); 
+  } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 app.put('/api/modelos-contrato/:id', async (req, res) => {
-  try { await updateModeloContrato(req.params.id, req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+  try { 
+    await updateModeloContrato(req.params.id, req.body); 
+    const appData = await getSchoolData();
+    appData.contractTemplates = await getModelosContrato();
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+    res.json({ success: true }); 
+  } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 app.delete('/api/modelos-contrato/:id', async (req, res) => {
-  try { await deleteModeloContrato(req.params.id); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+  try { 
+    await deleteModeloContrato(req.params.id); 
+    const appData = await getSchoolData();
+    appData.contractTemplates = await getModelosContrato();
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+    res.json({ success: true }); 
+  } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 
 app.get('/api/contratos', async (req, res) => {
   try { res.json({ contratos: await getContratos() }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 app.post('/api/contratos', async (req, res) => {
-  try { await insertContrato(req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+  try { 
+    await insertContrato(req.body); 
+    const appData = await getSchoolData();
+    appData.contracts = await getContratos();
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+    res.json({ success: true }); 
+  } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 app.put('/api/contratos/:id', async (req, res) => {
-  try { await updateContrato(req.params.id, req.body); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+  try { 
+    await updateContrato(req.params.id, req.body); 
+    const appData = await getSchoolData();
+    appData.contracts = await getContratos();
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+    res.json({ success: true }); 
+  } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 app.delete('/api/contratos/:id', async (req, res) => {
-  try { await deleteContrato(req.params.id); res.json({ success: true }); } catch (e) { res.status(500).json({ error: 'Erro' }); }
+  try { 
+    await deleteContrato(req.params.id); 
+    const appData = await getSchoolData();
+    appData.contracts = await getContratos();
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+    res.json({ success: true }); 
+  } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
 
 // ============================================================
@@ -647,6 +689,14 @@ app.post('/api/aulas/lote', async (req, res) => {
   try {
     const { aulas } = req.body;
     await insertAulas(aulas);
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbAulas = await getAllAulas();
+    appData.lessons = dbAulas;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao inserir aulas em lote:', error);
@@ -658,6 +708,14 @@ app.delete('/api/aulas/lote', async (req, res) => {
   try {
     const { ids } = req.body;
     await deleteAulas(ids);
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbAulas = await getAllAulas();
+    appData.lessons = dbAulas;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao deletar aulas em lote:', error);
@@ -681,6 +739,14 @@ app.get('/api/frequencias', async (req, res) => {
 app.post('/api/frequencias', async (req, res) => {
   try {
     await insertFrequencia(req.body);
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbFrequencias = await getFrequencias();
+    appData.attendance = dbFrequencias;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao inserir frequencia:', error);
@@ -691,6 +757,14 @@ app.post('/api/frequencias', async (req, res) => {
 app.put('/api/frequencias/:id', async (req, res) => {
   try {
     await updateFrequencia(req.params.id, req.body);
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbFrequencias = await getFrequencias();
+    appData.attendance = dbFrequencias;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao atualizar frequencia:', error);
@@ -701,6 +775,14 @@ app.put('/api/frequencias/:id', async (req, res) => {
 app.delete('/api/frequencias/:id', async (req, res) => {
   try {
     await deleteFrequencia(req.params.id);
+
+    // Reverse sync to legacy JSON
+    const appData = await getSchoolData();
+    const dbFrequencias = await getFrequencias();
+    appData.attendance = dbFrequencias;
+    appData.lastUpdated = new Date().toISOString();
+    await saveSchoolData(appData);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao deletar frequencia:', error);

@@ -58,6 +58,38 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
   const [currentJustificationText, setCurrentJustificationText] = useState('');
   const [currentRecordForJustification, setCurrentRecordForJustification] = useState<Attendance | null>(null);
 
+  const [dbAttendance, setDbAttendance] = useState<Attendance[]>(data.attendance || []);
+
+  const loadAttendance = async () => {
+    try {
+      const res = await fetch('/api/frequencias');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.frequencias) {
+          setDbAttendance(json.frequencias.map((r: any) => ({
+            id: r.id,
+            studentId: r.studentId || r.aluno_id,
+            classId: r.classId || r.turma_id,
+            lessonId: r.lessonId || r.aula_id,
+            date: r.date || r.data,
+            photo: r.photo || r.foto || r.foto_url,
+            verified: r.verified ?? r.verificado ?? false,
+            type: r.type || r.tipo || 'presence',
+            justification: r.justification || r.justificativa,
+            justificationAccepted: r.justificationAccepted ?? r.justificativa_aceita ?? false,
+            createdAt: r.createdAt || r.created_at
+          })));
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar frequencias do SQL:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadAttendance();
+  }, []);
+
   // Helper para normalizar URLs de fotos (vacina contra cache antigo)
   const normalizePhotoUrl = (url?: string) => {
     if (!url || typeof url !== 'string') return '';
@@ -72,8 +104,8 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     return url;
   };
 
-  const toggleAttendanceStatus = (record: any) => {
-    let updatedAttendance = [...(data.attendance || [])];
+  const toggleAttendanceStatus = async (record: any) => {
+    let updatedAttendance = [...dbAttendance];
 
     if (record.isVirtual) {
       // Ação do botão do Admin: criar o registro real a partir do virtual
@@ -106,10 +138,10 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
 
       if (existingIdx >= 0) {
         updatedAttendance[existingIdx] = { ...updatedAttendance[existingIdx], type: newType, justification: undefined, justificationAccepted: undefined };
-        fetch(`/api/frequencias/${updatedAttendance[existingIdx].id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedAttendance[existingIdx]) });
+        await fetch(`/api/frequencias/${updatedAttendance[existingIdx].id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedAttendance[existingIdx]) });
       } else {
         updatedAttendance.push(newRecord);
-        fetch('/api/frequencias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newRecord) });
+        await fetch('/api/frequencias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newRecord) });
       }
     } else {
       // Toggle existing record
@@ -118,14 +150,14 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
       updatedAttendance = updatedAttendance.map(a =>
         a.id === record.id ? modifiedRecord : a
       );
-      fetch(`/api/frequencias/${record.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
+      await fetch(`/api/frequencias/${record.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
     }
 
-    updateData({ attendance: updatedAttendance });
+    setDbAttendance(updatedAttendance);
     showAlert('Sucesso', 'Status de frequência atualizado com sucesso.', 'success');
   };
 
-  const handleDeleteAttachmentRecord = () => {
+  const handleDeleteAttachmentRecord = async () => {
     if (!attendanceForAttachment || !attendanceForAttachment.justification) return;
 
     try {
@@ -134,14 +166,14 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
       delete parsed.arquivo;
       const updatedJustification = JSON.stringify(parsed);
 
-      const updatedAttendance = (data.attendance || []).map(a =>
+      const updatedAttendance = dbAttendance.map(a =>
         a.id === attendanceForAttachment.id ? { ...a, justification: updatedJustification } : a
       );
 
       const modifiedRecord = updatedAttendance.find(a => a.id === attendanceForAttachment.id);
-      fetch(`/api/frequencias/${attendanceForAttachment.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
+      await fetch(`/api/frequencias/${attendanceForAttachment.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
 
-      updateData({ attendance: updatedAttendance });
+      setDbAttendance(updatedAttendance);
       setViewingAttachment(null);
       setAttendanceForAttachment(null);
       showAlert('Sucesso', 'Arquivo removido com sucesso.', 'success');
@@ -171,7 +203,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     }, 400);
   };
 
-  const handleAddAbsence = () => {
+  const handleAddAbsence = async () => {
     if (!absenceStudentId || !absenceJustification || !absenceLessonId) {
       showAlert('Atenção', "⚠️ Por favor, preencha todos os campos da justificativa.", 'warning');
       return;
@@ -190,12 +222,12 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
     }
 
     // Check if there is already a record for this lesson specifically
-    const existingIndex = (data.attendance || []).findIndex(a =>
+    const existingIndex = dbAttendance.findIndex(a =>
       a.studentId === absenceStudentId &&
       ((a as any).lessonId === lesson.id || a.date === `${lesson.date}T${lesson.startTime || '00:00'}:00`)
     );
 
-    let updatedAttendance = [...(data.attendance || [])];
+    let updatedAttendance = [...dbAttendance];
 
     if (existingIndex >= 0) {
       updatedAttendance[existingIndex] = {
@@ -206,7 +238,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
         verified: true,
         lessonId: lesson.id as any
       };
-      fetch(`/api/frequencias/${updatedAttendance[existingIndex].id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedAttendance[existingIndex]) });
+      await fetch(`/api/frequencias/${updatedAttendance[existingIndex].id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedAttendance[existingIndex]) });
     } else {
       const newAbsence: Attendance = {
         id: crypto.randomUUID(),
@@ -220,11 +252,10 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
         ...(lesson ? { lessonId: lesson.id } : {}) as any
       };
       updatedAttendance.push(newAbsence);
-      fetch('/api/frequencias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAbsence) });
+      await fetch('/api/frequencias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAbsence) });
     }
 
-    updateData({ attendance: updatedAttendance });
-    dbService.saveData({ ...data, attendance: updatedAttendance });
+    setDbAttendance(updatedAttendance);
 
     setAbsenceStudentId('');
     setAbsenceJustification('');
@@ -246,7 +277,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
       doc.text(`Data: ${new Date(selectedDate).toLocaleDateString()}`, 14, startY + 18);
       doc.text(`Turma: ${classObj.name}`, 14, startY + 24);
 
-      const classAttendance = (data.attendance || []).filter(record =>
+      const classAttendance = dbAttendance.filter(record =>
         record.classId === classObj.id && record.date.startsWith(selectedDate)
       );
 
@@ -310,7 +341,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {data.classes.map(classObj => {
           const classStudents = data.students.filter(s => s.classId === classObj.id && s.status === 'active');
-          const attendanceCount = (data.attendance || []).filter(a => a.classId === classObj.id && a.date.startsWith(selectedDate)).length;
+          const attendanceCount = dbAttendance.filter(a => a.classId === classObj.id && a.date.startsWith(selectedDate)).length;
           const course = data.courses.find(c => c.id === classObj.courseId);
 
           return (
@@ -395,7 +426,7 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 }
 
                 return classStudents.map(student => {
-                  const studentActualRecords = (data.attendance || []).filter(a => a.studentId === student.id && a.classId === selectedClass.id);
+                  const studentActualRecords = dbAttendance.filter(a => a.studentId === student.id && a.classId === selectedClass.id);
                   const classLessonsRaw = (data.lessons || []).filter(l => l.classId === selectedClass.id && l.status !== 'cancelled');
 
                   const deduplicatedLessons = classLessonsRaw.filter((lesson, index, self) =>
@@ -510,10 +541,10 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
                 const now = new Date();
                 const studentClassIds = new Set([
                   selectedClass.id,
-                  ...(data.attendance || []).filter(a => a.studentId === selectedStudent.id).map(a => a.classId)
+                  ...dbAttendance.filter(a => a.studentId === selectedStudent.id).map(a => a.classId)
                 ].filter(Boolean));
 
-                const actualRecords = (data.attendance || [])
+                const actualRecords = dbAttendance
                   .filter(a => a.studentId === selectedStudent.id);
 
                 const classLessonsRaw = (data.lessons || [])
@@ -745,12 +776,11 @@ const AttendanceQuery: React.FC<AttendanceQueryProps> = ({ data, updateData, dee
 
                                     {hasPendingJustification && (
                                       <button
-                                        onClick={() => {
-                                          const updated = (data.attendance || []).map(a => a.id === record.id ? { ...a, justificationAccepted: true } : a);
+                                        onClick={async () => {
+                                          const updated = dbAttendance.map(a => a.id === record.id ? { ...a, justificationAccepted: true } : a);
                                           const modifiedRecord = updated.find(a => a.id === record.id);
-                                          fetch(`/api/frequencias/${record.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
-                                          updateData({ attendance: updated });
-                                          dbService.saveData({ ...data, attendance: updated });
+                                          await fetch(`/api/frequencias/${record.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(modifiedRecord) });
+                                          setDbAttendance(updated);
                                           showAlert('Sucesso', 'Justificativa aceita com sucesso.', 'success');
                                         }}
                                         className="text-[10px] px-2 py-1.5 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 transition-colors"

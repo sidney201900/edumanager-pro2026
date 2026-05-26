@@ -44,7 +44,7 @@ const Students: React.FC<StudentsProps> = ({ data, updateData, deepLinkStudentId
 
   const loadStudents = async () => {
     try {
-      const res = await fetch('/api/alunos');
+      const res = await fetch(`/api/alunos?t=${Date.now()}`);
       if (res.ok) {
         const json = await res.json();
         setDbStudents(json.alunos || []);

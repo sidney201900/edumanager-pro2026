@@ -27,7 +27,7 @@ const Exams: React.FC<ExamsProps> = ({ data, updateData }) => {
 
   const loadExams = async () => {
     try {
-      const res = await fetch('/api/provas');
+      const res = await fetch(`/api/provas?t=${Date.now()}`);
       if (res.ok) {
         const { provas } = await res.json();
         setDbExams(provas.map((p: any) => ({

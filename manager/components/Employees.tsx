@@ -31,8 +31,8 @@ const Employees: React.FC = () => {
     try {
       setIsLoadingData(true);
       const [empRes, catRes] = await Promise.all([
-        fetch('/api/funcionarios'),
-        fetch('/api/categorias_funcionarios')
+        fetch(`/api/funcionarios?t=${Date.now()}`),
+        fetch(`/api/categorias_funcionarios?t=${Date.now()}`)
       ]);
       const empData = await empRes.json();
       const catData = await catRes.json();

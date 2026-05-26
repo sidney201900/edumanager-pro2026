@@ -593,6 +593,8 @@ app.post('/api/portal/frequencia/justificar', authMiddleware, upload.single('arq
 
     const submittedAt = new Date().toISOString();
 
+    let recordIndex = attendance.findIndex(a => a.studentId === req.user.studentId && a.date === fullDateStr);
+
     if (recordIndex !== -1) {
       const existing = attendance[recordIndex];
       if (existing.type === 'presence') return res.status(400).json({ error: 'Não é possível justificar uma presença' });

@@ -45,8 +45,8 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
   const loadData = async () => {
     try {
       const [resC, resT] = await Promise.all([
-        fetch('/api/contratos'),
-        fetch('/api/modelos-contrato')
+        fetch(`/api/contratos?t=${Date.now()}`),
+        fetch(`/api/modelos-contrato?t=${Date.now()}`)
       ]);
       if (resC.ok) {
         const json = await resC.json();
@@ -172,9 +172,6 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
          body: JSON.stringify(formData)
        }).then(() => loadData());
        
-       updateData({
-          contracts: dbContracts.map(c => c.id === (formData as any).id ? { ...c, ...formData } : c)
-       });
        closeModal();
        return;
     }
@@ -191,7 +188,6 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       body: JSON.stringify(newContract)
     }).then(() => loadData());
 
-    updateData({ contracts: [...dbContracts, newContract] });
     closeModal();
   };
 
@@ -247,7 +243,6 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
         body: JSON.stringify({ ...templateFormData, id: updatedTemplates.find(t=>t.name===templateFormData.name)?.id || crypto.randomUUID() })
       }).then(() => loadData());
     }
-    updateData({ contractTemplates: updatedTemplates });
     closeTemplateModal();
   };
 
@@ -276,7 +271,7 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       'Excluir Contrato', 
       'Tem certeza que deseja excluir este contrato?',
       () => {
-        updateData({ contracts: dbContracts.filter(c => c.id !== id) });
+        fetch(`/api/contratos/${id}`, { method: 'DELETE' }).then(() => loadData());
       }
     );
   };
@@ -286,7 +281,7 @@ const Contracts: React.FC<ContractsProps> = ({ data, updateData }) => {
       'Excluir Modelo', 
       'Tem certeza que deseja excluir este modelo de contrato?',
       () => {
-        updateData({ contractTemplates: dbTemplates.filter(t => t.id !== id) });
+        fetch(`/api/modelos-contrato/${id}`, { method: 'DELETE' }).then(() => loadData());
       }
     );
   };
